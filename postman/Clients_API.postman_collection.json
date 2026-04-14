@@ -1,0 +1,321 @@
+{
+    "info": {
+        "name": "Fitly Pro - Clients API",
+        "description": "API endpoints for managing clients in Fitly Pro",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "variable": [
+        {
+            "key": "baseUrl",
+            "value": "http://localhost:8000/api/v1",
+            "type": "string"
+        },
+        {
+            "key": "token",
+            "value": "",
+            "type": "string"
+        }
+    ],
+    "item": [
+        {
+            "name": "Auth",
+            "item": [
+                {
+                    "name": "Login as Trainer",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 200) {",
+                                    "    const response = pm.response.json();",
+                                    "    pm.collectionVariables.set('token', response.data.token);",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"email\": \"trainer@example.com\",\n  \"password\": \"password123\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/auth/login",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "auth",
+                                "login"
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Clients",
+            "item": [
+                {
+                    "name": "Create Client",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\",\n  \"email\": \"john.doe@example.com\",\n  \"password\": \"client123\",\n  \"phone\": \"1234567890\",\n  \"dateOfBirth\": \"1990-01-01\",\n  \"gender\": \"male\",\n  \"primaryFitnessGoal\": \"weight_loss\",\n  \"currentWeight\": 85,\n  \"targetWeight\": 75,\n  \"height\": 180,\n  \"experienceLevel\": \"intermediate\",\n  \"programType\": \"personal_training\",\n  \"sessionsPerWeek\": 3,\n  \"startDate\": \"2026-01-01\",\n  \"packageDuration\": \"3_months\",\n  \"additionalNotes\": \"Client prefers morning sessions\",\n  \"medicalConditions\": \"None\",\n  \"injuries\": \"Previous knee injury\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/clients",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "clients"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Get All My Clients",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/clients?page=1&limit=10",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "clients"
+                            ],
+                            "query": [
+                                {
+                                    "key": "page",
+                                    "value": "1"
+                                },
+                                {
+                                    "key": "limit",
+                                    "value": "10"
+                                },
+                                {
+                                    "key": "status",
+                                    "value": "active",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "search",
+                                    "value": "john",
+                                    "disabled": true
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Get Client by ID",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/clients/:id",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "clients",
+                                ":id"
+                            ],
+                            "variable": [
+                                {
+                                    "key": "id",
+                                    "value": "CLIENT_ID_HERE"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Update Client",
+                    "request": {
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"currentWeight\": 80,\n  \"targetWeight\": 72,\n  \"experienceLevel\": \"advanced\",\n  \"additionalNotes\": \"Making great progress!\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/clients/:id",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "clients",
+                                ":id"
+                            ],
+                            "variable": [
+                                {
+                                    "key": "id",
+                                    "value": "CLIENT_ID_HERE"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Add Progress Note",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"weight\": 78,\n  \"notes\": \"Great progress this week! Lost 2kg. Client is very motivated.\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/clients/:id/progress",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "clients",
+                                ":id",
+                                "progress"
+                            ],
+                            "variable": [
+                                {
+                                    "key": "id",
+                                    "value": "CLIENT_ID_HERE"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Get Trainer Statistics",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/clients/stats",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "clients",
+                                "stats"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Delete Client (Soft Delete)",
+                    "request": {
+                        "method": "DELETE",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/clients/:id",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "clients",
+                                ":id"
+                            ],
+                            "variable": [
+                                {
+                                    "key": "id",
+                                    "value": "CLIENT_ID_HERE"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Search Clients",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/clients?search=john",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "clients"
+                            ],
+                            "query": [
+                                {
+                                    "key": "search",
+                                    "value": "john"
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        }
+    ]
+}
