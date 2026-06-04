@@ -8,6 +8,10 @@ import { errorHandler, notFoundHandler } from './middlewares/errorHandler.js';
 
 const app = express();
 
+if (config.trustProxy) {
+    app.set('trust proxy', 1);
+}
+
 /**
  * Security Middleware
  */
@@ -42,6 +46,7 @@ app.get('/', (req, res) => {
         success: true,
         message: 'Welcome to Fitly Pro API',
         version: '1.0.0',
+        apiUrl: config.api.publicUrl || undefined,
     });
 });
 

@@ -13,8 +13,14 @@ connectDatabase();
 const PORT = config.port;
 
 const server = app.listen(PORT, () => {
+    const apiEndpoint =
+        config.api.publicUrl || `http://localhost:${PORT}${config.api.prefix}`;
+
     console.log(`🚀 Server is running on port ${PORT} in ${config.env} mode`);
-    console.log(`📡 API endpoint: http://localhost:${PORT}${config.api.prefix}`);
+    console.log(`📡 API endpoint: ${apiEndpoint}`);
+    if (config.env === 'production' && !process.env.API_URL) {
+        console.log(`ℹ️  Using default production API_URL: ${config.api.baseUrl}`);
+    }
 });
 
 /**
