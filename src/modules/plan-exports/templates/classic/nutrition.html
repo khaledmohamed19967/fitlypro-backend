@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+  <!--
+    Classic Nutrition Plan PDF template (reference structure).
+    Runtime HTML is assembled by nutrition.js + document.js + styles.css
+    and rendered with Playwright Chromium (htmlPdfRenderer.js).
+  -->
+  <head>
+    <meta charset="utf-8" />
+    <title>Classic Nutrition Plan</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="doc">
+      <header class="header"><!-- brand + generated date --></header>
+      <h1 class="plan-title"><!-- plan name --></h1>
+      <p class="plan-description"><!-- description --></p>
+      <hr class="rule" />
+      <section class="meta"><!-- trainer / goal / duration / days / status --></section>
+      <section class="macros"><!-- daily targets + average intake --></section>
+      <section class="section">
+        <h2 class="section-title">Meal Plan</h2>
+        <!-- meal blocks with food tables (not calendar days) -->
+      </section>
+    </div>
+  </body>
+</html>

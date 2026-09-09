@@ -199,8 +199,7 @@ userSchema.virtual('weightDifference').get(function () {
     return null;
 });
 
-// Index for better query performance
-userSchema.index({ email: 1 });
+// Index for better query performance (email index comes from unique: true above)
 userSchema.index({ createdAt: -1 });
 userSchema.index({ trainer: 1 }); // Index for trainer queries
 

@@ -15,6 +15,13 @@ import {
 } from './client.validator.js';
 import { validate } from '../../middlewares/validate.js';
 import { protect, authorize } from '../../middlewares/auth.middleware.js';
+import nutritionProfileRoutes from '../nutrition-profiles/nutrition-profile.routes.js';
+import {
+    calculatorRouter,
+    recommendationRouter,
+} from '../nutrition-calculator/nutrition-calculator.routes.js';
+import nutritionPlanAssignmentClientRoutes from '../nutrition-plan-assignments/nutrition-plan-assignment.client.routes.js';
+import workoutPlanClientRoutes from '../workout-plans/workout-plan.client.routes.js';
 
 const router = express.Router();
 
@@ -35,6 +42,14 @@ router
     .route('/')
     .get(getMyClients)
     .post(validate(validateCreateClient), createClient);
+
+// Nested nutrition / workout modules (before /:id CRUD so static segments match first is fine —
+// these use /:id/... so mount explicitly)
+router.use('/:id/nutrition-profile', nutritionProfileRoutes);
+router.use('/:id/nutrition-calculator', calculatorRouter);
+router.use('/:id/nutrition-recommendations', recommendationRouter);
+router.use('/:id/nutrition-plan-assignment', nutritionPlanAssignmentClientRoutes);
+router.use('/:id/workout-plan-assignment', workoutPlanClientRoutes);
 
 router
     .route('/:id')

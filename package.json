@@ -9,6 +9,12 @@
     "start": "node src/server.js",
     "env:production": "node src/server.js",
     "start:production": "node src/server.js",
+    "seed:exercises": "node src/modules/exercises/exercise.seed.js",
+    "import:exercises": "node src/modules/exercises/exercise.importer.js",
+    "seed:workout-templates": "node scripts/seed-workout-templates.mjs",
+    "seed:foods": "node scripts/seed-foods.mjs",
+    "cleanup:foods:legacy": "node scripts/cleanup-legacy-imported-foods.mjs",
+    "seed:nutrition-templates": "node scripts/seed-nutrition-templates.mjs",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
@@ -28,7 +34,8 @@
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.0.2",
     "morgan": "^1.10.1",
-    "multer": "^2.0.2"
+    "multer": "^2.0.2",
+    "playwright": "^1.62.1"
   },
   "devDependencies": {
     "nodemon": "^3.1.11"

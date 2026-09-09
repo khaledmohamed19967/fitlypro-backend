@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+  <!--
+    Classic Workout Plan PDF template (reference structure).
+    Runtime HTML is assembled by workout.js + document.js + styles.css
+    and rendered with Playwright Chromium (htmlPdfRenderer.js).
+  -->
+  <head>
+    <meta charset="utf-8" />
+    <title>Classic Workout Plan</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="doc">
+      <header class="header"><!-- brand + generated date --></header>
+      <h1 class="plan-title"><!-- plan name --></h1>
+      <p class="plan-description"><!-- description --></p>
+      <hr class="rule" />
+      <section class="meta"><!-- trainer / goal / level / duration / days per week --></section>
+      <section class="section">
+        <h2 class="section-title">Training Plan</h2>
+        <!-- day blocks with exercise tables -->
+      </section>
+    </div>
+  </body>
+</html>

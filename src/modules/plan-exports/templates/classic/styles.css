@@ -1,0 +1,209 @@
+/* Fitly Pro — Classic Plan PDF (simple table layout) */
+
+@page {
+  size: A4;
+  margin: 14mm 12mm;
+}
+
+:root {
+  --fp-text: #111827;
+  --fp-text-muted: #4b5563;
+  --fp-border: #374151;
+  --fp-border-light: #d1d5db;
+  --fp-head-bg: #f3f4f6;
+  --fp-accent: #84cc16;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: #fff;
+  color: var(--fp-text);
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 10pt;
+  line-height: 1.4;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.doc {
+  width: 100%;
+}
+
+/* Header */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--fp-border);
+}
+
+.brand {
+  font-size: 11pt;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.generated {
+  font-size: 8pt;
+  color: var(--fp-text-muted);
+}
+
+.plan-title {
+  margin: 0 0 4px;
+  font-size: 18pt;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.plan-type {
+  margin: 0 0 8px;
+  font-size: 9pt;
+  font-weight: 600;
+  color: var(--fp-accent);
+  text-transform: uppercase;
+}
+
+.plan-description {
+  margin: 0 0 16px;
+  font-size: 9pt;
+  color: var(--fp-text-muted);
+}
+
+/* Blocks */
+.block {
+  margin-bottom: 18px;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+.block-title {
+  margin: 0 0 6px;
+  font-size: 10pt;
+  font-weight: 700;
+}
+
+.table-caption {
+  margin: 14px 0 6px;
+  font-size: 9.5pt;
+  font-weight: 700;
+}
+
+.table-caption:first-child {
+  margin-top: 0;
+}
+
+.table-note {
+  margin: 0 0 6px;
+  font-size: 8pt;
+  color: var(--fp-text-muted);
+}
+
+/* Tables */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  margin-bottom: 4px;
+}
+
+.table th,
+.table td {
+  border: 1px solid var(--fp-border);
+  padding: 6px 8px;
+  vertical-align: top;
+  font-size: 9pt;
+  word-break: break-word;
+}
+
+.table thead th {
+  background: var(--fp-head-bg);
+  font-weight: 700;
+  text-align: left;
+}
+
+.table tbody th {
+  background: var(--fp-head-bg);
+  font-weight: 600;
+  text-align: left;
+  width: 28%;
+}
+
+.table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.table tbody tr {
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+.table tfoot td,
+.table tfoot th {
+  background: var(--fp-head-bg);
+  font-weight: 700;
+}
+
+.cell-sub {
+  margin-top: 2px;
+  font-size: 8pt;
+  font-weight: 400;
+  color: var(--fp-text-muted);
+}
+
+.info-table tbody th {
+  width: 22%;
+}
+
+.macro-table thead th.num,
+.macro-table tbody td.num {
+  width: 16%;
+}
+
+/* Column widths — nutrition */
+.col-food { width: 34%; }
+.col-amount { width: 14%; }
+.col-kcal { width: 13%; }
+.col-p { width: 13%; }
+.col-c { width: 13%; }
+.col-f { width: 13%; }
+
+/* Column widths — workout */
+.col-exercise { width: 50%; }
+.col-sets { width: 14%; }
+.col-reps { width: 18%; }
+.col-rest { width: 18%; }
+
+.empty {
+  color: var(--fp-text-muted);
+  font-style: italic;
+}
+
+.notes-block {
+  margin-top: 16px;
+}
+
+.notes-block p {
+  margin: 6px 0 0;
+  font-size: 9pt;
+  color: var(--fp-text-muted);
+}
+
+.doc-footer {
+  margin-top: 20px;
+  padding-top: 8px;
+  border-top: 1px solid var(--fp-border-light);
+  font-size: 8pt;
+  color: var(--fp-text-muted);
+  text-align: center;
+}
+
