@@ -6,6 +6,7 @@ import mongoose from 'mongoose';
  */
 let connectionPromise = null;
 let listenersRegistered = false;
+let hasConnectedOnce = false;
 
 const registerConnectionListeners = () => {
     if (listenersRegistered) {
@@ -14,11 +15,14 @@ const registerConnectionListeners = () => {
     listenersRegistered = true;
 
     mongoose.connection.on('error', (err) => {
-        console.error('MongoDB connection error:', err);
+        console.error('[MongoDB] Connection error event:', err.message);
     });
 
     mongoose.connection.on('disconnected', () => {
-        console.warn('⚠️  MongoDB disconnected');
+        console.warn(
+            `[MongoDB] Disconnected. readyState: ${mongoose.connection.readyState}`
+        );
+        console.warn('[MongoDB] Clearing cached connection promise');
         connectionPromise = null;
     });
 
@@ -31,15 +35,30 @@ const registerConnectionListeners = () => {
 };
 
 const connectDatabase = async () => {
+    const appDbUrlPresent = Boolean(process.env.APP_DB_URL);
+    console.log(`[MongoDB] APP_DB_URL present: ${appDbUrlPresent}`);
+    console.log(
+        `[MongoDB] Current readyState: ${mongoose.connection.readyState}`
+    );
+
     if (mongoose.connection.readyState === 1) {
+        console.log('[MongoDB] Reusing existing open connection');
         return mongoose.connection;
     }
 
     if (connectionPromise) {
+        console.log('[MongoDB] Reusing in-flight connection promise');
         return connectionPromise;
     }
 
     registerConnectionListeners();
+
+    const isReconnect = hasConnectedOnce;
+    if (isReconnect) {
+        console.log('[MongoDB] Starting reconnect attempt...');
+    } else {
+        console.log('[MongoDB] Starting connection attempt...');
+    }
 
     connectionPromise = mongoose
         .connect(process.env.APP_DB_URL, {
@@ -47,12 +66,23 @@ const connectDatabase = async () => {
             // But explicitly set for clarity and backward compatibility
         })
         .then((connection) => {
-            console.log(`✅ MongoDB Connected: ${connection.connection.host}`);
+            hasConnectedOnce = true;
+            if (isReconnect) {
+                console.log('[MongoDB] Reconnected successfully');
+                console.log(
+                    `[MongoDB] Reconnect readyState: ${mongoose.connection.readyState}`
+                );
+            } else {
+                console.log('[MongoDB] Connected successfully');
+                console.log(
+                    `[MongoDB] readyState after connect: ${mongoose.connection.readyState}`
+                );
+            }
             return connection;
         })
         .catch((error) => {
             connectionPromise = null;
-            console.error('❌ Database connection failed:', error.message);
+            console.error(`[MongoDB] Connection failed: ${error.message}`);
             throw error;
         });
 
