@@ -619,6 +619,7 @@ const buildHydratedExercise = (exerciseId, exerciseSnapshot, exerciseMap) => {
             name: exerciseSnapshot.name,
             thumbnailUrl: exerciseSnapshot.thumbnailUrl ?? null,
             status: 'archived',
+            muscles: null,
         };
     }
 
@@ -627,6 +628,7 @@ const buildHydratedExercise = (exerciseId, exerciseSnapshot, exerciseMap) => {
         name: 'Unknown exercise',
         thumbnailUrl: null,
         status: null,
+        muscles: null,
     };
 };
 
@@ -752,6 +754,17 @@ const mapPlayerPlanExercise = (exercise) => ({
               name: exercise.exercise.name,
               thumbnailUrl: exercise.exercise.thumbnailUrl ?? null,
               status: exercise.exercise.status ?? null,
+              muscles:
+                  exercise.exercise.muscles &&
+                  typeof exercise.exercise.muscles === 'object' &&
+                  exercise.exercise.muscles.primary
+                      ? {
+                            primary: exercise.exercise.muscles.primary,
+                            secondary: Array.isArray(exercise.exercise.muscles.secondary)
+                                ? exercise.exercise.muscles.secondary
+                                : [],
+                        }
+                      : null,
           }
         : null,
 });

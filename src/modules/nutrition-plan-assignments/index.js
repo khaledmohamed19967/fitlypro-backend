@@ -4,6 +4,7 @@
 
 export { default as NutritionPlanAssignment } from './nutrition-plan-assignment.model.js';
 export { default as nutritionPlanAssignmentService } from './nutrition-plan-assignment.service.js';
+export { default as nutritionPlanPlayerRoutes } from './nutrition-plan.player.routes.js';
 export * from './nutrition-plan-assignment.controller.js';
 export * from './nutrition-plan-assignment.validator.js';
 export * from './nutrition-plan-assignment.helpers.js';

@@ -2,6 +2,7 @@ import express from 'express';
 import {
     startWorkoutSession,
     logWorkoutSet,
+    logWorkoutSetBatch,
     updateWorkoutSetLog,
     completeWorkoutSession,
     abandonWorkoutSession,
@@ -11,6 +12,7 @@ import {
 import {
     validateStartWorkoutSession,
     validateLogWorkoutSet,
+    validateLogWorkoutSetBatch,
     validateUpdateWorkoutSetLog,
 } from './workout-session.validator.js';
 import { validate } from '../../middlewares/validate.js';
@@ -26,6 +28,12 @@ router
     .post(validate(validateStartWorkoutSession), startWorkoutSession);
 
 router.get('/:sessionId', getMyWorkoutSession);
+
+router.post(
+    '/:sessionId/sets/batch',
+    validate(validateLogWorkoutSetBatch),
+    logWorkoutSetBatch
+);
 
 router.post(
     '/:sessionId/sets',

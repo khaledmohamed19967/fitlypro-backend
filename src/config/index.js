@@ -71,6 +71,16 @@ const config = {
     cors: {
         origin: parseCorsOrigin(process.env.CORS_ORIGIN),
     },
+
+    // Client-facing web app (invitation activation links)
+    clientApp: {
+        url: normalizeUrl(process.env.CLIENT_APP_URL) || 'http://localhost:3000',
+    },
+
+    // Client invitation password-setup tokens
+    clientInvitation: {
+        expiresIn: process.env.INVITATION_EXPIRES_IN || '7d',
+    },
 };
 
 export default config;

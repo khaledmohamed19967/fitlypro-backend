@@ -1,5 +1,6 @@
 import config from '../config/index.js';
 import { ApiError } from '../utils/ApiError.js';
+import { isClientInvitationPath, redactSensitiveUrl } from '../utils/urlRedaction.js';
 
 /**
  * Global Error Handler Middleware
@@ -14,21 +15,26 @@ export const errorHandler = (err, req, res, next) => {
         error = new ApiError(statusCode, message, [], err.stack);
     }
 
-    // Prepare response
+    // Never echo raw invitation tokens in API error messages
+    const safeMessage = isClientInvitationPath(error.message)
+        ? redactSensitiveUrl(error.message)
+        : error.message;
+
     const response = {
         success: false,
         statusCode: error.statusCode,
-        message: error.message,
+        message: safeMessage,
         ...(error.errors && error.errors.length > 0 && { errors: error.errors }),
         ...(config.env === 'development' && { stack: error.stack }),
     };
 
-    // Log error in development
     if (config.env === 'development') {
-        console.error('❌ Error:', error);
+        console.error('❌ Error:', {
+            statusCode: error.statusCode,
+            message: safeMessage,
+        });
     }
 
-    // Send response
     res.status(error.statusCode).json(response);
 };
 
@@ -36,6 +42,12 @@ export const errorHandler = (err, req, res, next) => {
  * 404 Not Found Handler
  */
 export const notFoundHandler = (req, res, next) => {
-    const error = new ApiError(404, `Route ${req.originalUrl} not found`);
-    next(error);
+    const url = req.originalUrl || req.url || '';
+
+    if (isClientInvitationPath(url)) {
+        next(new ApiError(404, 'Invitation not found'));
+        return;
+    }
+
+    next(new ApiError(404, `Route ${redactSensitiveUrl(url)} not found`));
 };

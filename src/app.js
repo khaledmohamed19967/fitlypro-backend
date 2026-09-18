@@ -5,6 +5,7 @@ import helmet from 'helmet';
 import config from './config/index.js';
 import routes from './routes/index.js';
 import { errorHandler, notFoundHandler } from './middlewares/errorHandler.js';
+import { redactSensitiveUrl } from './utils/urlRedaction.js';
 
 const app = express();
 
@@ -19,12 +20,18 @@ app.use(helmet()); // Adds security headers
 app.use(cors({ origin: config.cors.origin })); // Enable CORS
 
 /**
- * Logging Middleware
+ * Logging Middleware — redact invitation tokens from access logs
  */
+morgan.token('url-safe', (req) => redactSensitiveUrl(req.originalUrl || req.url || ''));
+
 if (config.env === 'development') {
-    app.use(morgan('dev'));
+    app.use(morgan(':method :url-safe :status :response-time ms'));
 } else {
-    app.use(morgan('combined'));
+    app.use(
+        morgan(
+            ':remote-addr - :remote-user [:date[clf]] ":method :url-safe HTTP/:http-version" :status :res[content-length] ":referrer" ":user-agent"'
+        )
+    );
 }
 
 /**

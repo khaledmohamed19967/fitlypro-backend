@@ -10,14 +10,24 @@ import { ApiError } from '../../utils/ApiError.js';
 // =========================================================================
 
 /**
- * Register a new user
+ * Register a new user (public self-registration).
+ * Role is always forced to client — trainers/admins are not creatable here.
  */
 const register = async (userData) => {
     // 1. Validate uniqueness
     await checkEmailUnique(userData.email);
 
-    // 2. Create user
-    const user = await User.create(userData);
+    // 2. Create user — force client role; never trust client-supplied privilege fields
+    const user = await User.create({
+        firstName: userData.firstName,
+        lastName: userData.lastName,
+        email: userData.email,
+        password: userData.password,
+        phone: userData.phone,
+        dateOfBirth: userData.dateOfBirth,
+        gender: userData.gender,
+        role: 'client',
+    });
 
     // 3. Generate token
     const token = user.generateAuthToken();

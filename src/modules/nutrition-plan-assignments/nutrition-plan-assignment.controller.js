@@ -64,6 +64,26 @@ export const cancelNutritionAssignment = asyncHandler(async (req, res) => {
 });
 
 /**
+ * @desc    Get authenticated client's active nutrition assignment + Player plan content
+ * @route   GET /api/v1/me/nutrition-plan
+ * @access  Private (Client)
+ */
+export const getMyNutritionPlan = asyncHandler(async (req, res) => {
+    const clientId = req.user.id;
+    const result = await nutritionPlanAssignmentService.getMyActiveNutritionAssignment(clientId);
+
+    res.status(200).json(
+        new ApiResponse(
+            200,
+            result ?? { assignment: null },
+            result
+                ? 'Active nutrition plan retrieved successfully'
+                : 'No active nutrition plan assignment for this client'
+        )
+    );
+});
+
+/**
  * @desc    Get client's active nutrition plan assignment (Client Details → Nutrition)
  * @route   GET /api/v1/clients/:id/nutrition-plan-assignment
  * @access  Private (Trainer / Admin)

@@ -8,7 +8,11 @@ import {
     isSystemNutritionPlan,
 } from '../nutrition-plans/nutrition-plan.helpers.js';
 import { loadAccessibleClientDocument } from '../nutrition-profiles/nutrition-profile.helpers.js';
-import { mapNutritionAssignmentToPublic } from './nutrition-plan-assignment.helpers.js';
+import {
+    mapNutritionAssignmentToPublic,
+    mapPlayerNutritionAssignment,
+    mapPlayerNutritionPlan,
+} from './nutrition-plan-assignment.helpers.js';
 import { CANCELLABLE_ASSIGNMENT_STATUSES } from './nutrition-plan-assignment.constants.js';
 
 /**
@@ -261,6 +265,59 @@ const getActiveAssignmentByClient = async (clientId, trainerId) => {
 };
 
 /**
+ * Player: authenticated client's active nutrition assignment + live plan content.
+ * Selection is client-scoped (`status === 'active'` only; endDate not applied).
+ * Multiple actives → data-integrity 500 (do not pick newest/arbitrary).
+ *
+ * @param {string} clientId — req.user.id
+ * @returns {Promise<{ assignment: object, plan: object }|null>}
+ */
+const getMyActiveNutritionAssignment = async (clientId) => {
+    if (!isValidObjectId(clientId)) {
+        throw new ApiError(400, 'Invalid client ID');
+    }
+
+    const assignments = await NutritionPlanAssignment.find({
+        clientId,
+        status: 'active',
+    });
+
+    if (assignments.length === 0) {
+        return null;
+    }
+
+    if (assignments.length > 1) {
+        const ids = assignments.map((a) => a._id?.toString?.() ?? String(a._id)).join(', ');
+        console.error(
+            `[nutrition-plan-assignment] Data integrity conflict: client=${clientId} has ${assignments.length} active assignments (${ids}). Product rule allows only one active Nutrition Plan per client.`
+        );
+        throw new ApiError(
+            500,
+            'Data integrity conflict: multiple active nutrition plan assignments for this client'
+        );
+    }
+
+    const assignment = assignments[0];
+    const planId =
+        assignment.planId && typeof assignment.planId === 'object'
+            ? assignment.planId._id ?? assignment.planId.id
+            : assignment.planId;
+
+    const plan = await NutritionPlan.findById(planId);
+
+    // Draft plans cannot be newly assigned; archived plans may still have active
+    // assignments (assignments survive archive). Player may continue the program.
+    if (!plan || plan.status === 'draft') {
+        throw new ApiError(404, 'Assigned nutrition plan not found');
+    }
+
+    return {
+        assignment: mapPlayerNutritionAssignment(assignment),
+        plan: mapPlayerNutritionPlan(plan),
+    };
+};
+
+/**
  * "Remove from Client" — cancel an active assignment.
  * Only active → cancelled; the document and all other fields are preserved.
  *
@@ -305,5 +362,6 @@ export default {
     createAssignments,
     getAssignments,
     getActiveAssignmentByClient,
+    getMyActiveNutritionAssignment,
     cancelAssignment,
 };

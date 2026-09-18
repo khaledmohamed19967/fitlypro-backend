@@ -77,6 +77,34 @@ export const mapWorkoutSetLogToPublic = (setLog) => {
 };
 
 /**
+ * Slim previous-performance row for in-progress execution context.
+ * Informational only — not a full SetLog DTO.
+ *
+ * @param {import('mongoose').Document|object} setLog
+ * @returns {object|null}
+ */
+export const mapPreviousSetLogToPublic = (setLog) => {
+    if (!setLog) {
+        return null;
+    }
+
+    const doc = toPlainObject(setLog);
+    const exerciseId = toIdString(doc.exerciseId);
+    if (!exerciseId || doc.setNumber == null) {
+        return null;
+    }
+
+    return {
+        exerciseId,
+        setNumber: doc.setNumber,
+        weight: doc.weight ?? null,
+        weightUnit: doc.weightUnit ?? 'kg',
+        reps: doc.reps ?? null,
+        status: doc.status,
+    };
+};
+
+/**
  * @param {import('mongoose').Document|object} session
  * @param {import('mongoose').Document|object[]} [setLogs]
  * @returns {object}
@@ -102,6 +130,7 @@ export const mapWorkoutSessionToPublic = (session, setLogs = []) => {
         totalSets: doc.totalSets ?? 0,
         progress: doc.progress ?? 0,
         setLogs: (setLogs ?? []).map(mapWorkoutSetLogToPublic),
+        previousSetLogs: [],
         createdAt: doc.createdAt,
         updatedAt: doc.updatedAt,
     };
@@ -116,5 +145,6 @@ export const mapWorkoutSessionToPublic = (session, setLogs = []) => {
 export const mapWorkoutSessionListItem = (session) => {
     const mapped = mapWorkoutSessionToPublic(session, []);
     delete mapped.setLogs;
+    delete mapped.previousSetLogs;
     return mapped;
 };

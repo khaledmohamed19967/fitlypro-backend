@@ -75,6 +75,41 @@ export const validateLogWorkoutSet = Joi.object({
 });
 
 /**
+ * Batch log performed sets (partial-success per item).
+ * Duplicate exerciseId+setNumber within the payload fails the whole request.
+ */
+export const validateLogWorkoutSetBatch = Joi.object({
+    sets: Joi.array()
+        .items(validateLogWorkoutSet)
+        .min(1)
+        .max(50)
+        .required()
+        .custom((sets, helpers) => {
+            const seen = new Set();
+            for (const item of sets) {
+                const key = `${item.exerciseId}:${item.setNumber}`;
+                if (seen.has(key)) {
+                    return helpers.error('sets.duplicateKeys');
+                }
+                seen.add(key);
+            }
+            return sets;
+        })
+        .messages({
+            'any.required': 'sets is required',
+            'array.base': 'sets must be an array',
+            'array.min': 'sets must contain at least 1 item',
+            'array.max': 'sets cannot exceed 50 items',
+            'sets.duplicateKeys':
+                'Duplicate exerciseId and setNumber within the same batch',
+        }),
+    planExerciseId: Joi.forbidden(),
+    workoutDayId: Joi.forbidden(),
+    completedAt: Joi.forbidden(),
+    ...ownershipForbidden,
+});
+
+/**
  * Update performed values on an existing set log.
  */
 export const validateUpdateWorkoutSetLog = Joi.object({

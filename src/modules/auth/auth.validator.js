@@ -72,12 +72,16 @@ export const validateRegister = Joi.object({
         }),
 
     role: Joi.string()
-        .valid('client', 'trainer', 'admin')
+        .valid('client')
         .optional()
         .default('client')
         .messages({
-            'any.only': 'Role must be either client, trainer, or admin',
+            'any.only': 'Public registration only allows the client role',
         }),
+
+    trainerId: Joi.forbidden(),
+    isActive: Joi.forbidden(),
+    trainer: Joi.forbidden(),
 });
 
 /**

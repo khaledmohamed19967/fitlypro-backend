@@ -9,6 +9,7 @@ import {
     calculateAssignmentProgress,
     calculateSessionProgress,
     countPrescribedSetsForDay,
+    mapPreviousSetLogToPublic,
     mapWorkoutSessionListItem,
     mapWorkoutSessionToPublic,
     mapWorkoutSetLogToPublic,
@@ -227,6 +228,50 @@ const loadSessionSetLogs = (sessionId) =>
     WorkoutSetLog.find({ sessionId }).sort({ exerciseId: 1, setNumber: 1 });
 
 /**
+ * Latest completed session for the same client + assignment + workout day,
+ * excluding the current session. Matches startSession uniqueness scope and
+ * overview "completed for day" semantics (completed only, not abandoned).
+ *
+ * @param {import('mongoose').Document} session
+ * @returns {Promise<object[]>}
+ */
+const loadPreviousSetLogsForSession = async (session) => {
+    if (!session || session.status !== 'in_progress') {
+        return [];
+    }
+
+    const previous = await WorkoutSession.findOne({
+        clientId: session.clientId,
+        assignmentId: session.assignmentId,
+        workoutDayId: session.workoutDayId,
+        status: 'completed',
+        _id: { $ne: session._id },
+        startedAt: { $lt: session.startedAt },
+    }).sort({ startedAt: -1, createdAt: -1 });
+
+    if (!previous) {
+        return [];
+    }
+
+    const logs = await loadSessionSetLogs(previous._id);
+    return logs
+        .map(mapPreviousSetLogToPublic)
+        .filter((row) => row != null);
+};
+
+/**
+ * Public session DTO with optional previous-performance context for in-progress.
+ *
+ * @param {import('mongoose').Document} session
+ * @param {import('mongoose').Document[]} setLogs
+ */
+const toPublicSessionWithPrevious = async (session, setLogs) => {
+    const mapped = mapWorkoutSessionToPublic(session, setLogs);
+    mapped.previousSetLogs = await loadPreviousSetLogsForSession(session);
+    return mapped;
+};
+
+/**
  * @param {string} clientId
  * @param {object} body
  */
@@ -257,7 +302,7 @@ const startSession = async (clientId, body) => {
 
     if (existing) {
         const setLogs = await loadSessionSetLogs(existing._id);
-        return mapWorkoutSessionToPublic(existing, setLogs);
+        return toPublicSessionWithPrevious(existing, setLogs);
     }
 
     try {
@@ -279,7 +324,7 @@ const startSession = async (clientId, body) => {
             progress: 0,
         });
 
-        return mapWorkoutSessionToPublic(session, []);
+        return toPublicSessionWithPrevious(session, []);
     } catch (err) {
         if (err?.code === 11000) {
             const raced = await WorkoutSession.findOne({
@@ -290,7 +335,7 @@ const startSession = async (clientId, body) => {
             });
             if (raced) {
                 const setLogs = await loadSessionSetLogs(raced._id);
-                return mapWorkoutSessionToPublic(raced, setLogs);
+                return toPublicSessionWithPrevious(raced, setLogs);
             }
         }
         throw err;
@@ -347,6 +392,237 @@ const logSet = async (sessionId, clientId, body) => {
         }
         throw err;
     }
+};
+
+/**
+ * @param {string} exerciseId
+ * @param {number} setNumber
+ */
+const setIdentityKey = (exerciseId, setNumber) =>
+    `${String(exerciseId)}:${Number(setNumber)}`;
+
+/**
+ * Collect write-error indexes that are duplicate-key (11000) from a bulkWrite failure.
+ * Non-duplicate errors are rethrown.
+ *
+ * @param {unknown} err
+ * @returns {Set<number>}
+ */
+const collectDuplicateBulkIndexes = (err) => {
+    const writeErrors = err?.writeErrors ?? [];
+    if (!Array.isArray(writeErrors) || writeErrors.length === 0) {
+        if (err?.code === 11000) {
+            return new Set([0]);
+        }
+        throw err;
+    }
+
+    const duplicateIndexes = new Set();
+    for (const writeError of writeErrors) {
+        const code = writeError.code ?? writeError.err?.code;
+        if (code === 11000) {
+            duplicateIndexes.add(writeError.index);
+        } else {
+            throw err;
+        }
+    }
+
+    return duplicateIndexes;
+};
+
+/**
+ * Partial-success batch set logging.
+ * Session-level failures abort the whole request; per-item failures are rejected results.
+ * Duplicate keys (existing unique index) → alreadyExists (no 409).
+ *
+ * @param {string} sessionId
+ * @param {string} clientId
+ * @param {{ sets: object[] }} body
+ */
+const logSetBatch = async (sessionId, clientId, body) => {
+    const session = await loadOwnedSession(sessionId, clientId);
+
+    if (session.status !== 'in_progress') {
+        throw new ApiError(
+            409,
+            `Cannot log sets on a session that is ${session.status}`
+        );
+    }
+
+    await loadActiveAssignmentForSession(session, clientId);
+    const { day } = await loadPlanDayForSession(session);
+
+    const sets = Array.isArray(body.sets) ? body.sets : [];
+    /** @type {Array<object|undefined>} */
+    const results = new Array(sets.length);
+    /** @type {{ index: number, item: object, planExerciseId: import('mongoose').Types.ObjectId }[]} */
+    const eligible = [];
+
+    for (let index = 0; index < sets.length; index += 1) {
+        const item = sets[index];
+        try {
+            const { exercise } = findPrescribedExerciseSet(
+                day,
+                item.exerciseId,
+                item.setNumber
+            );
+            eligible.push({
+                index,
+                item,
+                planExerciseId: exercise._id,
+            });
+        } catch (err) {
+            if (err instanceof ApiError) {
+                results[index] = {
+                    exerciseId: String(item.exerciseId),
+                    setNumber: item.setNumber,
+                    outcome: 'rejected',
+                    setLog: null,
+                    error: {
+                        statusCode: err.statusCode,
+                        message: err.message,
+                    },
+                };
+                continue;
+            }
+            throw err;
+        }
+    }
+
+    if (eligible.length === 0) {
+        const setLogs = await loadSessionSetLogs(session._id);
+        return {
+            session: mapWorkoutSessionToPublic(session, setLogs),
+            results,
+        };
+    }
+
+    const existingLogs = await WorkoutSetLog.find({
+        sessionId: session._id,
+        $or: eligible.map(({ item }) => ({
+            exerciseId: item.exerciseId,
+            setNumber: item.setNumber,
+        })),
+    });
+
+    const existingMap = new Map(
+        existingLogs.map((log) => [setIdentityKey(log.exerciseId, log.setNumber), log])
+    );
+
+    /** @type {typeof eligible} */
+    const toInsert = [];
+
+    for (const entry of eligible) {
+        const key = setIdentityKey(entry.item.exerciseId, entry.item.setNumber);
+        const existing = existingMap.get(key);
+        if (existing) {
+            results[entry.index] = {
+                exerciseId: String(entry.item.exerciseId),
+                setNumber: entry.item.setNumber,
+                outcome: 'alreadyExists',
+                setLog: mapWorkoutSetLogToPublic(existing),
+                error: null,
+            };
+        } else {
+            toInsert.push(entry);
+        }
+    }
+
+    let createdCount = 0;
+
+    if (toInsert.length > 0) {
+        const completedAt = new Date();
+        const ops = toInsert.map(({ item, planExerciseId }) => {
+            const status = item.status ?? 'completed';
+            return {
+                insertOne: {
+                    document: {
+                        sessionId: session._id,
+                        assignmentId: session.assignmentId,
+                        clientId,
+                        planId: session.planId,
+                        workoutDayId: session.workoutDayId,
+                        exerciseId: item.exerciseId,
+                        planExerciseId,
+                        setNumber: item.setNumber,
+                        status,
+                        reps: item.reps ?? null,
+                        weight: item.weight ?? null,
+                        weightUnit: item.weightUnit ?? 'kg',
+                        durationSeconds: item.durationSeconds ?? null,
+                        distance: item.distance ?? null,
+                        notes: emptyToNull(item.notes),
+                        completedAt: status === 'completed' ? completedAt : null,
+                    },
+                },
+            };
+        });
+
+        const duplicateOpIndexes = new Set();
+        try {
+            await WorkoutSetLog.bulkWrite(ops, { ordered: false });
+            createdCount = toInsert.length;
+        } catch (err) {
+            const duplicates = collectDuplicateBulkIndexes(err);
+            for (const opIndex of duplicates) {
+                duplicateOpIndexes.add(opIndex);
+            }
+            createdCount = toInsert.length - duplicateOpIndexes.size;
+        }
+
+        const persistedLogs = await WorkoutSetLog.find({
+            sessionId: session._id,
+            $or: toInsert.map(({ item }) => ({
+                exerciseId: item.exerciseId,
+                setNumber: item.setNumber,
+            })),
+        });
+
+        const persistedMap = new Map(
+            persistedLogs.map((log) => [
+                setIdentityKey(log.exerciseId, log.setNumber),
+                log,
+            ])
+        );
+
+        for (let opIndex = 0; opIndex < toInsert.length; opIndex += 1) {
+            const entry = toInsert[opIndex];
+            const key = setIdentityKey(entry.item.exerciseId, entry.item.setNumber);
+            const log = persistedMap.get(key);
+
+            if (!log) {
+                results[entry.index] = {
+                    exerciseId: String(entry.item.exerciseId),
+                    setNumber: entry.item.setNumber,
+                    outcome: 'rejected',
+                    setLog: null,
+                    error: {
+                        statusCode: 500,
+                        message: 'Failed to persist set log',
+                    },
+                };
+                continue;
+            }
+
+            results[entry.index] = {
+                exerciseId: String(entry.item.exerciseId),
+                setNumber: entry.item.setNumber,
+                outcome: duplicateOpIndexes.has(opIndex) ? 'alreadyExists' : 'created',
+                setLog: mapWorkoutSetLogToPublic(log),
+                error: null,
+            };
+        }
+    }
+
+    if (createdCount > 0) {
+        await refreshSessionCounters(session);
+    }
+
+    const setLogs = await loadSessionSetLogs(session._id);
+    return {
+        session: mapWorkoutSessionToPublic(session, setLogs),
+        results,
+    };
 };
 
 /**
@@ -515,12 +791,13 @@ const listSessions = async (clientId, query = {}) => {
 const getSession = async (sessionId, clientId) => {
     const session = await loadOwnedSession(sessionId, clientId);
     const setLogs = await loadSessionSetLogs(session._id);
-    return mapWorkoutSessionToPublic(session, setLogs);
+    return toPublicSessionWithPrevious(session, setLogs);
 };
 
 export default {
     startSession,
     logSet,
+    logSetBatch,
     updateSetLog,
     completeSession,
     abandonSession,

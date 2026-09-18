@@ -33,6 +33,17 @@ export const logWorkoutSet = asyncHandler(async (req, res) => {
     res.status(201).json(new ApiResponse(201, { setLog }, 'Set logged successfully'));
 });
 
+export const logWorkoutSetBatch = asyncHandler(async (req, res) => {
+    const clientId = req.user.id;
+    const result = await workoutSessionService.logSetBatch(
+        req.params.sessionId,
+        clientId,
+        req.body
+    );
+
+    res.status(200).json(new ApiResponse(200, result, 'Set batch processed'));
+});
+
 export const updateWorkoutSetLog = asyncHandler(async (req, res) => {
     const clientId = req.user.id;
     const setLog = await workoutSessionService.updateSetLog(

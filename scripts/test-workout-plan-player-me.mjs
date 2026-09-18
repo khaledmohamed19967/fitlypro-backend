@@ -116,20 +116,29 @@ async function main() {
         throw new Error('Failed to login test users');
     }
 
-    let systemExercise = await Exercise.findOne({ 'ownership.type': 'system', status: 'active' });
-    if (!systemExercise) {
-        systemExercise = await Exercise.create({
-            name: `Player Test Exercise ${suffix}`,
-            slug: `player-test-ex-${suffix}`,
-            muscles: { primary: 'chest', secondary: [] },
-            equipment: ['dumbbell'],
-            category: 'strength',
-            difficulty: 'beginner',
-            ownership: { type: 'system', trainerId: null },
-            source: { type: 'manual' },
-            status: 'active',
-        });
-    }
+    const benchPress = await Exercise.create({
+        name: `Barbell Bench Press ${suffix}`,
+        slug: `player-bench-${suffix}`,
+        muscles: { primary: 'chest', secondary: ['triceps', 'shoulders'] },
+        equipment: ['barbell', 'bench'],
+        category: 'strength',
+        difficulty: 'intermediate',
+        ownership: { type: 'trainer', trainerId: trainer._id },
+        source: { type: 'manual' },
+        status: 'active',
+    });
+
+    const pullUp = await Exercise.create({
+        name: `Pull Up ${suffix}`,
+        slug: `player-pullup-${suffix}`,
+        muscles: { primary: 'back', secondary: ['biceps', 'shoulders', 'core'] },
+        equipment: ['pull_up_bar', 'bodyweight'],
+        category: 'strength',
+        difficulty: 'advanced',
+        ownership: { type: 'trainer', trainerId: trainer._id },
+        source: { type: 'manual' },
+        status: 'active',
+    });
 
     const planPayload = {
         name: `Player Active Plan ${suffix}`,
@@ -146,7 +155,7 @@ async function main() {
                 description: 'Chest focus',
                 exercises: [
                     {
-                        exerciseId: systemExercise._id.toString(),
+                        exerciseId: benchPress._id.toString(),
                         order: 1,
                         restBetweenSets: 90,
                         notes: 'Controlled tempo',
@@ -164,6 +173,20 @@ async function main() {
                                 setNumber: 2,
                                 reps: 8,
                                 weight: 25,
+                                weightUnit: 'kg',
+                                isWarmup: false,
+                                isDropset: false,
+                            },
+                        ],
+                    },
+                    {
+                        exerciseId: pullUp._id.toString(),
+                        order: 2,
+                        restBetweenSets: 120,
+                        sets: [
+                            {
+                                setNumber: 1,
+                                reps: 8,
                                 weightUnit: 'kg',
                                 isWarmup: false,
                                 isDropset: false,
@@ -196,7 +219,7 @@ async function main() {
                     name: 'Other Day',
                     exercises: [
                         {
-                            exerciseId: systemExercise._id.toString(),
+                            exerciseId: benchPress._id.toString(),
                             order: 1,
                             restBetweenSets: 60,
                             sets: [{ setNumber: 1, reps: 5, weightUnit: 'kg' }],
@@ -293,6 +316,58 @@ async function main() {
         pass('6. Response contains sets and executable fields');
     } else {
         fail('6. Response contains sets and executable fields', JSON.stringify({ set, exercise }));
+    }
+
+    const pullExercise = day?.exercises?.[1];
+    if (
+        exercise?.exercise?.muscles?.primary === 'chest' &&
+        Array.isArray(exercise?.exercise?.muscles?.secondary) &&
+        exercise.exercise.muscles.secondary.includes('triceps') &&
+        exercise.exercise.muscles.secondary.includes('shoulders') &&
+        exercise.exercise.muscles.secondary.length === 2
+    ) {
+        pass('6b. Bench press exercise.muscles (chest / triceps / shoulders)');
+    } else {
+        fail(
+            '6b. Bench press exercise.muscles (chest / triceps / shoulders)',
+            JSON.stringify(exercise?.exercise)
+        );
+    }
+
+    if (
+        pullExercise?.exercise?.muscles?.primary === 'back' &&
+        Array.isArray(pullExercise?.exercise?.muscles?.secondary) &&
+        pullExercise.exercise.muscles.secondary.includes('biceps') &&
+        pullExercise.exercise.muscles.secondary.includes('shoulders') &&
+        pullExercise.exercise.muscles.secondary.includes('core')
+    ) {
+        pass('6c. Pull-up exercise.muscles (back / biceps / shoulders / core)');
+    } else {
+        fail(
+            '6c. Pull-up exercise.muscles (back / biceps / shoulders / core)',
+            JSON.stringify(pullExercise?.exercise)
+        );
+    }
+
+    const catalogKeys = Object.keys(exercise?.exercise || {}).sort();
+    const allowedCatalogKeys = ['id', 'name', 'thumbnailUrl', 'status', 'muscles'].sort();
+    const unexpectedCatalog = catalogKeys.filter((k) => !allowedCatalogKeys.includes(k));
+    const muscleKeys = Object.keys(exercise?.exercise?.muscles || {}).sort();
+    const snapshotKeys = Object.keys(exercise?.exerciseSnapshot || {}).sort();
+    if (
+        unexpectedCatalog.length === 0 &&
+        muscleKeys.join(',') === 'primary,secondary' &&
+        !('ownership' in (exercise?.exercise || {})) &&
+        !('equipment' in (exercise?.exercise || {})) &&
+        !('instructions' in (exercise?.exercise || {})) &&
+        snapshotKeys.every((k) => ['name', 'thumbnailUrl'].includes(k))
+    ) {
+        pass('6d. Player exercise DTO exposes only safe catalog + muscles fields');
+    } else {
+        fail(
+            '6d. Player exercise DTO exposes only safe catalog + muscles fields',
+            JSON.stringify({ catalogKeys, unexpectedCatalog, muscleKeys, snapshotKeys })
+        );
     }
 
     // 7. No active assignment → null
@@ -482,6 +557,72 @@ async function main() {
         fail('19. Client cannot use trainer GET /workout-plans/:id', `status=${clientPlanGet.status}`);
     }
 
+    // 20. Missing live catalog exercise → snapshot fallback, muscles null (no invented data)
+    const ghostClient = await User.create({
+        firstName: 'Player',
+        lastName: 'Ghost',
+        email: `wp-player-ghost-${suffix}@test.com`,
+        password,
+        role: 'client',
+        trainer: trainer._id,
+    });
+    const loginGhost = await request('POST', '/auth/login', {
+        body: { email: ghostClient.email, password },
+    });
+    const tokenGhost = loginGhost.json?.data?.token;
+
+    const ghostPlan = await request('POST', '/workout-plans', {
+        token: tokenTrainer,
+        body: {
+            ...planPayload,
+            name: `Ghost Catalog Plan ${suffix}`,
+            workoutDays: [
+                {
+                    dayNumber: 1,
+                    name: 'Ghost Day',
+                    exercises: [
+                        {
+                            exerciseId: benchPress._id.toString(),
+                            order: 1,
+                            restBetweenSets: 60,
+                            sets: [{ setNumber: 1, reps: 5, weightUnit: 'kg' }],
+                        },
+                    ],
+                },
+            ],
+        },
+    });
+    const ghostPlanId = ghostPlan.json?.data?.workoutPlan?.id;
+    const assignGhost = await request('POST', `/workout-plans/${ghostPlanId}/assignments`, {
+        token: tokenTrainer,
+        body: {
+            clientIds: [ghostClient._id.toString()],
+            startDate: new Date().toISOString(),
+        },
+    });
+    if (assignGhost.status !== 201 || !ghostPlanId) {
+        fail('20. Missing exercise snapshot fallback', `setup failed: ${JSON.stringify(ghostPlan.json)}`);
+    } else {
+        await Exercise.deleteOne({ _id: benchPress._id });
+
+        const meGhost = await request('GET', '/me/workout-plan', { token: tokenGhost });
+        const ghostEx = meGhost.json?.data?.assignment?.plan?.workoutDays?.[0]?.exercises?.[0];
+        if (
+            meGhost.status === 200 &&
+            ghostEx?.exerciseSnapshot?.name &&
+            ghostEx?.exercise?.name &&
+            ghostEx?.exercise?.muscles === null &&
+            !('ownership' in (ghostEx?.exercise || {}))
+        ) {
+            pass('20. Missing live catalog → snapshot fallback, muscles null');
+        } else {
+            fail(
+                '20. Missing live catalog → snapshot fallback, muscles null',
+                JSON.stringify(ghostEx)
+            );
+        }
+    }
+
     const failed = results.filter((r) => !r.ok);
     console.log('\n---');
     console.log(`Total: ${results.length}, Passed: ${results.length - failed.length}, Failed: ${failed.length}`);
@@ -490,6 +631,7 @@ async function main() {
         trainerId: trainer._id,
     });
     await WorkoutPlan.deleteMany({ trainerId: trainer._id });
+    await Exercise.deleteMany({ _id: { $in: [benchPress._id, pullUp._id] } });
     await User.deleteMany({
         _id: {
             $in: [
@@ -500,6 +642,7 @@ async function main() {
                 clientEmpty._id,
                 statusClient._id,
                 multiClient._id,
+                ghostClient._id,
             ],
         },
     });

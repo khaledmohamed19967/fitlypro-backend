@@ -505,6 +505,12 @@ const loadExercisesForPlan = async (plan) => {
             name: exercise.name,
             thumbnailUrl: exercise.media?.thumbnailUrl ?? null,
             status: exercise.status,
+            muscles: {
+                primary: exercise.muscles?.primary ?? null,
+                secondary: Array.isArray(exercise.muscles?.secondary)
+                    ? [...exercise.muscles.secondary]
+                    : [],
+            },
         });
     }
 
