@@ -1,10 +1,12 @@
 import app from './src/app.js';
 import connectDatabase from './src/config/database.js';
 
-console.log('🔥 FITLYPRO SERVER.JS LOADED');
+console.log('🔥 FITLYPRO ROOT SERVER.JS LOADED');
+console.log('🔥 APP_DB_URL PRESENT:', Boolean(process.env.APP_DB_URL));
+console.log('🔥 BEFORE DB CONNECT');
 
-console.log('🔥 Before connectDatabase');
 await connectDatabase();
-console.log('🔥 After connectDatabase');
+
+console.log('🔥 AFTER DB CONNECT');
 
 export default app;
