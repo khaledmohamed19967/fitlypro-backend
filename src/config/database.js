@@ -2,16 +2,18 @@ import mongoose from 'mongoose';
 
 /**
  * Database connection configuration
- * Cached for Vercel serverless: reuse open / in-flight connections.
+ * Cached using global object for Vercel serverless functions
  */
-let connectionPromise = null;
+let cached = global.mongoose;
+
+if (!cached) {
+    cached = global.mongoose = { conn: null, promise: null };
+}
+
 let listenersRegistered = false;
-let hasConnectedOnce = false;
 
 const registerConnectionListeners = () => {
-    if (listenersRegistered) {
-        return;
-    }
+    if (listenersRegistered) return;
     listenersRegistered = true;
 
     mongoose.connection.on('error', (err) => {
@@ -19,74 +21,77 @@ const registerConnectionListeners = () => {
     });
 
     mongoose.connection.on('disconnected', () => {
-        console.warn(
-            `[MongoDB] Disconnected. readyState: ${mongoose.connection.readyState}`
-        );
-        console.warn('[MongoDB] Clearing cached connection promise');
-        connectionPromise = null;
+        console.warn(`[MongoDB] Disconnected. readyState: ${mongoose.connection.readyState}`);
+        console.warn('[MongoDB] Clearing cached connection');
+        cached.conn = null;
+        cached.promise = null;
     });
 
-    // Graceful shutdown (local / long-running process)
-    process.on('SIGINT', async () => {
-        await mongoose.connection.close();
-        console.log('MongoDB connection closed through app termination');
-        process.exit(0);
-    });
+    if (process.env.NODE_ENV !== 'production') {
+        process.on('SIGINT', async () => {
+            await mongoose.connection.close();
+            console.log('MongoDB connection closed through app termination');
+            process.exit(0);
+        });
+    }
 };
 
 const connectDatabase = async () => {
     const appDbUrlPresent = Boolean(process.env.APP_DB_URL);
     console.log(`[MongoDB] APP_DB_URL present: ${appDbUrlPresent}`);
-    console.log(
-        `[MongoDB] Current readyState: ${mongoose.connection.readyState}`
-    );
+    console.log(`[MongoDB] Current readyState: ${mongoose.connection.readyState}`);
+
+    // 1. إعادة استخدام الاتصال القائم
+    if (cached.conn) {
+        console.log('[MongoDB] Reusing cached connection instance');
+        return cached.conn;
+    }
 
     if (mongoose.connection.readyState === 1) {
         console.log('[MongoDB] Reusing existing open connection');
-        return mongoose.connection;
+        cached.conn = mongoose.connection;
+        return cached.conn;
     }
 
-    if (connectionPromise) {
+    // 2. إعادة استخدام الـ Promise لو الاتصال شغال حالياً
+    if (cached.promise) {
         console.log('[MongoDB] Reusing in-flight connection promise');
-        return connectionPromise;
+        return cached.promise;
     }
 
     registerConnectionListeners();
 
-    const isReconnect = hasConnectedOnce;
-    if (isReconnect) {
-        console.log('[MongoDB] Starting reconnect attempt...');
-    } else {
-        console.log('[MongoDB] Starting connection attempt...');
-    }
+    // 3. خيارات الاتصال الخاصة بـ Serverless لعدم التعليق (Hanging)
+    const opts = {
+        bufferCommands: false, // بيمنع Mongoose إنه يعلق الـ Queries لو الاتصال مش جاهز
+        serverSelectionTimeoutMS: 5000, // يرمي Error بعد 5 ثواني عشان يظهر في الـ Logs
+    };
 
-    connectionPromise = mongoose
-        .connect(process.env.APP_DB_URL, {
-            // These options are now defaults in Mongoose 6+
-            // But explicitly set for clarity and backward compatibility
-        })
-        .then((connection) => {
-            hasConnectedOnce = true;
-            if (isReconnect) {
-                console.log('[MongoDB] Reconnected successfully');
-                console.log(
-                    `[MongoDB] Reconnect readyState: ${mongoose.connection.readyState}`
-                );
-            } else {
-                console.log('[MongoDB] Connected successfully');
-                console.log(
-                    `[MongoDB] readyState after connect: ${mongoose.connection.readyState}`
-                );
-            }
-            return connection;
+    console.log('[MongoDB] Starting connection attempt...');
+
+    cached.promise = mongoose
+        .connect(process.env.APP_DB_URL, opts)
+        .then((mongooseInstance) => {
+            console.log('[MongoDB] Connected successfully');
+            console.log(`[MongoDB] readyState after connect: ${mongooseInstance.connection.readyState}`);
+            cached.conn = mongooseInstance.connection;
+            return cached.conn;
         })
         .catch((error) => {
-            connectionPromise = null;
+            cached.promise = null;
+            cached.conn = null;
             console.error(`[MongoDB] Connection failed: ${error.message}`);
             throw error;
         });
 
-    return connectionPromise;
+    try {
+        await cached.promise;
+    } catch (e) {
+        cached.promise = null;
+        throw e;
+    }
+
+    return cached.conn;
 };
 
 export default connectDatabase;
