@@ -1,5 +1,6 @@
 import User from '../users/user.model.js';
 import { ApiError } from '../../utils/ApiError.js';
+import { applyCoachingPackageEndDate } from './client.package-dates.js';
 
 /**
  * Client Service
@@ -61,6 +62,7 @@ const createClient = async (clientData, trainerId) => {
         medicalConditions: clientData.medicalConditions,
         injuries: clientData.injuries,
     };
+    applyCoachingPackageEndDate(userData);
 
     const client = await User.create(userData);
 
@@ -149,6 +151,7 @@ const updateClient = async (clientId, updateData, trainerId = null) => {
 
     // Update client data
     Object.assign(client, updateData);
+    applyCoachingPackageEndDate(client);
     await client.save();
 
     // Return updated client with populated data
