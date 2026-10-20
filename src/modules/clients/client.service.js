@@ -1,6 +1,10 @@
 import User from '../users/user.model.js';
 import { ApiError } from '../../utils/ApiError.js';
 import { applyCoachingPackageEndDate } from './client.package-dates.js';
+import { resolveSubscriptionNeedsAttention } from './client.subscription-attention.js';
+import { buildClientListScopeQuery } from './client.list-scope.js';
+import { buildClientListSummary } from './client.list-summary.js';
+import workoutPlanService from '../workout-plans/workout-plan.service.js';
 
 /**
  * Client Service
@@ -72,36 +76,82 @@ const createClient = async (clientData, trainerId) => {
 };
 
 /**
- * Get all clients for a specific trainer
+ * GET /clients list payload: paginated or search rows + roster summary (same scope).
  */
-const getClientsByTrainer = async (trainerId, filters = {}, pagination = {}) => {
+const listTrainerClients = async (
+    trainerId,
+    { page = 1, limit = 10, search, status, packageDuration } = {}
+) => {
+    const scopeQuery = buildClientListScopeQuery(trainerId, {
+        search,
+        status,
+        packageDuration,
+    });
+
+    const summaryPromise = buildClientListSummary(scopeQuery);
+
+    if (search && String(search).trim()) {
+        const clients = await User.find(scopeQuery)
+            .populate('trainer', 'firstName lastName email')
+            .sort({ createdAt: -1 });
+
+        const enriched = await enrichClientListRows(
+            trainerId,
+            clients.map((client) => client.getPublicProfile())
+        );
+
+        const summary = await summaryPromise;
+
+        return {
+            clients: enriched,
+            pagination: {
+                page: 1,
+                limit: enriched.length,
+                total: enriched.length,
+                pages: enriched.length > 0 ? 1 : 0,
+            },
+            summary,
+        };
+    }
+
+    const listResult = await getClientsByTrainer(
+        trainerId,
+        scopeQuery,
+        { page, limit }
+    );
+    const summary = await summaryPromise;
+
+    return {
+        ...listResult,
+        summary,
+    };
+};
+
+/**
+ * Paginated clients for a pre-built scope query (trainer roster slice).
+ */
+const getClientsByTrainer = async (trainerId, scopeQuery, pagination = {}) => {
     const { page = 1, limit = 10 } = pagination;
     const skip = (page - 1) * limit;
 
-    // Build query - clients have role='client' and trainer field set
-    const query = {
-        role: 'client',
-        trainer: trainerId,
-        ...filters,
-    };
+    const total = await User.countDocuments(scopeQuery);
 
-    // Get total count
-    const total = await User.countDocuments(query);
-
-    // Get clients with pagination
-    const clients = await User.find(query)
+    const clients = await User.find(scopeQuery)
         .populate('trainer', 'firstName lastName email')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit);
 
     return {
-        clients: clients.map((client) => client.getPublicProfile()),
+        clients: await enrichClientListRows(
+            trainerId,
+            clients.map((client) => client.getPublicProfile())
+        ),
         pagination: {
             page,
             limit,
             total,
-            pages: Math.ceil(total / limit),
+            pages: Math.ceil(total / limit) || 0,
         },
     };
 };
@@ -248,31 +298,55 @@ const getTrainerStats = async (trainerId) => {
 };
 
 /**
- * Search clients by name or email
+ * Workout assignment bulk lookup + subscription needsAttention (no extra DB reads).
  */
-const searchClients = async (trainerId, searchTerm) => {
-    const clients = await User.find({
-        role: 'client',
-        trainer: trainerId,
-        $or: [
-            { firstName: { $regex: searchTerm, $options: 'i' } },
-            { lastName: { $regex: searchTerm, $options: 'i' } },
-            { email: { $regex: searchTerm, $options: 'i' } },
-        ],
-    })
-        .populate('trainer', 'firstName lastName email')
-        .sort({ createdAt: -1 });
+const enrichClientListRows = async (trainerId, profiles) => {
+    const withWorkout = await attachWorkoutPlanAssignments(trainerId, profiles);
+    return attachSubscriptionNeedsAttention(withWorkout);
+};
 
-    return clients.map((client) => client.getPublicProfile());
+const attachSubscriptionNeedsAttention = (profiles) => {
+    if (!Array.isArray(profiles)) {
+        return profiles;
+    }
+    return profiles.map((client) => ({
+        ...client,
+        needsAttention: resolveSubscriptionNeedsAttention({
+            startDate: client.startDate,
+            packageDuration: client.packageDuration,
+            endDate: client.endDate,
+        }),
+    }));
+};
+
+/**
+ * Attach the current workout assignment (or null) using the same DTO as
+ * GET /clients/:id/workout-plan-assignment. One batch lookup per list/search.
+ */
+const attachWorkoutPlanAssignments = async (trainerId, profiles) => {
+    if (!Array.isArray(profiles) || profiles.length === 0) {
+        return profiles;
+    }
+
+    const assignments = await workoutPlanService.getActiveAssignmentsForClients(
+        trainerId,
+        profiles.map((client) => client.id)
+    );
+
+    return profiles.map((client) => ({
+        ...client,
+        workoutPlanAssignment:
+            assignments.get(String(client.id)) ?? null,
+    }));
 };
 
 export default {
     createClient,
+    listTrainerClients,
     getClientsByTrainer,
     getClientById,
     updateClient,
     deleteClient,
     addProgressNote,
     getTrainerStats,
-    searchClients,
 };

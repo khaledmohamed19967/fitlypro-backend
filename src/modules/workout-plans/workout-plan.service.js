@@ -847,6 +847,23 @@ const findNewestActiveAssignments = (filter) =>
         createdAt: -1,
     });
 
+/** Fields required by mapTrainerClientWorkoutAssignment (list + Client Details summary). */
+const TRAINER_CLIENT_WORKOUT_PLAN_SUMMARY_SELECT =
+    'name description goal level status';
+
+/**
+ * Trainer-facing assignment DTO when the linked plan is visible (not missing/draft).
+ * Matches Client Details behavior; archived plans remain visible while active.
+ *
+ * @returns {object|null}
+ */
+const mapTrainerClientWorkoutAssignmentIfVisible = (assignment, plan) => {
+    if (!plan || plan.status === 'draft') {
+        return null;
+    }
+    return mapTrainerClientWorkoutAssignment(assignment, plan);
+};
+
 /**
  * Trainer Client Details ownership: same 400/404/403 conventions as client CRUD.
  * Kept local so workout does not import nutrition modules.
@@ -953,8 +970,9 @@ const getClientActiveAssignment = async (clientId, trainerId) => {
 
     const assignment = assignments[0];
     const plan = await resolveAssignedPlan(assignment);
+    const mapped = mapTrainerClientWorkoutAssignmentIfVisible(assignment, plan);
 
-    if (!plan || plan.status === 'draft') {
+    if (!mapped) {
         console.warn(
             `[workout-plan] Active assignment ${assignment._id} references missing/draft plan; returning null for Client Details.`
         );
@@ -963,7 +981,72 @@ const getClientActiveAssignment = async (clientId, trainerId) => {
 
     // Archived plans remain visible in Client Details while the assignment is active
     // (consistent with player endpoint and "assignments survive archive").
-    return mapTrainerClientWorkoutAssignment(assignment, plan);
+    return mapped;
+};
+
+/**
+ * Trainer client list: current workout assignment per client, same product rules as
+ * GET /clients/:id/workout-plan-assignment (newest active by startDate/createdAt;
+ * skip missing/draft plans; archived plans remain visible).
+ *
+ * Two queries for the page of ids (assignments + plans) — not one query per client.
+ *
+ * @param {string} trainerId
+ * @param {Array<string|{toString(): string}>} clientIds
+ * @returns {Promise<Map<string, object>>}
+ */
+const getActiveAssignmentsForClients = async (trainerId, clientIds) => {
+    const result = new Map();
+    const ids = [
+        ...new Set(
+            (Array.isArray(clientIds) ? clientIds : [])
+                .map((id) => String(id ?? ''))
+                .filter((id) => isValidObjectId(id))
+        ),
+    ];
+
+    if (!isValidObjectId(String(trainerId)) || ids.length === 0) {
+        return result;
+    }
+
+    const assignments = await findNewestActiveAssignments({
+        trainerId,
+        clientId: { $in: ids },
+    });
+
+    const newestByClient = new Map();
+    for (const assignment of assignments) {
+        const clientId = String(assignment.clientId);
+        if (!newestByClient.has(clientId)) {
+            newestByClient.set(clientId, assignment);
+        }
+    }
+
+    const planIds = [
+        ...new Set(
+            [...newestByClient.values()]
+                .map((assignment) => String(assignment.planId ?? ''))
+                .filter((id) => isValidObjectId(id))
+        ),
+    ];
+
+    const plans =
+        planIds.length > 0
+            ? await WorkoutPlan.find({ _id: { $in: planIds } }).select(
+                  TRAINER_CLIENT_WORKOUT_PLAN_SUMMARY_SELECT
+              )
+            : [];
+    const planById = new Map(plans.map((plan) => [String(plan._id), plan]));
+
+    for (const [clientId, assignment] of newestByClient) {
+        const plan = planById.get(String(assignment.planId));
+        const mapped = mapTrainerClientWorkoutAssignmentIfVisible(assignment, plan);
+        if (mapped) {
+            result.set(clientId, mapped);
+        }
+    }
+
+    return result;
 };
 
 /**
@@ -1019,5 +1102,6 @@ export default {
     getAssignments,
     getMyActiveAssignment,
     getClientActiveAssignment,
+    getActiveAssignmentsForClients,
     cancelAssignment,
 };

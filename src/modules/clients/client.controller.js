@@ -31,36 +31,32 @@ export const createClient = asyncHandler(async (req, res) => {
  */
 export const getMyClients = asyncHandler(async (req, res) => {
     const trainerId = req.user.id;
-    const { page = 1, limit = 10, status, search } = req.query;
+    const { page = 1, limit = 10, status, search, packageDuration } =
+        req.query;
 
-    let result;
+    const statusFilter =
+        status === 'active' || status === 'inactive' ? status : undefined;
 
-    // If search term provided, use search functionality
-    if (search) {
-        const clients = await clientService.searchClients(trainerId, search);
-        result = {
-            clients,
-            pagination: {
-                page: 1,
-                limit: clients.length,
-                total: clients.length,
-                pages: 1,
-            },
-        };
-    } else {
-        // Build filters
-        const filters = {};
-        if (status) filters.status = status;
+    const allowedPackageDurations = new Set([
+        '1_month',
+        '3_months',
+        '6_months',
+        '12_months',
+        'ongoing',
+    ]);
+    const packageDurationFilter =
+        packageDuration &&
+        allowedPackageDurations.has(String(packageDuration))
+            ? String(packageDuration)
+            : undefined;
 
-        result = await clientService.getClientsByTrainer(
-            trainerId,
-            filters,
-            {
-                page: parseInt(page),
-                limit: parseInt(limit),
-            }
-        );
-    }
+    const result = await clientService.listTrainerClients(trainerId, {
+        page: parseInt(page, 10),
+        limit: parseInt(limit, 10),
+        search: search ? String(search).trim() : undefined,
+        status: search ? undefined : statusFilter,
+        packageDuration: search ? undefined : packageDurationFilter,
+    });
 
     res.status(200).json(
         new ApiResponse(200, result, 'Clients retrieved successfully')
