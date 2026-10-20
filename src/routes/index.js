@@ -10,6 +10,7 @@ import foodRoutes from '../modules/foods/food.routes.js';
 import nutritionPlanRoutes from '../modules/nutrition-plans/nutrition-plan.routes.js';
 import planExportRoutes from '../modules/plan-exports/plan-export.routes.js';
 import clientInvitationRoutes from '../modules/client-invitations/client-invitation.routes.js';
+import healthReferenceRoutes from '../modules/health-reference/health-reference.routes.js';
 
 const router = express.Router();
 
@@ -30,6 +31,7 @@ router.get('/health', (req, res) => {
 router.use('/users', userRoutes);
 router.use('/auth', authRoutes);
 router.use('/clients', clientRoutes);
+router.use('/health-reference-options', healthReferenceRoutes);
 router.use('/client-invitations', clientInvitationRoutes);
 router.use('/exercises', exerciseRoutes);
 router.use('/workout-plans', workoutPlanRoutes);

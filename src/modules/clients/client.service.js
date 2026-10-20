@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import User from '../users/user.model.js';
 import { ApiError } from '../../utils/ApiError.js';
 import { applyCoachingPackageEndDate } from './client.package-dates.js';
@@ -5,6 +6,12 @@ import { resolveSubscriptionNeedsAttention } from './client.subscription-attenti
 import { buildClientListScopeQuery } from './client.list-scope.js';
 import { buildClientListSummary } from './client.list-summary.js';
 import workoutPlanService from '../workout-plans/workout-plan.service.js';
+import {
+    enrichClientPublicProfileWithInjuryAreas,
+    validateHealthOptionIdsForCategory,
+} from '../health-reference/health-reference.helpers.js';
+import NutritionProfile from '../nutrition-profiles/nutrition-profile.model.js';
+import nutritionProfileService from '../nutrition-profiles/nutrition-profile.service.js';
 
 /**
  * Client Service
@@ -15,12 +22,23 @@ import workoutPlanService from '../workout-plans/workout-plan.service.js';
 // Service Methods
 // =========================================================================
 
+const mapInjuryAreaIdsToObjectIds = (idStrings) =>
+    (idStrings ?? []).map((id) => new mongoose.Types.ObjectId(id));
+
 /**
  * Create a new client (creates User with role='client' and fitness data)
  */
 const createClient = async (clientData, trainerId) => {
+    const {
+        allergyOptionIds,
+        dietaryRestrictionOptionIds,
+        injuryAreaOptionIds,
+        injuryDetails,
+        ...restClientData
+    } = clientData;
+
     // 1. Check if user with this email already exists
-    const existingUser = await User.findByEmail(clientData.email);
+    const existingUser = await User.findByEmail(restClientData.email);
     if (existingUser) {
         throw new ApiError(400, 'User with this email already exists');
     }
@@ -34,45 +52,117 @@ const createClient = async (clientData, trainerId) => {
         throw new ApiError(403, 'Only trainers can add clients');
     }
 
+    const validatedInjuryAreaIds = await validateHealthOptionIdsForCategory({
+        category: 'body_area',
+        requestedIds: injuryAreaOptionIds,
+        existingIds: [],
+        fieldName: 'injuryAreaOptionIds',
+    });
+
+    const nutritionCreateBody = {};
+    if (allergyOptionIds !== undefined) {
+        nutritionCreateBody.allergyOptionIds = allergyOptionIds;
+    }
+    if (dietaryRestrictionOptionIds !== undefined) {
+        nutritionCreateBody.dietaryRestrictionOptionIds = dietaryRestrictionOptionIds;
+    }
+
+    if (nutritionCreateBody.allergyOptionIds !== undefined) {
+        await validateHealthOptionIdsForCategory({
+            category: 'allergy',
+            requestedIds: nutritionCreateBody.allergyOptionIds,
+            existingIds: [],
+            fieldName: 'allergyOptionIds',
+        });
+    }
+    if (nutritionCreateBody.dietaryRestrictionOptionIds !== undefined) {
+        await validateHealthOptionIdsForCategory({
+            category: 'dietary_restriction',
+            requestedIds: nutritionCreateBody.dietaryRestrictionOptionIds,
+            existingIds: [],
+            fieldName: 'dietaryRestrictionOptionIds',
+        });
+    }
+
     // 3. Create User with client role and all fitness data
     const userData = {
         // Personal information
-        firstName: clientData.firstName,
-        lastName: clientData.lastName,
-        email: clientData.email,
-        password: clientData.password,
-        phone: clientData.phone,
-        dateOfBirth: clientData.dateOfBirth,
-        gender: clientData.gender,
+        firstName: restClientData.firstName,
+        lastName: restClientData.lastName,
+        email: restClientData.email,
+        password: restClientData.password,
+        phone: restClientData.phone,
+        dateOfBirth: restClientData.dateOfBirth,
+        gender: restClientData.gender,
         role: 'client',
         trainer: trainerId,
 
         // Fitness information (optional)
-        primaryFitnessGoal: clientData.primaryFitnessGoal,
-        currentWeight: clientData.currentWeight,
-        targetWeight: clientData.targetWeight,
-        height: clientData.height,
-        experienceLevel: clientData.experienceLevel,
+        primaryFitnessGoal: restClientData.primaryFitnessGoal,
+        currentWeight: restClientData.currentWeight,
+        targetWeight: restClientData.targetWeight,
+        height: restClientData.height,
+        experienceLevel: restClientData.experienceLevel,
 
         // Program details (optional)
-        programType: clientData.programType,
-        sessionsPerWeek: clientData.sessionsPerWeek,
-        startDate: clientData.startDate,
-        packageDuration: clientData.packageDuration,
-        endDate: clientData.endDate,
+        programType: restClientData.programType,
+        sessionsPerWeek: restClientData.sessionsPerWeek,
+        startDate: restClientData.startDate,
+        packageDuration: restClientData.packageDuration,
+        endDate: restClientData.endDate,
 
         // Additional information (optional)
-        additionalNotes: clientData.additionalNotes,
-        medicalConditions: clientData.medicalConditions,
-        injuries: clientData.injuries,
+        additionalNotes: restClientData.additionalNotes,
+        medicalConditions: restClientData.medicalConditions,
+        injuries: restClientData.injuries,
+        injuryAreaOptionIds:
+            validatedInjuryAreaIds !== undefined
+                ? mapInjuryAreaIdsToObjectIds(validatedInjuryAreaIds)
+                : undefined,
+        injuryDetails:
+            injuryDetails === '' || injuryDetails == null
+                ? null
+                : injuryDetails,
     };
+
+    if (userData.injuryAreaOptionIds === undefined) {
+        delete userData.injuryAreaOptionIds;
+    }
+
     applyCoachingPackageEndDate(userData);
 
-    const client = await User.create(userData);
+    let client;
+    try {
+        client = await User.create(userData);
+
+        if (Object.keys(nutritionCreateBody).length > 0) {
+            await nutritionProfileService.createNutritionProfileForNewClient(
+                client._id.toString(),
+                trainerId,
+                nutritionCreateBody
+            );
+        }
+    } catch (err) {
+        if (client?._id) {
+            try {
+                await NutritionProfile.deleteMany({ clientId: client._id });
+                await User.findByIdAndDelete(client._id);
+            } catch (rollbackErr) {
+                const original = err?.message || String(err);
+                const rollback = rollbackErr?.message || String(rollbackErr);
+                throw new ApiError(
+                    500,
+                    `Client creation failed (${original}) and rollback failed (${rollback})`
+                );
+            }
+        }
+        throw err;
+    }
 
     // Populate trainer info and return
     await client.populate('trainer', 'firstName lastName email');
-    return client.getPublicProfile();
+    const profile = client.getPublicProfile();
+    return enrichClientPublicProfileWithInjuryAreas(profile);
 };
 
 /**
@@ -178,7 +268,8 @@ const getClientById = async (clientId, trainerId = null) => {
         throw new ApiError(403, 'You do not have access to this client');
     }
 
-    return client.getPublicProfile();
+    const profile = client.getPublicProfile();
+    return enrichClientPublicProfileWithInjuryAreas(profile);
 };
 
 /**
@@ -199,14 +290,39 @@ const updateClient = async (clientId, updateData, trainerId = null) => {
         throw new ApiError(403, 'You do not have access to this client');
     }
 
-    // Update client data
-    Object.assign(client, updateData);
+    const {
+        allergyOptionIds: _omitAllergy,
+        dietaryRestrictionOptionIds: _omitDiet,
+        injuryAreaOptionIds,
+        injuryDetails,
+        ...userUpdateData
+    } = updateData;
+
+    if (injuryAreaOptionIds !== undefined) {
+        const validated = await validateHealthOptionIdsForCategory({
+            category: 'body_area',
+            requestedIds: injuryAreaOptionIds,
+            existingIds: (client.injuryAreaOptionIds ?? []).map((id) => id.toString()),
+            fieldName: 'injuryAreaOptionIds',
+        });
+        client.injuryAreaOptionIds = mapInjuryAreaIdsToObjectIds(validated ?? []);
+    }
+
+    if (injuryDetails !== undefined) {
+        client.injuryDetails =
+            injuryDetails === '' || injuryDetails == null
+                ? null
+                : String(injuryDetails).trim();
+    }
+
+    Object.assign(client, userUpdateData);
     applyCoachingPackageEndDate(client);
     await client.save();
 
     // Return updated client with populated data
     await client.populate('trainer', 'firstName lastName email');
-    return client.getPublicProfile();
+    const profile = client.getPublicProfile();
+    return enrichClientPublicProfileWithInjuryAreas(profile);
 };
 
 /**

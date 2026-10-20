@@ -1,4 +1,5 @@
 import Joi from 'joi';
+import { healthOptionIdList } from '../health-reference/health-reference.validator.js';
 
 /**
  * Client Validation Schemas
@@ -174,6 +175,19 @@ export const validateCreateClient = Joi.object({
         .messages({
             'string.max': 'Injuries cannot exceed 500 characters',
         }),
+
+    injuryAreaOptionIds: healthOptionIdList,
+    injuryDetails: Joi.string()
+        .max(500)
+        .trim()
+        .allow('', null)
+        .optional()
+        .messages({
+            'string.max': 'Injury details cannot exceed 500 characters',
+        }),
+
+    allergyOptionIds: healthOptionIdList,
+    dietaryRestrictionOptionIds: healthOptionIdList,
 });
 
 // Validation schema for updating client fitness data
@@ -251,6 +265,13 @@ export const validateUpdateClient = Joi.object({
     injuries: Joi.string()
         .max(500)
         .trim()
+        .optional(),
+
+    injuryAreaOptionIds: healthOptionIdList,
+    injuryDetails: Joi.string()
+        .max(500)
+        .trim()
+        .allow('', null)
         .optional(),
 
     status: Joi.string()

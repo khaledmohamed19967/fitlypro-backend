@@ -1,5 +1,6 @@
 import Joi from 'joi';
 import { ACTIVITY_LEVELS } from './nutrition-profile.constants.js';
+import { healthOptionIdList } from '../health-reference/health-reference.validator.js';
 
 const stringList = Joi.array()
     .items(Joi.string().trim().min(1).max(120))
@@ -16,7 +17,9 @@ export const validateUpsertNutritionProfile = Joi.object({
         .allow(null)
         .optional(),
     allergies: stringList,
+    allergyOptionIds: healthOptionIdList,
     dietaryRestrictions: stringList,
+    dietaryRestrictionOptionIds: healthOptionIdList,
     foodPreferences: stringList,
     notes: Joi.string().trim().max(1000).allow('', null).optional(),
     height: Joi.forbidden(),

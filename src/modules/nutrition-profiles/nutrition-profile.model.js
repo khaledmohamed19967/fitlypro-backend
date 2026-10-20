@@ -39,6 +39,15 @@ const nutritionProfileSchema = new mongoose.Schema(
                 message: 'Each allergy must be a string up to 120 characters',
             },
         },
+        allergyOptionIds: {
+            type: [
+                {
+                    type: mongoose.Schema.Types.ObjectId,
+                    ref: 'HealthReferenceOption',
+                },
+            ],
+            default: [],
+        },
         dietaryRestrictions: {
             type: [String],
             default: [],
@@ -48,6 +57,15 @@ const nutritionProfileSchema = new mongoose.Schema(
                     arr.every((s) => typeof s === 'string' && s.trim().length <= 120),
                 message: 'Each dietary restriction must be a string up to 120 characters',
             },
+        },
+        dietaryRestrictionOptionIds: {
+            type: [
+                {
+                    type: mongoose.Schema.Types.ObjectId,
+                    ref: 'HealthReferenceOption',
+                },
+            ],
+            default: [],
         },
         foodPreferences: {
             type: [String],

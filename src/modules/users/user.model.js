@@ -140,6 +140,21 @@ const userSchema = new mongoose.Schema(
             type: String,
             maxlength: [500, 'Injuries cannot exceed 500 characters'],
         },
+        injuryAreaOptionIds: {
+            type: [
+                {
+                    type: mongoose.Schema.Types.ObjectId,
+                    ref: 'HealthReferenceOption',
+                },
+            ],
+            default: [],
+        },
+        injuryDetails: {
+            type: String,
+            trim: true,
+            maxlength: [500, 'Injury details cannot exceed 500 characters'],
+            default: null,
+        },
 
         // === PROGRESS TRACKING (Optional - for clients) ===
         progressNotes: [
@@ -255,6 +270,10 @@ userSchema.methods.getPublicProfile = function () {
         additionalNotes: this.additionalNotes,
         medicalConditions: this.medicalConditions,
         injuries: this.injuries,
+        injuryAreaOptionIds: (this.injuryAreaOptionIds ?? []).map((id) =>
+            id.toString()
+        ),
+        injuryDetails: this.injuryDetails ?? null,
         progressNotes: this.progressNotes,
         createdAt: this.createdAt,
         updatedAt: this.updatedAt,
