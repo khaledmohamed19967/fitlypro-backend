@@ -13,6 +13,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export const SUBSCRIPTION_NEEDS_ATTENTION_KINDS = Object.freeze({
     EXPIRED: 'subscription_expired',
     EXPIRES_TODAY: 'subscription_expires_today',
+    EXPIRING_SOON: 'subscription_expiring_soon',
 });
 
 export const SUBSCRIPTION_NEEDS_ATTENTION_ACTIONS = Object.freeze({
@@ -131,6 +132,10 @@ export const resolveSubscriptionNeedsAttention = (
     client = {},
     now = new Date()
 ) => {
+    if (client.isActive === false) {
+        return null;
+    }
+
     const classified = classifySubscriptionPackage(client, now);
     if (!classified) {
         return null;
@@ -146,6 +151,13 @@ export const resolveSubscriptionNeedsAttention = (
     if (classified.bucket === SUBSCRIPTION_PACKAGE_BUCKETS.EXPIRES_TODAY) {
         return {
             kind: SUBSCRIPTION_NEEDS_ATTENTION_KINDS.EXPIRES_TODAY,
+            suggestedAction: SUBSCRIPTION_NEEDS_ATTENTION_ACTIONS.SEND_RENEWAL_REMINDER,
+        };
+    }
+
+    if (classified.bucket === SUBSCRIPTION_PACKAGE_BUCKETS.EXPIRING_SOON) {
+        return {
+            kind: SUBSCRIPTION_NEEDS_ATTENTION_KINDS.EXPIRING_SOON,
             suggestedAction: SUBSCRIPTION_NEEDS_ATTENTION_ACTIONS.SEND_RENEWAL_REMINDER,
         };
     }

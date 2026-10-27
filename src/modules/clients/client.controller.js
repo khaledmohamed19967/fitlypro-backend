@@ -100,6 +100,26 @@ export const updateClient = asyncHandler(async (req, res) => {
 });
 
 /**
+ * @desc    Update client coaching package / fitness fields
+ * @route   PUT /api/v1/clients/:id/plan
+ * @access  Private (Trainer only - must own the client)
+ */
+export const updateClientPlan = asyncHandler(async (req, res) => {
+    const trainerId = req.user.id;
+    const clientId = req.params.id;
+
+    const client = await clientService.updateClientPlan(
+        clientId,
+        req.body,
+        trainerId
+    );
+
+    res.status(200).json(
+        new ApiResponse(200, client, 'Client plan updated successfully')
+    );
+});
+
+/**
  * @desc    Delete client (soft delete)
  * @route   DELETE /api/v1/clients/:id
  * @access  Private (Trainer only - must own the client)
@@ -112,6 +132,22 @@ export const deleteClient = asyncHandler(async (req, res) => {
 
     res.status(200).json(
         new ApiResponse(200, null, 'Client deactivated successfully')
+    );
+});
+
+/**
+ * @desc    Reactivate a deactivated client
+ * @route   POST /api/v1/clients/:id/reactivate
+ * @access  Private (Trainer only - must own the client)
+ */
+export const reactivateClient = asyncHandler(async (req, res) => {
+    const trainerId = req.user.id;
+    const clientId = req.params.id;
+
+    const client = await clientService.reactivateClient(clientId, trainerId);
+
+    res.status(200).json(
+        new ApiResponse(200, client, 'Client reactivated successfully')
     );
 });
 

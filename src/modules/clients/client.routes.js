@@ -4,13 +4,16 @@ import {
     getMyClients,
     getClientById,
     updateClient,
+    updateClientPlan,
     deleteClient,
+    reactivateClient,
     addProgressNote,
     getTrainerStats,
 } from './client.controller.js';
 import {
     validateCreateClient,
     validateUpdateClient,
+    validateUpdateClientPlan,
     validateProgressNote,
 } from './client.validator.js';
 import { validate } from '../../middlewares/validate.js';
@@ -57,6 +60,14 @@ router.post(
     '/:id/invitation',
     validate(validateCreateClientInvitation),
     createClientInvitation
+);
+
+router.post('/:id/reactivate', reactivateClient);
+
+router.put(
+    '/:id/plan',
+    validate(validateUpdateClientPlan),
+    updateClientPlan
 );
 
 router

@@ -190,9 +190,51 @@ export const validateCreateClient = Joi.object({
     dietaryRestrictionOptionIds: healthOptionIdList,
 });
 
-// Validation schema for updating client fitness data
-export const validateUpdateClient = Joi.object({
-    // Fitness Information
+const personalFieldsSchema = {
+    firstName: Joi.string()
+        .min(2)
+        .max(50)
+        .trim()
+        .optional()
+        .messages({
+            'string.min': 'First name must be at least 2 characters',
+            'string.max': 'First name cannot exceed 50 characters',
+        }),
+
+    lastName: Joi.string()
+        .min(2)
+        .max(50)
+        .trim()
+        .optional()
+        .messages({
+            'string.min': 'Last name must be at least 2 characters',
+            'string.max': 'Last name cannot exceed 50 characters',
+        }),
+
+    phone: Joi.string()
+        .pattern(/^[0-9]{10,15}$/)
+        .trim()
+        .allow('', null)
+        .optional()
+        .messages({
+            'string.pattern.base': 'Please provide a valid phone number (10-15 digits)',
+        }),
+
+    dateOfBirth: Joi.date()
+        .max('now')
+        .allow(null)
+        .optional()
+        .messages({
+            'date.max': 'Date of birth cannot be in the future',
+        }),
+
+    gender: Joi.string()
+        .valid('male', 'female', 'other')
+        .allow(null)
+        .optional(),
+};
+
+const fitnessFieldsSchema = {
     primaryFitnessGoal: Joi.string()
         .valid(
             'weight_loss',
@@ -224,8 +266,9 @@ export const validateUpdateClient = Joi.object({
     experienceLevel: Joi.string()
         .valid('beginner', 'intermediate', 'advanced', 'expert')
         .optional(),
+};
 
-    // Program Details
+const programFieldsSchema = {
     programType: Joi.string()
         .valid(
             'personal_training',
@@ -251,20 +294,24 @@ export const validateUpdateClient = Joi.object({
     endDate: Joi.date()
         .optional(),
 
-    // Additional Information
     additionalNotes: Joi.string()
         .max(1000)
         .trim()
+        .allow('', null)
         .optional(),
+};
 
+const healthUserFieldsSchema = {
     medicalConditions: Joi.string()
         .max(500)
         .trim()
+        .allow('', null)
         .optional(),
 
     injuries: Joi.string()
         .max(500)
         .trim()
+        .allow('', null)
         .optional(),
 
     injuryAreaOptionIds: healthOptionIdList,
@@ -273,11 +320,33 @@ export const validateUpdateClient = Joi.object({
         .trim()
         .allow('', null)
         .optional(),
+};
 
-    status: Joi.string()
-        .valid('active', 'inactive', 'completed', 'on_hold')
+const nutritionRestrictionFieldsSchema = {
+    allergyOptionIds: healthOptionIdList,
+    dietaryRestrictionOptionIds: healthOptionIdList,
+    allergies: Joi.array()
+        .items(Joi.string().trim().max(200))
         .optional(),
-});
+    dietaryRestrictions: Joi.array()
+        .items(Joi.string().trim().max(200))
+        .optional(),
+};
+
+// Validation schema for updating client profile (trainer; email not accepted)
+export const validateUpdateClient = Joi.object({
+    ...personalFieldsSchema,
+    ...fitnessFieldsSchema,
+    ...programFieldsSchema,
+    ...healthUserFieldsSchema,
+    ...nutritionRestrictionFieldsSchema,
+}).min(1);
+
+/** Coaching / package subset for PUT /clients/:id/plan (BFF compatibility). */
+export const validateUpdateClientPlan = Joi.object({
+    ...fitnessFieldsSchema,
+    ...programFieldsSchema,
+}).min(1);
 
 // Validation schema for adding progress note
 export const validateProgressNote = Joi.object({

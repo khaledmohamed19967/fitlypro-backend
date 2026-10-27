@@ -12,6 +12,14 @@ import {
 } from '../health-reference/health-reference.helpers.js';
 import NutritionProfile from '../nutrition-profiles/nutrition-profile.model.js';
 import nutritionProfileService from '../nutrition-profiles/nutrition-profile.service.js';
+import { loadClientForCoachMutation } from './client.access.js';
+import { completeClientDeactivation } from './client.deactivation.js';
+import {
+    CLIENT_FULL_UPDATE_FIELDS,
+    CLIENT_NUTRITION_PROFILE_UPDATE_FIELDS,
+    CLIENT_PLAN_UPDATE_FIELDS,
+    pickAllowedUpdateFields,
+} from './client.update-allowlist.js';
 
 /**
  * Client Service
@@ -24,6 +32,128 @@ import nutritionProfileService from '../nutrition-profiles/nutrition-profile.ser
 
 const mapInjuryAreaIdsToObjectIds = (idStrings) =>
     (idStrings ?? []).map((id) => new mongoose.Types.ObjectId(id));
+
+const normalizeOptionalStringField = (value) => {
+    if (value === '' || value == null) {
+        return value === '' ? undefined : null;
+    }
+    return value;
+};
+
+const buildClientResponse = async (client, clientId, trainerId) => {
+    await client.populate('trainer', 'firstName lastName email');
+    const profile = client.getPublicProfile();
+    const withInjuries = await enrichClientPublicProfileWithInjuryAreas(profile);
+    return enrichClientWithNutritionRestrictionIds(
+        withInjuries,
+        clientId ?? client._id?.toString(),
+        trainerId
+    );
+};
+
+/**
+ * Attach nutrition restriction option IDs (canonical store: NutritionProfile).
+ * Does not duplicate legacy string lists on the client DTO.
+ */
+const enrichClientWithNutritionRestrictionIds = async (
+    publicProfile,
+    clientId,
+    trainerId
+) => {
+    if (!clientId || !trainerId) {
+        return publicProfile;
+    }
+
+    try {
+        const nutrition = await nutritionProfileService.getNutritionProfile(
+            clientId,
+            trainerId
+        );
+        if (!nutrition) {
+            return publicProfile;
+        }
+
+        return {
+            ...publicProfile,
+            allergyOptionIds: nutrition.allergyOptionIds ?? [],
+            dietaryRestrictionOptionIds:
+                nutrition.dietaryRestrictionOptionIds ?? [],
+        };
+    } catch {
+        return publicProfile;
+    }
+};
+
+/**
+ * Apply allowlisted User fields; does not save.
+ *
+ * @param {import('mongoose').Document} client
+ * @param {Record<string, unknown>} patch
+ * @param {readonly string[]} allowedKeys
+ */
+const applyAllowlistedUserUpdates = (client, patch, allowedKeys) => {
+    const userPatch = pickAllowedUpdateFields(patch, allowedKeys);
+
+    for (const [key, value] of Object.entries(userPatch)) {
+        if (key === 'phone' || key === 'additionalNotes' || key === 'medicalConditions' || key === 'injuries') {
+            const normalized = normalizeOptionalStringField(value);
+            if (normalized === undefined) {
+                client[key] = undefined;
+            } else {
+                client[key] = normalized;
+            }
+            continue;
+        }
+        client[key] = value;
+    }
+
+    if (
+        userPatch.startDate !== undefined ||
+        userPatch.packageDuration !== undefined ||
+        userPatch.endDate !== undefined
+    ) {
+        applyCoachingPackageEndDate(client);
+    }
+};
+
+const applyInjuryUpdates = async (client, { injuryAreaOptionIds, injuryDetails }) => {
+    if (injuryAreaOptionIds !== undefined) {
+        const validated = await validateHealthOptionIdsForCategory({
+            category: 'body_area',
+            requestedIds: injuryAreaOptionIds,
+            existingIds: (client.injuryAreaOptionIds ?? []).map((id) => id.toString()),
+            fieldName: 'injuryAreaOptionIds',
+        });
+        client.injuryAreaOptionIds = mapInjuryAreaIdsToObjectIds(validated ?? []);
+    }
+
+    if (injuryDetails !== undefined) {
+        client.injuryDetails =
+            injuryDetails === '' || injuryDetails == null
+                ? null
+                : String(injuryDetails).trim();
+    }
+};
+
+const applyNutritionRestrictionUpdates = async (
+    clientId,
+    trainerId,
+    updateData
+) => {
+    const nutritionPatch = pickAllowedUpdateFields(
+        updateData,
+        CLIENT_NUTRITION_PROFILE_UPDATE_FIELDS
+    );
+    if (Object.keys(nutritionPatch).length === 0) {
+        return;
+    }
+
+    await nutritionProfileService.upsertNutritionProfile(
+        clientId,
+        nutritionPatch,
+        trainerId
+    );
+};
 
 /**
  * Create a new client (creates User with role='client' and fitness data)
@@ -40,6 +170,24 @@ const createClient = async (clientData, trainerId) => {
     // 1. Check if user with this email already exists
     const existingUser = await User.findByEmail(restClientData.email);
     if (existingUser) {
+        if (
+            existingUser.role === 'client' &&
+            !existingUser.isActive &&
+            existingUser.trainer?.toString() === String(trainerId)
+        ) {
+            throw new ApiError(
+                409,
+                'This client was deactivated. Reactivate them instead of creating a duplicate account.',
+                [
+                    {
+                        field: 'email',
+                        message:
+                            'A deactivated client with this email already exists on your roster.',
+                        code: 'CLIENT_INACTIVE_REACTIVATE',
+                    },
+                ]
+            );
+        }
         throw new ApiError(400, 'User with this email already exists');
     }
 
@@ -269,85 +417,95 @@ const getClientById = async (clientId, trainerId = null) => {
     }
 
     const profile = client.getPublicProfile();
-    return enrichClientPublicProfileWithInjuryAreas(profile);
+    const withInjuries = await enrichClientPublicProfileWithInjuryAreas(profile);
+    return enrichClientWithNutritionRestrictionIds(
+        withInjuries,
+        clientId,
+        trainerId
+    );
 };
 
 /**
- * Update client fitness data
+ * Update client profile (personal, fitness, health, package, allergies/dietary restrictions).
  */
 const updateClient = async (clientId, updateData, trainerId = null) => {
-    const client = await User.findOne({
-        _id: clientId,
-        role: 'client',
-    });
+    const client = await loadClientForCoachMutation(clientId, trainerId);
 
-    if (!client) {
-        throw new ApiError(404, 'Client not found');
-    }
-
-    // Verify trainer has access
-    if (trainerId && client.trainer?.toString() !== trainerId.toString()) {
-        throw new ApiError(403, 'You do not have access to this client');
-    }
-
-    const {
-        allergyOptionIds: _omitAllergy,
-        dietaryRestrictionOptionIds: _omitDiet,
-        injuryAreaOptionIds,
-        injuryDetails,
-        ...userUpdateData
-    } = updateData;
-
-    if (injuryAreaOptionIds !== undefined) {
-        const validated = await validateHealthOptionIdsForCategory({
-            category: 'body_area',
-            requestedIds: injuryAreaOptionIds,
-            existingIds: (client.injuryAreaOptionIds ?? []).map((id) => id.toString()),
-            fieldName: 'injuryAreaOptionIds',
-        });
-        client.injuryAreaOptionIds = mapInjuryAreaIdsToObjectIds(validated ?? []);
-    }
-
-    if (injuryDetails !== undefined) {
-        client.injuryDetails =
-            injuryDetails === '' || injuryDetails == null
-                ? null
-                : String(injuryDetails).trim();
-    }
-
-    Object.assign(client, userUpdateData);
-    applyCoachingPackageEndDate(client);
+    await applyInjuryUpdates(client, updateData);
+    applyAllowlistedUserUpdates(client, updateData, CLIENT_FULL_UPDATE_FIELDS);
     await client.save();
 
-    // Return updated client with populated data
-    await client.populate('trainer', 'firstName lastName email');
-    const profile = client.getPublicProfile();
-    return enrichClientPublicProfileWithInjuryAreas(profile);
+    await applyNutritionRestrictionUpdates(
+        clientId,
+        trainerId,
+        updateData
+    );
+
+    return buildClientResponse(client, clientId, trainerId);
+};
+
+/**
+ * Update coaching package / fitness fields only (BFF PUT /clients/:id/plan).
+ */
+const updateClientPlan = async (clientId, updateData, trainerId = null) => {
+    const client = await loadClientForCoachMutation(clientId, trainerId);
+
+    applyAllowlistedUserUpdates(client, updateData, CLIENT_PLAN_UPDATE_FIELDS);
+    await client.save();
+
+    return buildClientResponse(client, clientId, trainerId);
 };
 
 /**
  * Delete client (soft delete - deactivate)
  */
 const deleteClient = async (clientId, trainerId = null) => {
-    const client = await User.findOne({
-        _id: clientId,
-        role: 'client',
-    });
+    const client = await loadClientForCoachMutation(clientId, trainerId);
 
-    if (!client) {
-        throw new ApiError(404, 'Client not found');
+    try {
+        await completeClientDeactivation(
+            client._id,
+            trainerId,
+            Boolean(client.isActive)
+        );
+    } catch (err) {
+        const detail = err?.message || String(err);
+        throw new ApiError(500, 'Failed to deactivate client', [
+            { field: 'clientId', message: detail },
+        ]);
     }
 
-    // Verify trainer has access
-    if (trainerId && client.trainer?.toString() !== trainerId.toString()) {
-        throw new ApiError(403, 'You do not have access to this client');
+    const refreshed = await User.findById(client._id);
+    if (!refreshed || refreshed.isActive) {
+        throw new ApiError(500, 'Failed to deactivate client', [
+            {
+                field: 'clientId',
+                message:
+                    'Deactivation did not complete. Retry the request; cancelled assignments are not restored automatically.',
+            },
+        ]);
     }
 
-    // Soft delete - mark as inactive
-    client.isActive = false;
+    return refreshed.getPublicProfile();
+};
+
+/**
+ * Reactivate a previously deactivated client (same user document; no assignment restore).
+ */
+const reactivateClient = async (clientId, trainerId) => {
+    const client = await loadClientForCoachMutation(clientId, trainerId);
+
+    if (client.isActive) {
+        const profile = client.getPublicProfile();
+        return enrichClientPublicProfileWithInjuryAreas(profile);
+    }
+
+    client.isActive = true;
     await client.save();
 
-    return client.getPublicProfile();
+    await client.populate('trainer', 'firstName lastName email');
+    const profile = client.getPublicProfile();
+    return enrichClientPublicProfileWithInjuryAreas(profile);
 };
 
 /**
@@ -431,6 +589,7 @@ const attachSubscriptionNeedsAttention = (profiles) => {
             startDate: client.startDate,
             packageDuration: client.packageDuration,
             endDate: client.endDate,
+            isActive: client.isActive,
         }),
     }));
 };
@@ -462,7 +621,9 @@ export default {
     getClientsByTrainer,
     getClientById,
     updateClient,
+    updateClientPlan,
     deleteClient,
+    reactivateClient,
     addProgressNote,
     getTrainerStats,
 };

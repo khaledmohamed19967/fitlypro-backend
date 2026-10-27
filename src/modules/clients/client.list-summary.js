@@ -1,6 +1,5 @@
 import User from '../users/user.model.js';
 import {
-    SUBSCRIPTION_NEEDS_ATTENTION_KINDS,
     SUBSCRIPTION_PACKAGE_BUCKETS,
     classifySubscriptionPackage,
     resolveSubscriptionDaysUntilEnd,
@@ -155,14 +154,16 @@ export function summarizeClientRoster(roster, now = new Date()) {
         }
 
         if (classified.bucket === SUBSCRIPTION_PACKAGE_BUCKETS.EXPIRES_TODAY) {
+            const needsAttention = resolveSubscriptionNeedsAttention(
+                packageFields,
+                now
+            );
             expiresTodayEntries.push({
                 id,
                 sortEndMs,
                 item: mapClientSummaryItem(client, {
                     endDate,
-                    needsAttention: {
-                        kind: SUBSCRIPTION_NEEDS_ATTENTION_KINDS.EXPIRES_TODAY,
-                    },
+                    needsAttention,
                 }),
             });
         }

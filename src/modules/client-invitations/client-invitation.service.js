@@ -10,6 +10,7 @@ import {
 } from './client-invitation.helpers.js';
 import User from '../users/user.model.js';
 import { ApiError } from '../../utils/ApiError.js';
+import { assertClientActiveForNewActivity } from '../clients/client.access.js';
 
 const isValidObjectId = (id) =>
     mongoose.Types.ObjectId.isValid(id) &&
@@ -137,6 +138,7 @@ const createInvitation = async (clientId, trainerId) => {
     }
 
     const client = await loadOwnedClientForInvite(clientId, trainerId);
+    assertClientActiveForNewActivity(client);
 
     await ClientInvitation.updateMany(
         {

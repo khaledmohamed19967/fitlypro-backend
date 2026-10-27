@@ -701,6 +701,16 @@ const verifyTrainerClient = async (clientId, trainerId) => {
         ]);
     }
 
+    if (!client.isActive) {
+        throw new ApiError(403, 'Client is deactivated', [
+            {
+                field: 'clientIds',
+                message: 'Client is deactivated',
+                code: 'CLIENT_DEACTIVATED',
+            },
+        ]);
+    }
+
     return client;
 };
 

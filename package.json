@@ -16,8 +16,10 @@
     "cleanup:foods:legacy": "node scripts/cleanup-legacy-imported-foods.mjs",
     "seed:nutrition-templates": "node scripts/seed-nutrition-templates.mjs",
     "seed:health-reference": "node scripts/seed-health-reference-options.mjs",
+    "seed:subscription-ui-clients": "node scripts/seed-subscription-ui-clients.mjs",
     "migrate:health-option-ids": "node scripts/migrate-health-option-ids.mjs",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "test:client-profile-update": "node scripts/test-client-profile-update.mjs"
   },
   "keywords": [
     "fitness",

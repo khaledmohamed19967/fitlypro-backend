@@ -956,6 +956,102 @@ export const mapNutritionPlanToPublic = (plan) => {
 };
 
 /**
+ * Meals from the first nutrition day that contains meals (same rule as template card preview).
+ *
+ * @param {object[]} nutritionDays
+ * @returns {object[]}
+ */
+export const pickCanonicalPreviewMeals = (nutritionDays = []) => {
+    const days = normalizeNutritionDays(nutritionDays);
+    const withMeals = days.find((day) => Array.isArray(day.meals) && day.meals.length > 0);
+    if (!withMeals) {
+        return [];
+    }
+    return normalizeMealOrder(withMeals.meals);
+};
+
+/**
+ * Compact meal + food-name preview for list rows (no full food snapshots).
+ *
+ * @param {object[]} nutritionDays
+ * @returns {Array<{ name: string, foods: string[] }>}
+ */
+export const buildNutritionPlanMealsPreview = (nutritionDays = []) =>
+    pickCanonicalPreviewMeals(nutritionDays).map((meal) => ({
+        name: meal.name,
+        foods: normalizeFoodItemOrder(meal.foodItems ?? [])
+            .map((item) => {
+                const name = item?.foodSnapshot?.name;
+                return typeof name === 'string' ? name.trim() : '';
+            })
+            .filter(Boolean),
+    }));
+
+/**
+ * Display kcal for list cards.
+ *
+ * Precedence (matches trainer template card / detail meal-derived field first):
+ * 1. `avgDailyCalories` — same value as detail `avgDailyCalories` (kcal/day from denormalized
+ *    store or `calculatePlanComputedMacros` over embedded meals; not `macroTargets.calories`).
+ * 2. `macroTargets.calories` — trainer calorie target (kcal) when meal-derived average is 0.
+ *
+ * Detail API keeps these separate; `dailyCalories` is the combined display field for list rows.
+ *
+ * @param {number} avgDailyCalories — already rounded list/detail avgDailyCalories
+ * @param {{ calories?: number }|null|undefined} macroTargets
+ */
+const resolveListItemDailyCalories = (avgDailyCalories, macroTargets) => {
+    if (avgDailyCalories > 0) {
+        return avgDailyCalories;
+    }
+    const targetCalories = macroTargets?.calories;
+    if (targetCalories != null && targetCalories > 0) {
+        return roundCalories(targetCalories);
+    }
+    return 0;
+};
+
+/**
+ * Macro grams for list cards.
+ *
+ * Precedence (aligned with detail `macroTargets` protein/carbs/fat in grams):
+ * 1. Use all `macroTargets` gram fields when their sum is &gt; 0 (including explicit zeros, e.g. protein: 0).
+ * 2. Otherwise fall back to `computedMacros`-equivalent averages from embedded meals.
+ *
+ * @param {object} doc
+ * @param {{ avgDailyProtein?: number, avgDailyCarbs?: number, avgDailyFat?: number }} computed
+ * @returns {{ protein: number, carbs: number, fat: number }|null}
+ */
+const resolveListItemMacroGrams = (doc, computed) => {
+    const targets = doc.macroTargets;
+    if (targets) {
+        const protein = Number(targets.protein) || 0;
+        const carbs = Number(targets.carbs) || 0;
+        const fat = Number(targets.fat) || 0;
+        if (protein + carbs + fat > 0) {
+            return {
+                protein: roundMacroValue(protein),
+                carbs: roundMacroValue(carbs),
+                fat: roundMacroValue(fat),
+            };
+        }
+    }
+
+    const protein = Number(computed.avgDailyProtein) || 0;
+    const carbs = Number(computed.avgDailyCarbs) || 0;
+    const fat = Number(computed.avgDailyFat) || 0;
+    if (protein + carbs + fat <= 0) {
+        return null;
+    }
+
+    return {
+        protein: roundMacroValue(protein),
+        carbs: roundMacroValue(carbs),
+        fat: roundMacroValue(fat),
+    };
+};
+
+/**
  * Compact nutrition plan row for list API responses.
  *
  * @param {import('mongoose').Document|object} plan
@@ -968,24 +1064,34 @@ export const mapNutritionPlanListItem = (plan) => {
 
     const doc = toPlainObject(plan);
     const ownership = resolvePlanOwnership(doc);
+    const nutritionDays = normalizeNutritionDays(doc.nutritionDays ?? []);
+    const computed = calculatePlanComputedMacros(nutritionDays);
+    const mealsPreview = buildNutritionPlanMealsPreview(nutritionDays);
+    const totalMeals = doc.totalMeals ?? countTotalMeals(nutritionDays);
+    const avgDailyCalories = roundCalories(doc.avgDailyCalories ?? computed.avgDailyCalories);
 
     return {
         id: toIdString(doc._id ?? doc.id),
         name: doc.name,
         icon: resolvePlanIcon(doc),
+        description: doc.description ?? null,
         goal: doc.goal,
         duration: doc.duration,
         daysCount: doc.daysCount,
         macroTargets: doc.macroTargets ?? null,
+        dailyCalories: resolveListItemDailyCalories(avgDailyCalories, doc.macroTargets),
+        macros: resolveListItemMacroGrams(doc, computed),
+        mealCount: totalMeals,
+        mealsPreview,
         isTemplate: Boolean(doc.isTemplate),
         status: doc.status,
         ownership: {
             type: ownership.type,
             trainerId: ownership.trainerId,
         },
-        totalMeals: doc.totalMeals ?? 0,
-        totalFoodItems: doc.totalFoodItems ?? 0,
-        avgDailyCalories: roundCalories(doc.avgDailyCalories ?? 0),
+        totalMeals,
+        totalFoodItems: doc.totalFoodItems ?? countTotalFoodItems(nutritionDays),
+        avgDailyCalories,
         createdAt: doc.createdAt,
         updatedAt: doc.updatedAt,
     };

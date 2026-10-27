@@ -15,7 +15,7 @@ const PACKAGE_DURATION_FILTERS = new Set([
  * @param {string|import('mongoose').Types.ObjectId} trainerId
  * @param {object} [options]
  * @param {string} [options.search]
- * @param {'active'|'inactive'} [options.status]
+ * @param {'active'|'inactive'} [options.status] — omitted or `active`: active roster only; `inactive`: deactivated clients
  * @param {string} [options.packageDuration]
  */
 export const buildClientListScopeQuery = (
@@ -27,10 +27,10 @@ export const buildClientListScopeQuery = (
         trainer: new mongoose.Types.ObjectId(String(trainerId)),
     };
 
-    if (status === 'active') {
-        query.isActive = true;
-    } else if (status === 'inactive') {
+    if (status === 'inactive') {
         query.isActive = false;
+    } else {
+        query.isActive = true;
     }
 
     if (
