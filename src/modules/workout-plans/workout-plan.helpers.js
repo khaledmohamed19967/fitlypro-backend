@@ -566,9 +566,10 @@ export const mapWorkoutPlanToPublic = (plan) => {
  * Compact workout plan row for list API responses.
  *
  * @param {import('mongoose').Document|object} plan
+ * @param {{ assignedClientsCount?: number }} [options]
  * @returns {object|null}
  */
-export const mapWorkoutPlanListItem = (plan) => {
+export const mapWorkoutPlanListItem = (plan, options = {}) => {
     if (!plan) {
         return null;
     }
@@ -576,6 +577,8 @@ export const mapWorkoutPlanListItem = (plan) => {
     const doc = toPlainObject(plan);
     const workoutDays = doc.workoutDays ?? [];
     const ownership = resolvePlanOwnership(doc);
+    const assignedClientsCount =
+        ownership.type === 'system' ? 0 : Math.max(0, Number(options.assignedClientsCount) || 0);
 
     return {
         id: toIdString(doc._id ?? doc.id),
@@ -591,6 +594,7 @@ export const mapWorkoutPlanListItem = (plan) => {
             type: ownership.type,
             trainerId: ownership.trainerId,
         },
+        assignedClientsCount,
         totalExercises: countTotalExercises(workoutDays),
         totalDays: Array.isArray(workoutDays) ? workoutDays.length : 0,
         createdAt: doc.createdAt,

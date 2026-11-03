@@ -4,7 +4,6 @@ import { checkEmailUnique, checkUserActive } from '../users/user.helpers.js';
 import { verifyPassword, findUserForAuth, findUserByIdWithPassword } from './auth.helpers.js';
 import { ApiError } from '../../utils/ApiError.js';
 
-
 // =========================================================================
 // Service Methods
 // =========================================================================
@@ -72,6 +71,41 @@ const getProfile = async (userId) => {
 };
 
 /**
+ * Update current user profile fields
+ */
+const updateProfile = async (userId, updateData) => {
+    const payload = {};
+    if (updateData.firstName !== undefined) payload.firstName = updateData.firstName;
+    if (updateData.lastName !== undefined) payload.lastName = updateData.lastName;
+    if (updateData.email !== undefined) payload.email = updateData.email;
+
+    const clearPhone =
+        updateData.phone !== undefined &&
+        (updateData.phone === '' || updateData.phone == null);
+
+    if (updateData.phone !== undefined && !clearPhone) {
+        payload.phone = updateData.phone;
+    }
+
+    if (updateData.email) {
+        await checkEmailUnique(updateData.email, userId);
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+        throw new ApiError(404, 'User not found');
+    }
+
+    Object.assign(user, payload);
+    if (clearPhone) {
+        user.phone = undefined;
+    }
+    await user.save();
+
+    return user.getPublicProfile();
+};
+
+/**
  * Update user password
  */
 const updatePassword = async (userId, currentPassword, newPassword) => {
@@ -94,5 +128,6 @@ export default {
     register,
     login,
     getProfile,
+    updateProfile,
     updatePassword,
 };

@@ -43,6 +43,19 @@ const getProfile = asyncHandler(async (req, res) => {
 });
 
 /**
+ * Update current user profile
+ * @route   PUT /api/v1/auth/me
+ * @access  Private
+ */
+const updateProfile = asyncHandler(async (req, res) => {
+    const result = await authService.updateProfile(req.user._id, req.body);
+
+    res.status(200).json(
+        new ApiResponse(200, result, 'Profile updated successfully')
+    );
+});
+
+/**
  * Update user password
  * @route   PUT /api/v1/auth/password
  * @access  Private
@@ -64,5 +77,6 @@ export default {
     register,
     login,
     getProfile,
+    updateProfile,
     updatePassword,
 };

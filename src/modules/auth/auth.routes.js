@@ -4,6 +4,7 @@ import { validate } from '../../middlewares/validate.js';
 import {
     validateRegister,
     validateLogin,
+    validateUpdateProfile,
     validateUpdatePassword,
 } from './auth.validator.js';
 import { protect } from '../../middlewares/auth.middleware.js';
@@ -28,6 +29,13 @@ router.get(
     '/me',
     protect,
     authController.getProfile
+);
+
+router.put(
+    '/me',
+    protect,
+    validate(validateUpdateProfile),
+    authController.updateProfile
 );
 
 router.put(

@@ -106,6 +106,23 @@ export const validateLogin = Joi.object({
 });
 
 /**
+ * Update current user profile (self-service).
+ * Avatar/photo is not supported by the User model yet.
+ */
+export const validateUpdateProfile = Joi.object({
+    firstName: Joi.string().min(2).max(50).trim().optional(),
+    lastName: Joi.string().min(2).max(50).trim().optional(),
+    email: Joi.string().email().lowercase().trim().optional(),
+    phone: Joi.string()
+        .pattern(/^[0-9]{10,15}$/)
+        .optional()
+        .allow(null, '')
+        .messages({
+            'string.pattern.base': 'Please provide a valid phone number (10-15 digits)',
+        }),
+}).min(1);
+
+/**
  * Update password validation schema
  */
 export const validateUpdatePassword = Joi.object({

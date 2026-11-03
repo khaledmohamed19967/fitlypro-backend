@@ -155,6 +155,69 @@ const throwIfDuplicateActiveAssignment = (err) => {
 };
 
 /**
+ * Active assignment counts per plan for the current list page (single aggregation).
+ *
+ * @param {string|import('mongoose').Types.ObjectId} trainerId
+ * @param {Array<string|import('mongoose').Types.ObjectId>} planIds
+ * @returns {Promise<Map<string, number>>}
+ */
+const attachAssignedClientsCounts = async (trainerId, planIds) => {
+    const countByPlanId = new Map();
+    const uniquePlanIds = [
+        ...new Set(
+            (Array.isArray(planIds) ? planIds : [])
+                .map((id) => String(id ?? ''))
+                .filter((id) => isValidObjectId(id))
+        ),
+    ];
+
+    if (!isValidObjectId(String(trainerId)) || uniquePlanIds.length === 0) {
+        return countByPlanId;
+    }
+
+    const trainerObjectId = new mongoose.Types.ObjectId(String(trainerId));
+    const planObjectIds = uniquePlanIds.map((id) => new mongoose.Types.ObjectId(id));
+
+    const rows = await PlanAssignment.aggregate([
+        {
+            $match: {
+                trainerId: trainerObjectId,
+                planId: { $in: planObjectIds },
+                status: 'active',
+            },
+        },
+        {
+            $group: {
+                _id: '$planId',
+                assignedClientsCount: { $sum: 1 },
+            },
+        },
+    ]);
+
+    for (const row of rows) {
+        countByPlanId.set(String(row._id), row.assignedClientsCount);
+    }
+
+    return countByPlanId;
+};
+
+/**
+ * @param {string|import('mongoose').Types.ObjectId} trainerId
+ * @param {object[]} plans
+ */
+const mapWorkoutPlansListItemsWithCounts = async (trainerId, plans) => {
+    const planIds = plans.map((plan) => String(plan._id ?? plan.id));
+    const countByPlanId = await attachAssignedClientsCounts(trainerId, planIds);
+
+    return plans.map((plan) => {
+        const planId = String(plan._id ?? plan.id);
+        return mapWorkoutPlanListItem(plan, {
+            assignedClientsCount: countByPlanId.get(planId) ?? 0,
+        });
+    });
+};
+
+/**
  * @param {object} query
  * @param {string} trainerId
  */
@@ -214,7 +277,7 @@ const getWorkoutPlans = async (query, trainerId) => {
         ]);
 
         return {
-            workoutPlans: results.map((plan) => mapWorkoutPlanListItem(plan)),
+            workoutPlans: await mapWorkoutPlansListItemsWithCounts(trainerId, results),
             pagination: buildPaginationMeta(safePage, safeLimit, total),
         };
     }
@@ -228,7 +291,7 @@ const getWorkoutPlans = async (query, trainerId) => {
     });
 
     return {
-        workoutPlans: docs.map((plan) => mapWorkoutPlanListItem(plan)),
+        workoutPlans: await mapWorkoutPlansListItemsWithCounts(trainerId, docs),
         pagination,
     };
 };
