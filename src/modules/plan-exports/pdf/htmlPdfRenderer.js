@@ -85,6 +85,10 @@ export const renderHtmlToPdf = async (html, pdfOptions = {}) => {
 
         return Buffer.isBuffer(pdf) ? pdf : Buffer.from(pdf);
     } catch (error) {
+        // Provide a clearer error when Playwright browser binaries are missing
+        if (error instanceof Error && error.message.includes("Executable doesn't exist")) {
+            throw new ApiError(500, 'PDF generation failed: Playwright Chromium binary missing. Ensure "npx playwright install" has been run.');
+        }
         if (error instanceof ApiError) {
             throw error;
         }

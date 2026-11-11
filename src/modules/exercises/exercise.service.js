@@ -81,10 +81,15 @@ const buildListFilter = (query, trainerId) => {
     }
 
     if (search && String(search).trim()) {
-        const regex = new RegExp(escapeRegex(String(search).trim()), 'i');
-        conditions.push({
-            $or: [{ name: regex }, { nameAr: regex }, { tags: regex }],
+        // Token‑based, order‑independent matching
+        const raw = String(search).trim();
+        const tokens = raw.split(/\s+/).filter(Boolean);
+        const tokenConditions = tokens.map((t) => {
+            const tokenRegex = new RegExp(escapeRegex(t), 'i');
+            return { $or: [{ name: tokenRegex }, { nameAr: tokenRegex }, { tags: tokenRegex }] };
         });
+        // Append each token condition to the outer conditions array.
+        conditions.push(...tokenConditions);
     }
 
     return conditions.length === 1 ? conditions[0] : { $and: conditions };
