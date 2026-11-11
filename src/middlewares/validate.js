@@ -45,13 +45,7 @@ export const validateQuery = (schema) => {
             throw new ApiError(400, 'Validation failed', errors);
         }
 
-        // Express 5 exposes req.query as a getter; replace the property instead of assigning.
-        Object.defineProperty(req, 'query', {
-            value,
-            writable: true,
-            configurable: true,
-            enumerable: true,
-        });
+        req.query = value;
         next();
     };
 };
