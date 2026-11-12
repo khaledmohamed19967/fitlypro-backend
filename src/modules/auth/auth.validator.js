@@ -71,12 +71,15 @@ export const validateRegister = Joi.object({
             'any.only': 'Gender must be either male, female, or other',
         }),
 
+    // Public roles: client | trainer. "coach" is accepted as a product alias for trainer.
+    // Admin is never allowed here. Service still resolves/persists the canonical role.
     role: Joi.string()
-        .valid('client')
+        .valid('client', 'trainer', 'coach')
         .optional()
         .default('client')
         .messages({
-            'any.only': 'Public registration only allows the client role',
+            'any.only':
+                'Public registration only allows the client or coach (trainer) role',
         }),
 
     trainerId: Joi.forbidden(),

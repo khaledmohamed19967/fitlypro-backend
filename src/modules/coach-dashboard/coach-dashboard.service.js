@@ -12,6 +12,15 @@ import {
     buildNeedsAttentionSection,
     buildSubscriptionsSection,
 } from './coach-dashboard.helpers.js';
+import {
+    buildClientsGrowthBuckets,
+    clientsGrowthBucketKey,
+    computeClientsGrowthPercentage,
+    fillClientsGrowthSeries,
+    resolveClientsGrowthGroupBy,
+    resolveClientsGrowthWindow,
+    resolvePreviousClientsGrowthWindow,
+} from './coach-dashboard.clients-growth.js';
 
 /** Same lean projection as client list summary. */
 const ROSTER_SELECT = '_id firstName lastName startDate packageDuration endDate';
@@ -179,6 +188,92 @@ const getOverview = async (trainerId, now = new Date()) => {
     };
 };
 
+/**
+ * Count coach-owned clients whose joinedCoachAt falls in [from, to).
+ *
+ * @param {import('mongoose').Types.ObjectId} trainerObjectId
+ * @param {Date} from
+ * @param {Date} to
+ */
+const countNewClientsInWindow = (trainerObjectId, from, to) =>
+    User.countDocuments({
+        role: 'client',
+        trainer: trainerObjectId,
+        joinedCoachAt: { $gte: from, $lt: to },
+    });
+
+/**
+ * Load joinedCoachAt values for bucketing (coach-scoped, date-filtered).
+ *
+ * @param {import('mongoose').Types.ObjectId} trainerObjectId
+ * @param {Date} from
+ * @param {Date} to
+ */
+const loadJoinedCoachAtsInWindow = async (trainerObjectId, from, to) => {
+    const docs = await User.find({
+        role: 'client',
+        trainer: trainerObjectId,
+        joinedCoachAt: { $gte: from, $lt: to },
+    })
+        .select('joinedCoachAt')
+        .lean();
+
+    return docs
+        .map((doc) => doc.joinedCoachAt)
+        .filter((value) => value instanceof Date && !Number.isNaN(value.getTime()));
+};
+
+/**
+ * Clients Growth chart for the authenticated trainer.
+ * Source of truth: User.joinedCoachAt (not invitations or package dates).
+ *
+ * @param {string} trainerId
+ * @param {{ range: '30d'|'3m'|'6m'|'12m', groupBy?: 'day'|'week'|'month' }} query
+ * @param {Date} [now]
+ */
+const getClientsGrowth = async (trainerId, query, now = new Date()) => {
+    const trainerObjectId = new mongoose.Types.ObjectId(String(trainerId));
+    const range = query.range;
+    const groupBy = resolveClientsGrowthGroupBy(range, query.groupBy);
+    const window = resolveClientsGrowthWindow(range, now);
+    const previousWindow = resolvePreviousClientsGrowthWindow(window);
+
+    const [joinedAts, totalNewClients, previousPeriodTotal] = await Promise.all([
+        loadJoinedCoachAtsInWindow(trainerObjectId, window.from, window.to),
+        countNewClientsInWindow(trainerObjectId, window.from, window.to),
+        countNewClientsInWindow(
+            trainerObjectId,
+            previousWindow.from,
+            previousWindow.to
+        ),
+    ]);
+
+    const countByKey = new Map();
+    for (const joinedAt of joinedAts) {
+        const key = clientsGrowthBucketKey(joinedAt, groupBy);
+        countByKey.set(key, (countByKey.get(key) ?? 0) + 1);
+    }
+
+    const buckets = buildClientsGrowthBuckets(window.from, window.to, groupBy);
+    const series = fillClientsGrowthSeries(buckets, countByKey);
+
+    return {
+        range,
+        groupBy,
+        timezone: DASHBOARD_TIMEZONE,
+        from: window.from.toISOString(),
+        to: window.to.toISOString(),
+        totalNewClients,
+        previousPeriodTotal,
+        growthPercentage: computeClientsGrowthPercentage(
+            totalNewClients,
+            previousPeriodTotal
+        ),
+        series,
+    };
+};
+
 export default {
     getOverview,
+    getClientsGrowth,
 };

@@ -18,7 +18,9 @@
     "seed:health-reference": "node scripts/seed-health-reference-options.mjs",
     "seed:subscription-ui-clients": "node scripts/seed-subscription-ui-clients.mjs",
     "migrate:health-option-ids": "node scripts/migrate-health-option-ids.mjs",
+    "backfill:joined-coach-at": "node scripts/backfill-joined-coach-at.mjs",
     "test:coach-dashboard": "node scripts/test-coach-dashboard-overview.mjs",
+    "test:clients-growth": "node scripts/test-clients-growth.mjs",
     "test": "echo \"Error: no test specified\" && exit 1",
     "test:client-profile-update": "node scripts/test-client-profile-update.mjs"
   },

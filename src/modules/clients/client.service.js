@@ -232,7 +232,9 @@ const createClient = async (clientData, trainerId) => {
         });
     }
 
-    // 3. Create User with client role and all fitness data
+    // 3. Create User with client role and all fitness data.
+    // joinedCoachAt marks first coach association (same event as User create).
+    const associationAt = new Date();
     const userData = {
         // Personal information
         firstName: restClientData.firstName,
@@ -244,6 +246,7 @@ const createClient = async (clientData, trainerId) => {
         gender: restClientData.gender,
         role: 'client',
         trainer: trainerId,
+        joinedCoachAt: associationAt,
 
         // Fitness information (optional)
         primaryFitnessGoal: restClientData.primaryFitnessGoal,

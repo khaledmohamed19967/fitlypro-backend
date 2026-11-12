@@ -10,7 +10,10 @@ export class ApiError extends Error {
         this.data = null;
 
         if (stack) {
-            // this.stack = stack
+            // Preserve the original exception stack when wrapping non-ApiError throws
+            // (e.g. in errorHandler). Leaving this commented made every 500 look like
+            // it originated inside errorHandler.js.
+            this.stack = stack;
         } else {
             Error.captureStackTrace(this, this.constructor);
         }

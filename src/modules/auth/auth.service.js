@@ -2,6 +2,7 @@ import User from '../users/user.model.js';
 import userService from '../users/user.service.js';
 import { checkEmailUnique, checkUserActive } from '../users/user.helpers.js';
 import { verifyPassword, findUserForAuth, findUserByIdWithPassword } from './auth.helpers.js';
+import { resolvePublicRegistrationRole } from './auth.registration-role.js';
 import { ApiError } from '../../utils/ApiError.js';
 
 // =========================================================================
@@ -10,13 +11,16 @@ import { ApiError } from '../../utils/ApiError.js';
 
 /**
  * Register a new user (public self-registration).
- * Role is always forced to client — trainers/admins are not creatable here.
+ * Allowed roles: client (default) or trainer. Input "coach" maps to trainer.
+ * Admin and other privilege fields are never accepted from the client.
  */
 const register = async (userData) => {
     // 1. Validate uniqueness
     await checkEmailUnique(userData.email);
 
-    // 2. Create user — force client role; never trust client-supplied privilege fields
+    // 2. Resolve role server-side (do not persist arbitrary client-supplied roles)
+    const role = resolvePublicRegistrationRole(userData.role);
+
     const user = await User.create({
         firstName: userData.firstName,
         lastName: userData.lastName,
@@ -25,7 +29,7 @@ const register = async (userData) => {
         phone: userData.phone,
         dateOfBirth: userData.dateOfBirth,
         gender: userData.gender,
-        role: 'client',
+        role,
     });
 
     // 3. Generate token

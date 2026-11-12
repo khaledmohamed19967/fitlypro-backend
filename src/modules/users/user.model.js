@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import config from '../../config/index.js';
+import { registerJoinedCoachAtGuards } from './user.joined-coach-at-guard.js';
 
 /**
  * User Schema Definition
@@ -63,6 +64,16 @@ const userSchema = new mongoose.Schema(
         trainer: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'User',
+            default: null,
+        },
+        /**
+         * First coach–client association timestamp.
+         * Set once when a trainer creates the client; never overwritten by
+         * subscription, invitation, deactivation, or profile updates.
+         * Null for public self-registered clients (no coach).
+         */
+        joinedCoachAt: {
+            type: Date,
             default: null,
         },
 
@@ -217,6 +228,20 @@ userSchema.virtual('weightDifference').get(function () {
 // Index for better query performance (email index comes from unique: true above)
 userSchema.index({ createdAt: -1 });
 userSchema.index({ trainer: 1 }); // Index for trainer queries
+userSchema.index(
+    { role: 1, trainer: 1, joinedCoachAt: 1 },
+    {
+        name: 'role_1_trainer_1_joinedCoachAt_1',
+        partialFilterExpression: {
+            role: 'client',
+            trainer: { $type: 'objectId' },
+            joinedCoachAt: { $type: 'date' },
+        },
+    }
+);
+
+// Application-level joinedCoachAt immutability after first non-null assignment.
+registerJoinedCoachAtGuards(userSchema);
 
 // Instance method to compare password
 userSchema.methods.comparePassword = async function (candidatePassword) {

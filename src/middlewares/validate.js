@@ -27,6 +27,23 @@ export const validate = (schema) => {
 };
 
 /**
+ * Replace req.query with validated/sanitized values.
+ * Express 5 exposes query as a getter-only property, so direct assignment throws.
+ * Redefine the property on the request instead of mutating via `req.query = …`.
+ *
+ * @param {import('express').Request} req
+ * @param {Record<string, unknown>} value
+ */
+const applyValidatedQuery = (req, value) => {
+    Object.defineProperty(req, 'query', {
+        value,
+        writable: true,
+        configurable: true,
+        enumerable: true,
+    });
+};
+
+/**
  * Validation Middleware for query strings
  */
 export const validateQuery = (schema) => {
@@ -34,6 +51,7 @@ export const validateQuery = (schema) => {
         const { error, value } = schema.validate(req.query, {
             abortEarly: false,
             stripUnknown: true,
+            convert: true,
         });
 
         if (error) {
@@ -45,7 +63,7 @@ export const validateQuery = (schema) => {
             throw new ApiError(400, 'Validation failed', errors);
         }
 
-        req.query = value;
+        applyValidatedQuery(req, value);
         next();
     };
 };
