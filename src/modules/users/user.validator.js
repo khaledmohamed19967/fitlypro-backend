@@ -37,6 +37,16 @@ export const validateUser = Joi.object({
             'any.required': 'Email is required',
         }),
 
+    password: Joi.string()
+        .min(6)
+        .max(128)
+        .required()
+        .messages({
+            'string.min': 'Password must be at least 6 characters',
+            'string.max': 'Password cannot exceed 128 characters',
+            'any.required': 'Password is required',
+        }),
+
     phone: Joi.string()
         .pattern(/^[0-9]{10,15}$/)
         .optional()

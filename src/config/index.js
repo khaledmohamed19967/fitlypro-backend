@@ -81,6 +81,11 @@ const config = {
     clientInvitation: {
         expiresIn: process.env.INVITATION_EXPIRES_IN || '7d',
     },
+
+    // Coach-initiated prospect registration invitations (Phase 1+)
+    clientProspectInvitation: {
+        expiresIn: process.env.PROSPECT_INVITATION_EXPIRES_IN || '7d',
+    },
 };
 
 export default config;

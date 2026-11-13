@@ -9,6 +9,7 @@ import {
 } from './user.controller.js';
 import { validateUser, validateUpdateUser } from './user.validator.js';
 import { validate } from '../../middlewares/validate.js';
+import { protect, authorize } from '../../middlewares/auth.middleware.js';
 
 const router = express.Router();
 
@@ -23,7 +24,7 @@ const router = express.Router();
 router
     .route('/')
     .get(getAllUsers)
-    .post(validate(validateUser), createUser);
+    .post(protect, authorize('admin'), validate(validateUser), createUser);
 
 // router
 //     .route('/:id')

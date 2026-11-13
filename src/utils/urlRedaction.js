@@ -5,16 +5,16 @@
  * @returns {string}
  */
 export const redactSensitiveUrl = (url = '') =>
-    String(url).replace(
-        /(\/client-invitations\/)[^/?#]+/gi,
-        '$1[REDACTED]'
-    );
+    String(url)
+        .replace(/(\/client-invitations\/)[^/?#]+/gi, '$1[REDACTED]')
+        .replace(/(\/client-prospect-invitations\/)[^/?#]+/gi, '$1[REDACTED]');
 
 /**
- * True when the URL targets the public invitation API (token in path).
+ * True when the URL targets a public invitation API (token in path).
  *
  * @param {string} [url]
  * @returns {boolean}
  */
 export const isClientInvitationPath = (url = '') =>
-    /\/client-invitations\//i.test(String(url));
+    /\/client-invitations\//i.test(String(url)) ||
+    /\/client-prospect-invitations\//i.test(String(url));

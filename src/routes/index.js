@@ -10,6 +10,8 @@ import foodRoutes from '../modules/foods/food.routes.js';
 import nutritionPlanRoutes from '../modules/nutrition-plans/nutrition-plan.routes.js';
 import planExportRoutes from '../modules/plan-exports/plan-export.routes.js';
 import clientInvitationRoutes from '../modules/client-invitations/client-invitation.routes.js';
+import clientProspectInvitationRoutes from '../modules/client-prospect-invitations/client-prospect-invitation.routes.js';
+import clientRegistrationRequestRoutes from '../modules/client-registration-requests/client-registration-request.routes.js';
 import healthReferenceRoutes from '../modules/health-reference/health-reference.routes.js';
 import coachDashboardRoutes from '../modules/coach-dashboard/coach-dashboard.routes.js';
 
@@ -35,6 +37,8 @@ router.use('/clients', clientRoutes);
 router.use('/coach-dashboard', coachDashboardRoutes);
 router.use('/health-reference-options', healthReferenceRoutes);
 router.use('/client-invitations', clientInvitationRoutes);
+router.use('/client-prospect-invitations', clientProspectInvitationRoutes);
+router.use('/client-registration-requests', clientRegistrationRequestRoutes);
 router.use('/exercises', exerciseRoutes);
 router.use('/workout-plans', workoutPlanRoutes);
 router.use('/me', workoutPlanPlayerRoutes);

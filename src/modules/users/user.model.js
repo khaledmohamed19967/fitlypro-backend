@@ -36,7 +36,6 @@ const userSchema = new mongoose.Schema(
         },
         password: {
             type: String,
-            required: [true, 'Password is required'],
             minlength: [6, 'Password must be at least 6 characters'],
             select: false, // Don't include password in queries by default
         },
@@ -75,6 +74,14 @@ const userSchema = new mongoose.Schema(
         joinedCoachAt: {
             type: Date,
             default: null,
+        },
+        /**
+         * Set only when this client is created from an approved registration request.
+         * Idempotency key for approval retries. Omitted on every other user.
+         */
+        registrationRequestId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'ClientRegistrationRequest',
         },
 
         // === FITNESS INFORMATION (Optional - for clients) ===
@@ -185,20 +192,27 @@ const userSchema = new mongoose.Schema(
     },
     {
         timestamps: true, // Adds createdAt and updatedAt automatically
-        toJSON: { virtuals: true },
+        toJSON: {
+            virtuals: true,
+            transform(_doc, ret) {
+                if (ret && typeof ret === 'object') {
+                    delete ret.password;
+                }
+                return ret;
+            },
+        },
         toObject: { virtuals: true },
     }
 );
 
-// Pre-save hook to hash password
-// Pre-save hook to hash password
+const isUnsetPassword = (value) => value == null || value === '';
+
+// Hash only a real password that was set or changed. Never hash null, undefined, or ''.
 userSchema.pre('save', async function () {
-    // Only hash the password if it has been modified (or is new)
-    if (!this.isModified('password')) {
+    if (!this.isModified('password') || isUnsetPassword(this.password)) {
         return;
     }
 
-    // Generate salt and hash password
     const salt = await bcrypt.genSalt(10);
     this.password = await bcrypt.hash(this.password, salt);
 });
@@ -229,6 +243,16 @@ userSchema.virtual('weightDifference').get(function () {
 userSchema.index({ createdAt: -1 });
 userSchema.index({ trainer: 1 }); // Index for trainer queries
 userSchema.index(
+    { registrationRequestId: 1 },
+    {
+        unique: true,
+        name: 'registrationRequestId_1_unique',
+        partialFilterExpression: {
+            registrationRequestId: { $type: 'objectId' },
+        },
+    }
+);
+userSchema.index(
     { role: 1, trainer: 1, joinedCoachAt: 1 },
     {
         name: 'role_1_trainer_1_joinedCoachAt_1',
@@ -243,8 +267,13 @@ userSchema.index(
 // Application-level joinedCoachAt immutability after first non-null assignment.
 registerJoinedCoachAtGuards(userSchema);
 
-// Instance method to compare password
+// Instance method to compare password.
+// A missing hash is a failed comparison, not an internal error.
 userSchema.methods.comparePassword = async function (candidatePassword) {
+    if (isUnsetPassword(this.password)) {
+        return false;
+    }
+
     try {
         return await bcrypt.compare(candidatePassword, this.password);
     } catch (error) {

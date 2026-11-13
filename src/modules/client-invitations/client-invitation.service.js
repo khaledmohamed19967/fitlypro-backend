@@ -157,7 +157,7 @@ const createInvitation = async (clientId, trainerId) => {
     const tokenHash = hashInvitationToken(rawToken);
     const expiresAt = computeInvitationExpiresAt();
 
-    await ClientInvitation.create({
+    const invitation = await ClientInvitation.create({
         clientId: client._id,
         trainerId,
         tokenHash,
@@ -168,6 +168,7 @@ const createInvitation = async (clientId, trainerId) => {
     });
 
     return {
+        invitationId: invitation._id,
         invitationUrl: buildInvitationUrl(rawToken),
         expiresAt,
     };

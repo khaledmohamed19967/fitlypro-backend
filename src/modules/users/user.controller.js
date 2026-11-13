@@ -11,13 +11,13 @@ import { ApiError } from '../../utils/ApiError.js';
 /**
  * @desc    Create a new user
  * @route   POST /api/v1/users
- * @access  Public
+ * @access  Private (Admin)
  */
 export const createUser = asyncHandler(async (req, res) => {
     const user = await userService.createUser(req.body);
 
     res.status(201).json(
-        new ApiResponse(201, user, 'User created successfully')
+        new ApiResponse(201, user.getPublicProfile(), 'User created successfully')
     );
 });
 

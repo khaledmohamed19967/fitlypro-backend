@@ -12,6 +12,10 @@ import { ApiError } from '../../utils/ApiError.js';
  * @param {string} errorMessage 
  */
 export const verifyPassword = async (user, password, errorMessage = 'Invalid email or password') => {
+    if (user?.password == null || user.password === '') {
+        throw new ApiError(401, errorMessage);
+    }
+
     const isPasswordValid = await user.comparePassword(password);
     if (!isPasswordValid) {
         throw new ApiError(401, errorMessage);
