@@ -21,6 +21,24 @@ export const createClientProspectInvitation = asyncHandler(async (req, res) => {
 });
 
 /**
+ * @desc    Reissue a pending prospect invitation (revokes prior pending for same phone)
+ * @route   POST /api/v1/client-prospect-invitations/:invitationId/reissue
+ * @access  Private (Trainer, Admin)
+ */
+export const reissueClientProspectInvitation = asyncHandler(async (req, res) => {
+    const trainerId = req.user.id;
+
+    const result = await clientProspectInvitationService.reissueProspectInvitation(
+        req.params.invitationId,
+        trainerId
+    );
+
+    res.status(201).json(
+        new ApiResponse(201, result, 'Prospect invitation reissued successfully')
+    );
+});
+
+/**
  * @desc    Preview / validate prospect invitation token (public)
  * @route   GET /api/v1/client-prospect-invitations/:token
  * @access  Public

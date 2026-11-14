@@ -3,8 +3,9 @@ import { asyncHandler } from '../../utils/asyncHandler.js';
 import { ApiResponse } from '../../utils/ApiResponse.js';
 
 /**
- * @desc    List system health reference options
+ * @desc    List system health reference options (public read-only catalog)
  * @route   GET /api/v1/health-reference-options
+ * @access  Public
  */
 export const listHealthReferenceOptions = asyncHandler(async (req, res) => {
     const { category, includeInactive } = req.query;

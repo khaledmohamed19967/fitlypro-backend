@@ -2,7 +2,8 @@ import HealthReferenceOption from './health-reference.model.js';
 import { mapHealthReferenceOptionToPublic } from './health-reference.helpers.js';
 
 /**
- * List catalog options for trainers (active by default).
+ * List shared catalog options (active by default).
+ * Public read-only: no user/trainer-specific data.
  *
  * @param {{ category?: string, includeInactive?: boolean }} query
  */

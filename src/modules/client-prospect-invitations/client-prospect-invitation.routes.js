@@ -3,6 +3,7 @@ import {
     createClientProspectInvitation,
     previewClientProspectInvitation,
     registerClientProspectInvitation,
+    reissueClientProspectInvitation,
 } from './client-prospect-invitation.controller.js';
 import {
     validateCreateClientProspectInvitation,
@@ -14,7 +15,7 @@ import { protect, authorize } from '../../middlewares/auth.middleware.js';
 const router = express.Router();
 
 /**
- * Coach create — authenticated.
+ * Coach create / reissue — authenticated.
  * Public preview / register — no auth (token in path).
  */
 
@@ -24,6 +25,13 @@ router.post(
     authorize('trainer', 'admin'),
     validate(validateCreateClientProspectInvitation),
     createClientProspectInvitation
+);
+
+router.post(
+    '/:invitationId/reissue',
+    protect,
+    authorize('trainer', 'admin'),
+    reissueClientProspectInvitation
 );
 
 router.get('/:token', previewClientProspectInvitation);

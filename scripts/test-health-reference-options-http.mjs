@@ -104,15 +104,32 @@ async function main() {
         fail('3. Invalid category', `status=${badCat.status} ${JSON.stringify(badCat.json)}`);
     }
 
-    // 4. Unauthenticated → 401
+    // 4. Unauthenticated public catalog → 200
     const noAuth = await request('GET', '/health-reference-options');
-    if (noAuth.status === 401) {
-        pass('4. Unauthenticated returns 401');
+    const noAuthOptions = noAuth.json?.data?.options;
+    const publicFieldsOnly =
+        Array.isArray(noAuthOptions) &&
+        noAuthOptions.every(
+            (o) =>
+                o &&
+                typeof o.id === 'string' &&
+                typeof o.code === 'string' &&
+                typeof o.label === 'string' &&
+                typeof o.category === 'string' &&
+                !('trainerId' in o) &&
+                !('clientId' in o) &&
+                !('password' in o)
+        );
+    if (noAuth.status === 200 && publicFieldsOnly) {
+        pass('4. Unauthenticated catalog returns 200 with public fields only');
     } else {
-        fail('4. Auth required', `status=${noAuth.status}`);
+        fail(
+            '4. Unauthenticated public catalog',
+            `status=${noAuth.status} fieldsOk=${publicFieldsOnly}`
+        );
     }
 
-    // 5. Client role forbidden
+    // 5. Client role can also read the public catalog
     const clientLogin = await request('POST', '/auth/login', {
         body: { email: client.email, password },
     });
@@ -120,10 +137,10 @@ async function main() {
     const clientCall = await request('GET', '/health-reference-options', {
         token: clientToken,
     });
-    if (clientCall.status === 403) {
-        pass('5. Client role forbidden (403)');
+    if (clientCall.status === 200 && Array.isArray(clientCall.json?.data?.options)) {
+        pass('5. Client role can read public catalog (200)');
     } else {
-        fail('5. Client forbidden', `status=${clientCall.status}`);
+        fail('5. Client catalog access', `status=${clientCall.status}`);
     }
 
     // 6. Error handler: controlled throw must not surface req.query assignment errors
@@ -172,6 +189,45 @@ async function main() {
         fail(
             '7. includeInactive',
             `status=${withInactive.status} ${JSON.stringify(withInactive.json)}`
+        );
+    }
+
+    // 8. Public category filters without auth
+    const publicCategories = ['allergy', 'dietary_restriction', 'body_area'];
+    let publicCatsOk = true;
+    for (const category of publicCategories) {
+        const res = await request(
+            'GET',
+            `/health-reference-options?category=${category}`
+        );
+        if (
+            res.status !== 200 ||
+            !Array.isArray(res.json?.data?.options) ||
+            !res.json.data.options.every((o) => o.category === category)
+        ) {
+            publicCatsOk = false;
+            fail(
+                `8. Public category=${category}`,
+                `status=${res.status} count=${res.json?.data?.options?.length}`
+            );
+            break;
+        }
+    }
+    if (publicCatsOk) {
+        pass('8. Public requests for each supported category succeed');
+    }
+
+    // 9. Nested client nutrition-profile still requires auth
+    const nutritionNoAuth = await request(
+        'GET',
+        `/clients/${client._id}/nutrition-profile`
+    );
+    if (nutritionNoAuth.status === 401) {
+        pass('9. Nutrition profile endpoint still requires authentication');
+    } else {
+        fail(
+            '9. Nutrition profile still protected',
+            `status=${nutritionNoAuth.status}`
         );
     }
 

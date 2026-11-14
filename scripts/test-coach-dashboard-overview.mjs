@@ -11,6 +11,10 @@ import mongoose from 'mongoose';
 import User from '../src/modules/users/user.model.js';
 import ClientInvitation from '../src/modules/client-invitations/client-invitation.model.js';
 import { CLIENT_INVITATION_STATUS } from '../src/modules/client-invitations/client-invitation.constants.js';
+import ClientProspectInvitation from '../src/modules/client-prospect-invitations/client-prospect-invitation.model.js';
+import { CLIENT_PROSPECT_INVITATION_STATUS } from '../src/modules/client-prospect-invitations/client-prospect-invitation.constants.js';
+import ClientRegistrationRequest from '../src/modules/client-registration-requests/client-registration-request.model.js';
+import { CLIENT_REGISTRATION_REQUEST_STATUS } from '../src/modules/client-registration-requests/client-registration-request.constants.js';
 import { buildClientListScopeQuery } from '../src/modules/clients/client.list-scope.js';
 import { summarizeClientRoster } from '../src/modules/clients/client.list-summary.js';
 import coachDashboardService from '../src/modules/coach-dashboard/coach-dashboard.service.js';
@@ -384,6 +388,216 @@ async function main() {
         fail('No tokenHash / raw token / invitationUrl in invitations payload', invJson);
     }
 
+    // Empty registrationActivity before seeding prospect data
+    if (
+        overviewInv.registrationActivity &&
+        overviewInv.registrationActivity.activeLinks === 0 &&
+        overviewInv.registrationActivity.expiredLinks === 0 &&
+        overviewInv.registrationActivity.pendingRequests === 0 &&
+        overviewInv.registrationActivity.approvedRequests === 0 &&
+        overviewInv.registrationActivity.rejectedRequests === 0 &&
+        Array.isArray(overviewInv.registrationActivity.pendingPreview) &&
+        overviewInv.registrationActivity.pendingPreview.length === 0
+    ) {
+        pass('registrationActivity empty zeros before prospect seed');
+    } else {
+        fail(
+            'registrationActivity empty zeros before prospect seed',
+            JSON.stringify(overviewInv.registrationActivity)
+        );
+    }
+
+    // Password invitation metrics unchanged after registrationActivity exists
+    const passwordInvSnapshot = { ...overviewInv.invitations };
+    delete passwordInvSnapshot.pendingPreview;
+
+    // --- Registration activity (prospect links + requests) ---
+    let phoneSeq = 0;
+    const nextPhone = () =>
+        `9${String(suffix).slice(-8)}${String(phoneSeq++).padStart(1, '0')}`.slice(
+            0,
+            10
+        );
+    const mkProspect = async (trainerId, overrides = {}) =>
+        ClientProspectInvitation.create({
+            trainerId,
+            clientName: 'Prospect Dash',
+            phone: nextPhone(),
+            tokenHash: hashToken(`prospect-${suffix}-${Math.random()}`),
+            status: CLIENT_PROSPECT_INVITATION_STATUS.PENDING,
+            expiresAt: new Date('2026-11-20T00:00:00.000Z'),
+            ...overrides,
+        });
+
+    const activeLinkA = await mkProspect(trainerA._id, {
+        expiresAt: new Date('2026-11-20T00:00:00.000Z'),
+    });
+    // Boundary: expiresAt === NOW counts as expired (lte)
+    await mkProspect(trainerA._id, {
+        expiresAt: NOW,
+    });
+    await mkProspect(trainerA._id, {
+        expiresAt: new Date('2026-11-01T00:00:00.000Z'),
+    });
+    await mkProspect(trainerA._id, {
+        status: CLIENT_PROSPECT_INVITATION_STATUS.REVOKED,
+        expiresAt: new Date('2026-11-20T00:00:00.000Z'),
+        revokedAt: new Date('2026-11-05T00:00:00.000Z'),
+    });
+    await mkProspect(trainerA._id, {
+        status: CLIENT_PROSPECT_INVITATION_STATUS.USED,
+        expiresAt: new Date('2026-11-20T00:00:00.000Z'),
+        usedAt: new Date('2026-11-05T00:00:00.000Z'),
+    });
+    // Trainer B noise
+    await mkProspect(trainerB._id, {
+        expiresAt: new Date('2026-11-20T00:00:00.000Z'),
+    });
+    await mkProspect(trainerB._id, {
+        expiresAt: new Date('2026-11-01T00:00:00.000Z'),
+    });
+
+    const mkRequest = async (trainerId, invitationId, approvalStatus) =>
+        ClientRegistrationRequest.create({
+            invitationId,
+            trainerId,
+            firstName: 'Reg',
+            lastName: 'Req',
+            phone: nextPhone(),
+            email: `reg-req-${invitationId}@test.com`,
+            gender: 'male',
+            dateOfBirth: new Date('1990-01-01T00:00:00.000Z'),
+            height: 180,
+            currentWeight: 80,
+            primaryFitnessGoal: 'general_fitness',
+            approvalStatus,
+            ...(approvalStatus === CLIENT_REGISTRATION_REQUEST_STATUS.APPROVED
+                ? {
+                      reviewedAt: NOW,
+                      reviewedBy: trainerId,
+                      createdUserId: cExpiresToday._id,
+                  }
+                : {}),
+            ...(approvalStatus === CLIENT_REGISTRATION_REQUEST_STATUS.REJECTED
+                ? {
+                      reviewedAt: NOW,
+                      reviewedBy: trainerId,
+                      rejectionReason: 'Not a fit',
+                  }
+                : {}),
+        });
+
+    const pendingInvForReq = await mkProspect(trainerA._id, {
+        status: CLIENT_PROSPECT_INVITATION_STATUS.USED,
+        usedAt: NOW,
+        expiresAt: new Date('2026-12-01T00:00:00.000Z'),
+    });
+    const approvedInvForReq = await mkProspect(trainerA._id, {
+        status: CLIENT_PROSPECT_INVITATION_STATUS.USED,
+        usedAt: NOW,
+        expiresAt: new Date('2026-12-01T00:00:00.000Z'),
+    });
+    const rejectedInvForReq = await mkProspect(trainerA._id, {
+        status: CLIENT_PROSPECT_INVITATION_STATUS.USED,
+        usedAt: NOW,
+        expiresAt: new Date('2026-12-01T00:00:00.000Z'),
+    });
+    const bInvForReq = await mkProspect(trainerB._id, {
+        status: CLIENT_PROSPECT_INVITATION_STATUS.USED,
+        usedAt: NOW,
+        expiresAt: new Date('2026-12-01T00:00:00.000Z'),
+    });
+
+    await mkRequest(
+        trainerA._id,
+        pendingInvForReq._id,
+        CLIENT_REGISTRATION_REQUEST_STATUS.PENDING
+    );
+    await mkRequest(
+        trainerA._id,
+        approvedInvForReq._id,
+        CLIENT_REGISTRATION_REQUEST_STATUS.APPROVED
+    );
+    await mkRequest(
+        trainerA._id,
+        rejectedInvForReq._id,
+        CLIENT_REGISTRATION_REQUEST_STATUS.REJECTED
+    );
+    await mkRequest(
+        trainerB._id,
+        bInvForReq._id,
+        CLIENT_REGISTRATION_REQUEST_STATUS.PENDING
+    );
+
+    const overviewReg = await coachDashboardService.getOverview(
+        trainerA._id.toString(),
+        NOW
+    );
+
+    if (
+        overviewReg.registrationActivity.activeLinks === 1 &&
+        overviewReg.registrationActivity.expiredLinks === 2 &&
+        overviewReg.registrationActivity.pendingRequests === 1 &&
+        overviewReg.registrationActivity.approvedRequests === 1 &&
+        overviewReg.registrationActivity.rejectedRequests === 1
+    ) {
+        pass('registrationActivity counts for trainer A');
+    } else {
+        fail(
+            'registrationActivity counts for trainer A',
+            JSON.stringify(overviewReg.registrationActivity)
+        );
+    }
+
+    if (
+        overviewReg.invitations.accepted === passwordInvSnapshot.accepted &&
+        overviewReg.invitations.pending === passwordInvSnapshot.pending &&
+        overviewReg.invitations.expired === passwordInvSnapshot.expired
+    ) {
+        pass('Password invitation metrics unchanged with registrationActivity');
+    } else {
+        fail(
+            'Password invitation metrics unchanged with registrationActivity',
+            JSON.stringify({
+                before: passwordInvSnapshot,
+                after: overviewReg.invitations,
+            })
+        );
+    }
+
+    const preview = overviewReg.registrationActivity.pendingPreview;
+    if (
+        Array.isArray(preview) &&
+        preview.length === 1 &&
+        preview[0].invitationId === String(activeLinkA._id) &&
+        preview[0].clientName === activeLinkA.clientName &&
+        typeof preview[0].expiresAt === 'string' &&
+        !preview[0].tokenHash &&
+        !preview[0].invitationUrl &&
+        !preview[0].phone
+    ) {
+        pass('registrationActivity pendingPreview for active prospect link');
+    } else {
+        fail(
+            'registrationActivity pendingPreview for active prospect link',
+            JSON.stringify(preview)
+        );
+    }
+
+    const regJson = JSON.stringify(overviewReg.registrationActivity);
+    if (
+        !regJson.includes('tokenHash') &&
+        !regJson.includes('invitationUrl') &&
+        !regJson.includes('"phone"')
+    ) {
+        pass('registrationActivity omits tokens, URLs, and phone');
+    } else {
+        fail(
+            'registrationActivity omits tokens, URLs, and phone',
+            regJson
+        );
+    }
+
     const overviewB = await coachDashboardService.getOverview(
         trainerB._id.toString(),
         NOW
@@ -391,16 +605,39 @@ async function main() {
     if (
         overviewB.overview.totalClients === 1 &&
         overviewB.invitations.pending === 1 &&
-        overviewB.invitations.accepted === 0
+        overviewB.invitations.accepted === 0 &&
+        overviewB.registrationActivity.activeLinks === 1 &&
+        overviewB.registrationActivity.expiredLinks === 1 &&
+        overviewB.registrationActivity.pendingRequests === 1 &&
+        overviewB.registrationActivity.approvedRequests === 0 &&
+        overviewB.registrationActivity.rejectedRequests === 0
     ) {
-        pass('Trainer isolation for overview + invitations');
+        pass('Trainer isolation for overview + invitations + registrationActivity');
     } else {
         fail(
-            'Trainer isolation for overview + invitations',
+            'Trainer isolation for overview + invitations + registrationActivity',
             JSON.stringify({
                 overview: overviewB.overview,
                 invitations: overviewB.invitations,
+                registrationActivity: overviewB.registrationActivity,
             })
+        );
+    }
+
+    // Backward-compatible shape: prior keys still present
+    if (
+        overviewReg.overview &&
+        overviewReg.needsAttention &&
+        overviewReg.subscriptions &&
+        overviewReg.invitations &&
+        overviewReg.registrationActivity &&
+        typeof overviewReg.generatedAt === 'string'
+    ) {
+        pass('Overview response remains backward-compatible with new section');
+    } else {
+        fail(
+            'Overview response remains backward-compatible with new section',
+            Object.keys(overviewReg).join(',')
         );
     }
 
@@ -460,6 +697,9 @@ async function main() {
             if (
                 httpOverview.status === 200 &&
                 typeof httpOverview.json?.data?.overview?.totalClients === 'number' &&
+                typeof httpOverview.json?.data?.registrationActivity?.activeLinks ===
+                    'number' &&
+                typeof httpOverview.json?.data?.invitations?.pending === 'number' &&
                 !JSON.stringify(httpOverview.json).includes('tokenHash')
             ) {
                 pass('HTTP: trainer overview succeeds without secrets');
@@ -475,6 +715,12 @@ async function main() {
     }
 
     // Cleanup
+    await ClientRegistrationRequest.deleteMany({
+        trainerId: { $in: [trainerA._id, trainerB._id] },
+    });
+    await ClientProspectInvitation.deleteMany({
+        trainerId: { $in: [trainerA._id, trainerB._id] },
+    });
     await ClientInvitation.deleteMany({
         trainerId: { $in: [trainerA._id, trainerB._id] },
     });

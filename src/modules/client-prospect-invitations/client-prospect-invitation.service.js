@@ -318,8 +318,47 @@ const registerFromProspectInvitation = async (rawToken, registrationData) => {
     }
 };
 
+/**
+ * Reissue a coach-owned pending prospect invitation.
+ * Loads name + phone from the existing doc, then runs createProspectInvitation
+ * (which revokes prior pending invites for the same coach + phone).
+ *
+ * @param {string} invitationId
+ * @param {string} trainerId
+ */
+const reissueProspectInvitation = async (invitationId, trainerId) => {
+    if (!isValidObjectId(invitationId)) {
+        throw new ApiError(400, 'Invalid invitation ID');
+    }
+    if (!isValidObjectId(trainerId)) {
+        throw new ApiError(400, 'Invalid trainer ID');
+    }
+
+    const existing = await ClientProspectInvitation.findOne({
+        _id: invitationId,
+        trainerId,
+    }).select('_id clientName phone status');
+
+    if (!existing) {
+        throw new ApiError(404, 'Invitation not found');
+    }
+
+    if (existing.status !== CLIENT_PROSPECT_INVITATION_STATUS.PENDING) {
+        throw new ApiError(409, 'Invitation can no longer be reissued');
+    }
+
+    return createProspectInvitation(
+        {
+            clientName: existing.clientName,
+            phone: existing.phone,
+        },
+        trainerId
+    );
+};
+
 export default {
     createProspectInvitation,
+    reissueProspectInvitation,
     previewProspectInvitation,
     registerFromProspectInvitation,
 };

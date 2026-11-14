@@ -2,6 +2,10 @@ import mongoose from 'mongoose';
 import User from '../users/user.model.js';
 import ClientInvitation from '../client-invitations/client-invitation.model.js';
 import { CLIENT_INVITATION_STATUS } from '../client-invitations/client-invitation.constants.js';
+import ClientProspectInvitation from '../client-prospect-invitations/client-prospect-invitation.model.js';
+import { CLIENT_PROSPECT_INVITATION_STATUS } from '../client-prospect-invitations/client-prospect-invitation.constants.js';
+import ClientRegistrationRequest from '../client-registration-requests/client-registration-request.model.js';
+import { CLIENT_REGISTRATION_REQUEST_STATUS } from '../client-registration-requests/client-registration-request.constants.js';
 import { buildClientListScopeQuery } from '../clients/client.list-scope.js';
 import { summarizeClientRoster } from '../clients/client.list-summary.js';
 import {
@@ -146,6 +150,150 @@ const buildInvitationsSection = async (
 };
 
 /**
+ * Prospect registration workflow aggregates for a trainer.
+ * Separate from password ClientInvitation metrics.
+ *
+ * Links: ClientProspectInvitation with status pending only.
+ * Requests: ClientRegistrationRequest by approvalStatus.
+ *
+ * @param {string|import('mongoose').Types.ObjectId} trainerId
+ * @param {Date} [now]
+ */
+const buildRegistrationActivitySection = async (
+    trainerId,
+    now = new Date(),
+    previewLimit = DASHBOARD_PREVIEW_LIMIT
+) => {
+    const trainerObjectId = new mongoose.Types.ObjectId(String(trainerId));
+
+    const [[linkCounts] = [], [requestCounts] = [], pendingDocs] = await Promise.all([
+        ClientProspectInvitation.aggregate([
+            { $match: { trainerId: trainerObjectId } },
+            {
+                $group: {
+                    _id: null,
+                    activeLinks: {
+                        $sum: {
+                            $cond: [
+                                {
+                                    $and: [
+                                        {
+                                            $eq: [
+                                                '$status',
+                                                CLIENT_PROSPECT_INVITATION_STATUS.PENDING,
+                                            ],
+                                        },
+                                        { $gt: ['$expiresAt', now] },
+                                    ],
+                                },
+                                1,
+                                0,
+                            ],
+                        },
+                    },
+                    expiredLinks: {
+                        $sum: {
+                            $cond: [
+                                {
+                                    $and: [
+                                        {
+                                            $eq: [
+                                                '$status',
+                                                CLIENT_PROSPECT_INVITATION_STATUS.PENDING,
+                                            ],
+                                        },
+                                        { $lte: ['$expiresAt', now] },
+                                    ],
+                                },
+                                1,
+                                0,
+                            ],
+                        },
+                    },
+                },
+            },
+        ]),
+        ClientRegistrationRequest.aggregate([
+            { $match: { trainerId: trainerObjectId } },
+            {
+                $group: {
+                    _id: null,
+                    pendingRequests: {
+                        $sum: {
+                            $cond: [
+                                {
+                                    $eq: [
+                                        '$approvalStatus',
+                                        CLIENT_REGISTRATION_REQUEST_STATUS.PENDING,
+                                    ],
+                                },
+                                1,
+                                0,
+                            ],
+                        },
+                    },
+                    approvedRequests: {
+                        $sum: {
+                            $cond: [
+                                {
+                                    $eq: [
+                                        '$approvalStatus',
+                                        CLIENT_REGISTRATION_REQUEST_STATUS.APPROVED,
+                                    ],
+                                },
+                                1,
+                                0,
+                            ],
+                        },
+                    },
+                    rejectedRequests: {
+                        $sum: {
+                            $cond: [
+                                {
+                                    $eq: [
+                                        '$approvalStatus',
+                                        CLIENT_REGISTRATION_REQUEST_STATUS.REJECTED,
+                                    ],
+                                },
+                                1,
+                                0,
+                            ],
+                        },
+                    },
+                },
+            },
+        ]),
+        ClientProspectInvitation.find({
+            trainerId: trainerObjectId,
+            status: CLIENT_PROSPECT_INVITATION_STATUS.PENDING,
+            expiresAt: { $gt: now },
+        })
+            .select('_id clientName expiresAt')
+            .sort({ expiresAt: 1, _id: 1 })
+            .limit(previewLimit)
+            .lean(),
+    ]);
+
+    const pendingPreview = pendingDocs.map((doc) => ({
+        invitationId: String(doc._id),
+        clientName: typeof doc.clientName === 'string' ? doc.clientName : '',
+        expiresAt:
+            doc.expiresAt instanceof Date
+                ? doc.expiresAt.toISOString()
+                : new Date(doc.expiresAt).toISOString(),
+    }));
+
+    return {
+        activeLinks: linkCounts?.activeLinks ?? 0,
+        expiredLinks: linkCounts?.expiredLinks ?? 0,
+        pendingRequests: requestCounts?.pendingRequests ?? 0,
+        approvedRequests: requestCounts?.approvedRequests ?? 0,
+        rejectedRequests: requestCounts?.rejectedRequests ?? 0,
+        pendingPreview,
+    };
+};
+
+/**
  * Coach Dashboard Overview — Phase 1.
  * Active roster only (default Client List scope). UTC calendar boundaries.
  *
@@ -167,11 +315,10 @@ const getOverview = async (trainerId, now = new Date()) => {
         now,
         DASHBOARD_PREVIEW_LIMIT
     );
-    const invitations = await buildInvitationsSection(
-        trainerId,
-        now,
-        DASHBOARD_PREVIEW_LIMIT
-    );
+    const [invitations, registrationActivity] = await Promise.all([
+        buildInvitationsSection(trainerId, now, DASHBOARD_PREVIEW_LIMIT),
+        buildRegistrationActivitySection(trainerId, now, DASHBOARD_PREVIEW_LIMIT),
+    ]);
 
     return {
         generatedAt: now.toISOString(),
@@ -185,6 +332,7 @@ const getOverview = async (trainerId, now = new Date()) => {
         needsAttention,
         subscriptions,
         invitations,
+        registrationActivity,
     };
 };
 
