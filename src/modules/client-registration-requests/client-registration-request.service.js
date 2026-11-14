@@ -6,6 +6,8 @@ import {
     PASSWORD_INVITATION_INBOX_STATUS,
     PASSWORD_INVITATION_WAIT_ATTEMPTS,
     PASSWORD_INVITATION_WAIT_MS,
+    REGISTRATION_LIST_RECORD_TYPE,
+    REGISTRATION_WORKFLOW_FILTER,
 } from './client-registration-request.constants.js';
 import User from '../users/user.model.js';
 import NutritionProfile from '../nutrition-profiles/nutrition-profile.model.js';
@@ -13,6 +15,8 @@ import nutritionProfileService from '../nutrition-profiles/nutrition-profile.ser
 import ClientInvitation from '../client-invitations/client-invitation.model.js';
 import { CLIENT_INVITATION_STATUS } from '../client-invitations/client-invitation.constants.js';
 import clientInvitationService from '../client-invitations/client-invitation.service.js';
+import ClientProspectInvitation from '../client-prospect-invitations/client-prospect-invitation.model.js';
+import { CLIENT_PROSPECT_INVITATION_STATUS } from '../client-prospect-invitations/client-prospect-invitation.constants.js';
 import { applyCoachingPackageEndDate } from '../clients/client.package-dates.js';
 import {
     loadHealthOptionsMap,
@@ -818,6 +822,7 @@ const mapListItem = (doc, invitationById, now) => {
     const invitationSummary = derivePasswordInvitationSummary(invitation, now);
 
     return {
+        recordType: REGISTRATION_LIST_RECORD_TYPE.REGISTRATION_REQUEST,
         id: String(doc._id),
         firstName: doc.firstName,
         lastName: doc.lastName,
@@ -831,6 +836,16 @@ const mapListItem = (doc, invitationById, now) => {
         passwordInvitation: toListInvitationSummary(invitationSummary),
     };
 };
+
+const mapAwaitingFormListItem = (doc) => ({
+    recordType: REGISTRATION_LIST_RECORD_TYPE.PROSPECT_INVITATION,
+    id: String(doc._id),
+    clientName: typeof doc.clientName === 'string' ? doc.clientName : '',
+    phone: doc.phone ?? null,
+    expiresAt: toIsoDate(doc.expiresAt),
+    createdAt: toIsoDate(doc.createdAt),
+    status: REGISTRATION_WORKFLOW_FILTER.AWAITING_FORM,
+});
 
 const mapDetailItem = async (doc, invitation) => {
     const injuryAreaOptionIds = optionIdList(doc.injuryAreaOptionIds);
@@ -888,10 +903,50 @@ const mapDetailItem = async (doc, invitation) => {
 };
 
 /**
- * Trainer-scoped inbox list filter.
+ * Resolve semantic workflow filter. `workflowFilter` wins over legacy `approvalStatus`.
+ *
+ * @param {{ workflowFilter?: string, approvalStatus?: string }} query
+ * @returns {string}
+ */
+const resolveWorkflowFilter = ({ workflowFilter, approvalStatus } = {}) => {
+    if (workflowFilter) {
+        return workflowFilter;
+    }
+    if (approvalStatus === CLIENT_REGISTRATION_REQUEST_STATUS.PENDING) {
+        return REGISTRATION_WORKFLOW_FILTER.PENDING_APPROVAL;
+    }
+    if (approvalStatus === CLIENT_REGISTRATION_REQUEST_STATUS.APPROVED) {
+        return REGISTRATION_WORKFLOW_FILTER.APPROVED;
+    }
+    if (approvalStatus === CLIENT_REGISTRATION_REQUEST_STATUS.REJECTED) {
+        return REGISTRATION_WORKFLOW_FILTER.REJECTED;
+    }
+    return REGISTRATION_WORKFLOW_FILTER.ALL;
+};
+
+/**
+ * Map workflow filter → registration-request approvalStatus (null = any).
+ * @param {string} workflowFilter
+ * @returns {string|null}
+ */
+const approvalStatusForWorkflowFilter = (workflowFilter) => {
+    if (workflowFilter === REGISTRATION_WORKFLOW_FILTER.PENDING_APPROVAL) {
+        return CLIENT_REGISTRATION_REQUEST_STATUS.PENDING;
+    }
+    if (workflowFilter === REGISTRATION_WORKFLOW_FILTER.APPROVED) {
+        return CLIENT_REGISTRATION_REQUEST_STATUS.APPROVED;
+    }
+    if (workflowFilter === REGISTRATION_WORKFLOW_FILTER.REJECTED) {
+        return CLIENT_REGISTRATION_REQUEST_STATUS.REJECTED;
+    }
+    return null;
+};
+
+/**
+ * Trainer-scoped inbox list filter for ClientRegistrationRequest.
  *
  * @param {string} trainerId
- * @param {{ approvalStatus?: string, search?: string }} query
+ * @param {{ approvalStatus?: string|null, search?: string }} query
  */
 const buildListFilter = (trainerId, { approvalStatus, search } = {}) => {
     if (!isValidObjectId(trainerId)) {
@@ -921,15 +976,107 @@ const buildListFilter = (trainerId, { approvalStatus, search } = {}) => {
 };
 
 /**
- * List registration requests for the authenticated trainer.
+ * Awaiting-form = pending, non-expired prospect invitations that have not produced
+ * a registration request. Password ClientInvitation records are never included.
+ *
+ * @param {import('mongoose').Types.ObjectId} trainerObjectId
+ * @param {Date} now
+ * @param {import('mongoose').Types.ObjectId[]} submittedInvitationIds
+ * @param {string} [search]
+ */
+const buildAwaitingFormFilter = (
+    trainerObjectId,
+    now,
+    submittedInvitationIds,
+    search
+) => {
+    const filter = {
+        trainerId: trainerObjectId,
+        status: CLIENT_PROSPECT_INVITATION_STATUS.PENDING,
+        expiresAt: { $gt: now },
+    };
+
+    if (submittedInvitationIds.length > 0) {
+        filter._id = { $nin: submittedInvitationIds };
+    }
+
+    const term = typeof search === 'string' ? search.trim() : '';
+    if (term) {
+        const regex = new RegExp(escapeRegex(term), 'i');
+        filter.$or = [{ clientName: regex }, { phone: regex }];
+    }
+
+    return filter;
+};
+
+/**
+ * Trainer-scoped stats for registration inbox cards.
+ * Independent of list pagination and search.
  *
  * @param {string} trainerId
- * @param {{ approvalStatus?: string, search?: string, page?: number, limit?: number }} query
+ * @param {Date} [now]
  */
-const list = async (trainerId, query = {}) => {
-    const filter = buildListFilter(trainerId, query);
+const buildInboxStats = async (trainerId, now = new Date()) => {
+    if (!isValidObjectId(trainerId)) {
+        throw new ApiError(400, 'Invalid trainer ID');
+    }
+
+    const trainerObjectId = new mongoose.Types.ObjectId(String(trainerId));
+
+    const [requestGroups, submittedInvitationIds] = await Promise.all([
+        ClientRegistrationRequest.aggregate([
+            { $match: { trainerId: trainerObjectId } },
+            {
+                $group: {
+                    _id: '$approvalStatus',
+                    count: { $sum: 1 },
+                },
+            },
+        ]),
+        ClientRegistrationRequest.distinct('invitationId', {
+            trainerId: trainerObjectId,
+        }),
+    ]);
+
+    const byStatus = Object.fromEntries(
+        requestGroups.map((row) => [row._id, row.count])
+    );
+
+    const awaitingForm = await ClientProspectInvitation.countDocuments(
+        buildAwaitingFormFilter(trainerObjectId, now, submittedInvitationIds)
+    );
+
+    return {
+        approved: byStatus[CLIENT_REGISTRATION_REQUEST_STATUS.APPROVED] ?? 0,
+        pendingApproval: byStatus[CLIENT_REGISTRATION_REQUEST_STATUS.PENDING] ?? 0,
+        awaitingForm,
+        rejected: byStatus[CLIENT_REGISTRATION_REQUEST_STATUS.REJECTED] ?? 0,
+    };
+};
+
+/**
+ * List awaiting-form prospect invitations (not registration requests).
+ *
+ * @param {string} trainerId
+ * @param {{ search?: string, page?: number, limit?: number }} query
+ * @param {Date} now
+ */
+const listAwaitingForm = async (trainerId, query, now) => {
+    const trainerObjectId = new mongoose.Types.ObjectId(String(trainerId));
+    const submittedInvitationIds = await ClientRegistrationRequest.distinct(
+        'invitationId',
+        { trainerId: trainerObjectId }
+    );
+
+    const filter = buildAwaitingFormFilter(
+        trainerObjectId,
+        now,
+        submittedInvitationIds,
+        query.search
+    );
+
     const { docs, pagination } = await paginateCollection({
-        model: ClientRegistrationRequest,
+        model: ClientProspectInvitation,
         filter,
         sort: { createdAt: -1 },
         page: query.page,
@@ -937,10 +1084,73 @@ const list = async (trainerId, query = {}) => {
         lean: true,
     });
 
-    const invitationById = await loadInvitationsById(docs);
+    return {
+        items: docs.map(mapAwaitingFormListItem),
+        pagination,
+    };
+};
+
+/**
+ * List registration requests for the authenticated trainer.
+ *
+ * Decision (Awaiting Form):
+ * - Stats always include awaitingForm (prospect invitations).
+ * - List filter `awaiting_form` returns prospect_invitation records only.
+ * - Filters `all` / approved / pending_approval / rejected return registration_request
+ *   records only (legacy approvalStatus still supported).
+ * - Password ClientInvitation records are never listed here.
+ *
+ * @param {string} trainerId
+ * @param {{
+ *   approvalStatus?: string,
+ *   workflowFilter?: string,
+ *   search?: string,
+ *   page?: number,
+ *   limit?: number
+ * }} query
+ */
+const list = async (trainerId, query = {}) => {
     const now = new Date();
+    const workflowFilter = resolveWorkflowFilter(query);
+    const statsPromise = buildInboxStats(trainerId, now);
+
+    if (workflowFilter === REGISTRATION_WORKFLOW_FILTER.AWAITING_FORM) {
+        const [awaiting, stats] = await Promise.all([
+            listAwaitingForm(trainerId, query, now),
+            statsPromise,
+        ]);
+
+        return {
+            stats,
+            workflowFilter,
+            requests: awaiting.items,
+            pagination: awaiting.pagination,
+        };
+    }
+
+    const approvalStatus = approvalStatusForWorkflowFilter(workflowFilter);
+    const filter = buildListFilter(trainerId, {
+        approvalStatus,
+        search: query.search,
+    });
+
+    const [{ docs, pagination }, stats] = await Promise.all([
+        paginateCollection({
+            model: ClientRegistrationRequest,
+            filter,
+            sort: { createdAt: -1 },
+            page: query.page,
+            limit: query.limit,
+            lean: true,
+        }),
+        statsPromise,
+    ]);
+
+    const invitationById = await loadInvitationsById(docs);
 
     return {
+        stats,
+        workflowFilter,
         requests: docs.map((doc) => mapListItem(doc, invitationById, now)),
         pagination,
     };

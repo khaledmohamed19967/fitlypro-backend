@@ -39,6 +39,24 @@ export const reissueClientProspectInvitation = asyncHandler(async (req, res) => 
 });
 
 /**
+ * @desc    Cancel / revoke a pending prospect invitation (no replacement created)
+ * @route   POST /api/v1/client-prospect-invitations/:invitationId/revoke
+ * @access  Private (Trainer, Admin)
+ */
+export const revokeClientProspectInvitation = asyncHandler(async (req, res) => {
+    const trainerId = req.user.id;
+
+    const result = await clientProspectInvitationService.revokeProspectInvitation(
+        req.params.invitationId,
+        trainerId
+    );
+
+    res.status(200).json(
+        new ApiResponse(200, result, 'Prospect invitation cancelled successfully')
+    );
+});
+
+/**
  * @desc    Preview / validate prospect invitation token (public)
  * @route   GET /api/v1/client-prospect-invitations/:token
  * @access  Public

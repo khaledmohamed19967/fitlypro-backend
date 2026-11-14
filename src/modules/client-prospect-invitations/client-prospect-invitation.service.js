@@ -356,9 +356,79 @@ const reissueProspectInvitation = async (invitationId, trainerId) => {
     );
 };
 
+/**
+ * Revoke a coach-owned pending (and unexpired) prospect invitation.
+ * Does not create a replacement invitation.
+ *
+ * Concurrent-safe via findOneAndUpdate on status=pending + expiresAt > now.
+ *
+ * @param {string} invitationId
+ * @param {string} trainerId
+ */
+const revokeProspectInvitation = async (invitationId, trainerId) => {
+    if (!isValidObjectId(invitationId)) {
+        throw new ApiError(400, 'Invalid invitation ID');
+    }
+    if (!isValidObjectId(trainerId)) {
+        throw new ApiError(400, 'Invalid trainer ID');
+    }
+
+    const now = new Date();
+
+    const updated = await ClientProspectInvitation.findOneAndUpdate(
+        {
+            _id: invitationId,
+            trainerId,
+            status: CLIENT_PROSPECT_INVITATION_STATUS.PENDING,
+            expiresAt: { $gt: now },
+        },
+        {
+            $set: {
+                status: CLIENT_PROSPECT_INVITATION_STATUS.REVOKED,
+                revokedAt: now,
+            },
+        },
+        { new: true }
+    ).select('_id status revokedAt');
+
+    if (updated) {
+        return {
+            invitationId: String(updated._id),
+            status: updated.status,
+            revokedAt: updated.revokedAt ? updated.revokedAt.toISOString() : null,
+        };
+    }
+
+    const existing = await ClientProspectInvitation.findOne({
+        _id: invitationId,
+        trainerId,
+    }).select('_id status expiresAt');
+
+    if (!existing) {
+        throw new ApiError(404, 'Invitation not found');
+    }
+
+    if (
+        existing.status === CLIENT_PROSPECT_INVITATION_STATUS.USED ||
+        existing.status === CLIENT_PROSPECT_INVITATION_STATUS.REVOKED
+    ) {
+        throw new ApiError(409, 'Invitation can no longer be cancelled');
+    }
+
+    if (
+        existing.status !== CLIENT_PROSPECT_INVITATION_STATUS.PENDING ||
+        isInvitationExpired(existing.expiresAt)
+    ) {
+        throw new ApiError(410, 'Invitation has expired');
+    }
+
+    throw new ApiError(409, 'Invitation can no longer be cancelled');
+};
+
 export default {
     createProspectInvitation,
     reissueProspectInvitation,
+    revokeProspectInvitation,
     previewProspectInvitation,
     registerFromProspectInvitation,
 };

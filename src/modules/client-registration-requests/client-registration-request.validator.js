@@ -1,5 +1,8 @@
 import Joi from 'joi';
-import { CLIENT_REGISTRATION_REQUEST_STATUSES } from './client-registration-request.constants.js';
+import {
+    CLIENT_REGISTRATION_REQUEST_STATUSES,
+    REGISTRATION_WORKFLOW_FILTERS,
+} from './client-registration-request.constants.js';
 
 const ownershipForbidden = {
     trainerId: Joi.forbidden(),
@@ -27,6 +30,17 @@ export const validateListRegistrationRequestsQuery = Joi.object({
         .optional()
         .messages({
             'any.only': 'Approval status must be pending, approved, or rejected',
+        }),
+    /**
+     * Stats-card semantic filter. When set, takes precedence over approvalStatus.
+     * `awaiting_form` lists prospect invitations (not registration requests).
+     */
+    workflowFilter: Joi.string()
+        .valid(...REGISTRATION_WORKFLOW_FILTERS)
+        .optional()
+        .messages({
+            'any.only':
+                'workflowFilter must be all, approved, pending_approval, awaiting_form, or rejected',
         }),
     search: Joi.string().trim().max(100).optional().allow(''),
     page: Joi.number().integer().min(1).default(1),

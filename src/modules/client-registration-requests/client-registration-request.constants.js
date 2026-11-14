@@ -44,3 +44,28 @@ export const PASSWORD_INVITATION_INBOX_STATUS = Object.freeze({
     REVOKED: 'revoked',
     EXPIRED: 'expired',
 });
+
+/**
+ * Semantic inbox workflow filters (stats cards + list).
+ * Distinct from approvalStatus wire values for pending (`pending` vs `pending_approval`).
+ */
+export const REGISTRATION_WORKFLOW_FILTERS = Object.freeze([
+    'all',
+    'approved',
+    'pending_approval',
+    'awaiting_form',
+    'rejected',
+]);
+
+export const REGISTRATION_WORKFLOW_FILTER = Object.freeze({
+    ALL: 'all',
+    APPROVED: 'approved',
+    PENDING_APPROVAL: 'pending_approval',
+    AWAITING_FORM: 'awaiting_form',
+    REJECTED: 'rejected',
+});
+
+export const REGISTRATION_LIST_RECORD_TYPE = Object.freeze({
+    REGISTRATION_REQUEST: 'registration_request',
+    PROSPECT_INVITATION: 'prospect_invitation',
+});
