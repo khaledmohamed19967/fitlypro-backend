@@ -74,7 +74,7 @@ const config = {
 
     // Client-facing web app (invitation activation links)
     clientApp: {
-        url: normalizeUrl(process.env.CLIENT_APP_URL) || 'http://localhost:3000',
+        url: normalizeUrl(process.env.NUXT_CLIENT_APP_URL) || 'http://localhost:3000',
     },
 
     // Client invitation password-setup tokens
