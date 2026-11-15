@@ -7,13 +7,18 @@ import {
     generateInvitationToken,
     hashInvitationToken,
     isInvitationExpired,
-    isValidProspectPhone,
-    normalizeProspectPhone,
 } from './client-prospect-invitation.helpers.js';
 import ClientRegistrationRequest from '../client-registration-requests/client-registration-request.model.js';
 import { CLIENT_REGISTRATION_REQUEST_STATUS } from '../client-registration-requests/client-registration-request.constants.js';
 import { validateHealthOptionIdsForCategory } from '../health-reference/health-reference.helpers.js';
 import { ApiError } from '../../utils/ApiError.js';
+import {
+    assertNormalizedPhone,
+    isLegacyDigitsOnlyPhone,
+    isStoredPhoneValue,
+    pickPersistedPhoneFields,
+    toPhoneResponseFields,
+} from '../../utils/phone.js';
 
 const isValidObjectId = (id) =>
     mongoose.Types.ObjectId.isValid(id) &&
@@ -22,8 +27,9 @@ const isValidObjectId = (id) =>
 /**
  * Create a prospect invitation for the authenticated coach.
  * Does not create a User or ClientRegistrationRequest.
+ * Phone is expected pre-normalized by Joi (`applyPhoneContractToValue`).
  *
- * @param {{ clientName: string, phone: string }} payload
+ * @param {{ clientName: string, phone: string, phoneCountryIso?: string, phoneCountryCode?: string }} payload
  * @param {string} trainerId
  */
 const createProspectInvitation = async (payload, trainerId) => {
@@ -33,17 +39,45 @@ const createProspectInvitation = async (payload, trainerId) => {
 
     const clientName =
         typeof payload.clientName === 'string' ? payload.clientName.trim() : '';
-    const phone = normalizeProspectPhone(payload.phone);
 
     if (!clientName || clientName.length < 2) {
         throw new ApiError(400, 'Client name is required');
     }
 
-    if (!isValidProspectPhone(phone)) {
-        throw new ApiError(400, 'Please provide a valid phone number (10-15 digits)');
+    const hasIso =
+        payload.phoneCountryIso != null &&
+        String(payload.phoneCountryIso).trim() !== '';
+
+    let phoneFields;
+    if (hasIso) {
+        const normalized = assertNormalizedPhone(
+            {
+                phone: payload.phone,
+                phoneCountryIso: payload.phoneCountryIso,
+                phoneCountryCode: payload.phoneCountryCode,
+            },
+            { required: true }
+        );
+        phoneFields = pickPersistedPhoneFields(normalized);
+    } else if (isStoredPhoneValue(payload.phone)) {
+        phoneFields = pickPersistedPhoneFields({ phone: payload.phone });
+    } else if (
+        typeof payload.phone === 'string' &&
+        isLegacyDigitsOnlyPhone(payload.phone.replace(/\D/g, ''))
+    ) {
+        phoneFields = pickPersistedPhoneFields({
+            phone: payload.phone.replace(/\D/g, ''),
+        });
+    } else {
+        throw new ApiError(400, 'Please provide a valid phone number');
     }
 
-    // Same coach + phone: revoke earlier pending invites (matches password-invite pattern)
+    const phone = phoneFields.phone;
+    if (!phone || !isStoredPhoneValue(phone)) {
+        throw new ApiError(400, 'Please provide a valid phone number');
+    }
+
+    // Exact phone match only (E.164 or legacy digits). No cross-format national-digit matching.
     await ClientProspectInvitation.updateMany(
         {
             trainerId,
@@ -66,6 +100,8 @@ const createProspectInvitation = async (payload, trainerId) => {
         trainerId,
         clientName,
         phone,
+        phoneCountryIso: phoneFields.phoneCountryIso ?? null,
+        phoneCountryCode: phoneFields.phoneCountryCode ?? null,
         tokenHash,
         status: CLIENT_PROSPECT_INVITATION_STATUS.PENDING,
         expiresAt,
@@ -170,7 +206,7 @@ const previewProspectInvitation = async (rawToken) => {
     return {
         valid: true,
         clientName: invitation.clientName,
-        phone: invitation.phone,
+        ...toPhoneResponseFields(invitation),
         expiresAt: invitation.expiresAt,
     };
 };
@@ -248,10 +284,20 @@ const registerFromProspectInvitation = async (rawToken, registrationData) => {
     try {
         const healthIds = await validateProspectHealthOptionIds(registrationData);
 
-        const phone =
-            registrationData.phone && isValidProspectPhone(registrationData.phone)
-                ? registrationData.phone
-                : claimed.phone;
+        // Prefer structured/legacy phone from registration body when present; else copy invitation.
+        const submittedPhone = pickPersistedPhoneFields(registrationData);
+        const phoneFields =
+            submittedPhone.phone && isStoredPhoneValue(submittedPhone.phone)
+                ? {
+                      phone: submittedPhone.phone,
+                      phoneCountryIso: submittedPhone.phoneCountryIso ?? null,
+                      phoneCountryCode: submittedPhone.phoneCountryCode ?? null,
+                  }
+                : {
+                      phone: claimed.phone,
+                      phoneCountryIso: claimed.phoneCountryIso ?? null,
+                      phoneCountryCode: claimed.phoneCountryCode ?? null,
+                  };
 
         const injuryDetails =
             registrationData.injuryDetails === '' ||
@@ -265,7 +311,9 @@ const registerFromProspectInvitation = async (rawToken, registrationData) => {
             firstName: registrationData.firstName,
             lastName: registrationData.lastName,
             email: registrationData.email,
-            phone,
+            phone: phoneFields.phone,
+            phoneCountryIso: phoneFields.phoneCountryIso,
+            phoneCountryCode: phoneFields.phoneCountryCode,
             dateOfBirth: registrationData.dateOfBirth,
             gender: registrationData.gender,
             primaryFitnessGoal: registrationData.primaryFitnessGoal,
@@ -337,7 +385,7 @@ const reissueProspectInvitation = async (invitationId, trainerId) => {
     const existing = await ClientProspectInvitation.findOne({
         _id: invitationId,
         trainerId,
-    }).select('_id clientName phone status');
+    }).select('_id clientName phone phoneCountryIso phoneCountryCode status');
 
     if (!existing) {
         throw new ApiError(404, 'Invitation not found');
@@ -351,6 +399,8 @@ const reissueProspectInvitation = async (invitationId, trainerId) => {
         {
             clientName: existing.clientName,
             phone: existing.phone,
+            phoneCountryIso: existing.phoneCountryIso ?? undefined,
+            phoneCountryCode: existing.phoneCountryCode ?? undefined,
         },
         trainerId
     );

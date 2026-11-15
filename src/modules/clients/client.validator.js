@@ -1,5 +1,6 @@
 import Joi from 'joi';
 import { healthOptionIdList } from '../health-reference/health-reference.validator.js';
+import { applyPhoneContractToValue } from '../../utils/phone.js';
 
 /**
  * Client Validation Schemas
@@ -40,13 +41,9 @@ export const validateCreateClient = Joi.object({
             'string.email': 'Please provide a valid email address',
         }),
 
-    phone: Joi.string()
-        .pattern(/^[0-9]{10,15}$/)
-        .trim()
-        .optional()
-        .messages({
-            'string.pattern.base': 'Please provide a valid phone number (10-15 digits)',
-        }),
+    phone: Joi.string().trim().optional().allow('', null),
+    phoneCountryIso: Joi.string().trim().uppercase().length(2).optional().allow('', null),
+    phoneCountryCode: Joi.string().trim().optional().allow('', null),
 
     dateOfBirth: Joi.date()
         .max('now')
@@ -188,7 +185,9 @@ export const validateCreateClient = Joi.object({
 
     allergyOptionIds: healthOptionIdList,
     dietaryRestrictionOptionIds: healthOptionIdList,
-});
+}).custom((value, helpers) =>
+    applyPhoneContractToValue(value, helpers, { required: false })
+);
 
 const personalFieldsSchema = {
     firstName: Joi.string()
@@ -211,14 +210,9 @@ const personalFieldsSchema = {
             'string.max': 'Last name cannot exceed 50 characters',
         }),
 
-    phone: Joi.string()
-        .pattern(/^[0-9]{10,15}$/)
-        .trim()
-        .allow('', null)
-        .optional()
-        .messages({
-            'string.pattern.base': 'Please provide a valid phone number (10-15 digits)',
-        }),
+    phone: Joi.string().trim().allow('', null).optional(),
+    phoneCountryIso: Joi.string().trim().uppercase().length(2).optional().allow('', null),
+    phoneCountryCode: Joi.string().trim().optional().allow('', null),
 
     dateOfBirth: Joi.date()
         .max('now')
@@ -340,7 +334,18 @@ export const validateUpdateClient = Joi.object({
     ...programFieldsSchema,
     ...healthUserFieldsSchema,
     ...nutritionRestrictionFieldsSchema,
-}).min(1);
+})
+    .min(1)
+    .custom((value, helpers) => {
+        if (
+            value.phone === undefined &&
+            value.phoneCountryIso === undefined &&
+            value.phoneCountryCode === undefined
+        ) {
+            return value;
+        }
+        return applyPhoneContractToValue(value, helpers, { required: false });
+    });
 
 /** Coaching / package subset for PUT /clients/:id/plan (BFF compatibility). */
 export const validateUpdateClientPlan = Joi.object({

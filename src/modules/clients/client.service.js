@@ -20,6 +20,8 @@ import {
     CLIENT_PLAN_UPDATE_FIELDS,
     pickAllowedUpdateFields,
 } from './client.update-allowlist.js';
+import ClientRegistrationRequest from '../client-registration-requests/client-registration-request.model.js';
+import { CLIENT_REGISTRATION_REQUEST_STATUS } from '../client-registration-requests/client-registration-request.constants.js';
 
 /**
  * Client Service
@@ -94,8 +96,23 @@ const enrichClientWithNutritionRestrictionIds = async (
 const applyAllowlistedUserUpdates = (client, patch, allowedKeys) => {
     const userPatch = pickAllowedUpdateFields(patch, allowedKeys);
 
+    /**
+     * Joi empty-phone contract sets `phone` (and country fields) to undefined while
+     * keeping the own keys. pickAllowedUpdateFields skips undefined, so detect clear
+     * from the validated patch itself.
+     */
+    const phoneSubmitted = Object.prototype.hasOwnProperty.call(patch, 'phone');
+    const clearingPhone = phoneSubmitted && (patch.phone === '' || patch.phone == null);
+
     for (const [key, value] of Object.entries(userPatch)) {
-        if (key === 'phone' || key === 'additionalNotes' || key === 'medicalConditions' || key === 'injuries') {
+        if (
+            key === 'phone' ||
+            key === 'phoneCountryIso' ||
+            key === 'phoneCountryCode' ||
+            key === 'additionalNotes' ||
+            key === 'medicalConditions' ||
+            key === 'injuries'
+        ) {
             const normalized = normalizeOptionalStringField(value);
             if (normalized === undefined) {
                 client[key] = undefined;
@@ -105,6 +122,31 @@ const applyAllowlistedUserUpdates = (client, patch, allowedKeys) => {
             continue;
         }
         client[key] = value;
+    }
+
+    // Clearing phone also clears structured country fields (legacy rows had none).
+    // Assigning undefined → Mongoose $unset on save (do not persist null placeholders).
+    if (clearingPhone) {
+        client.phone = undefined;
+        client.phoneCountryIso = undefined;
+        client.phoneCountryCode = undefined;
+    }
+
+    /**
+     * Legacy-only phone write: Joi sets phoneCountryIso/Code to undefined, but
+     * pickAllowedUpdateFields skips undefined keys — so stale country metadata
+     * would otherwise remain. Explicitly $unset when phone is updated without
+     * structured country fields in the applied patch.
+     */
+    const legacyPhoneOnlyUpdate =
+        Object.prototype.hasOwnProperty.call(userPatch, 'phone') &&
+        !clearingPhone &&
+        userPatch.phoneCountryIso === undefined &&
+        userPatch.phoneCountryCode === undefined;
+
+    if (legacyPhoneOnlyUpdate) {
+        client.phoneCountryIso = undefined;
+        client.phoneCountryCode = undefined;
     }
 
     if (
@@ -242,6 +284,8 @@ const createClient = async (clientData, trainerId) => {
         email: restClientData.email,
         password: restClientData.password,
         phone: restClientData.phone,
+        phoneCountryIso: restClientData.phoneCountryIso,
+        phoneCountryCode: restClientData.phoneCountryCode,
         dateOfBirth: restClientData.dateOfBirth,
         gender: restClientData.gender,
         role: 'client',
@@ -317,6 +361,26 @@ const createClient = async (clientData, trainerId) => {
 };
 
 /**
+ * Trainer-scoped count of registration requests awaiting approval.
+ * Independent of list search / pagination / status filters.
+ *
+ * @param {string|import('mongoose').Types.ObjectId} trainerId
+ * @returns {Promise<number>}
+ */
+const countPendingRegistrationRequests = async (trainerId) => {
+    if (!mongoose.Types.ObjectId.isValid(String(trainerId))) {
+        return 0;
+    }
+
+    const count = await ClientRegistrationRequest.countDocuments({
+        trainerId: new mongoose.Types.ObjectId(String(trainerId)),
+        approvalStatus: CLIENT_REGISTRATION_REQUEST_STATUS.PENDING,
+    });
+
+    return Number.isFinite(count) && count > 0 ? count : 0;
+};
+
+/**
  * GET /clients list payload: paginated or search rows + roster summary (same scope).
  */
 const listTrainerClients = async (
@@ -330,6 +394,8 @@ const listTrainerClients = async (
     });
 
     const summaryPromise = buildClientListSummary(scopeQuery);
+    const pendingRegistrationRequestsPromise =
+        countPendingRegistrationRequests(trainerId);
 
     if (search && String(search).trim()) {
         const clients = await User.find(scopeQuery)
@@ -341,7 +407,10 @@ const listTrainerClients = async (
             clients.map((client) => client.getPublicProfile())
         );
 
-        const summary = await summaryPromise;
+        const [summary, pendingRegistrationRequests] = await Promise.all([
+            summaryPromise,
+            pendingRegistrationRequestsPromise,
+        ]);
 
         return {
             clients: enriched,
@@ -352,19 +421,20 @@ const listTrainerClients = async (
                 pages: enriched.length > 0 ? 1 : 0,
             },
             summary,
+            pendingRegistrationRequests,
         };
     }
 
-    const listResult = await getClientsByTrainer(
-        trainerId,
-        scopeQuery,
-        { page, limit }
-    );
-    const summary = await summaryPromise;
+    const [listResult, summary, pendingRegistrationRequests] = await Promise.all([
+        getClientsByTrainer(trainerId, scopeQuery, { page, limit }),
+        summaryPromise,
+        pendingRegistrationRequestsPromise,
+    ]);
 
     return {
         ...listResult,
         summary,
+        pendingRegistrationRequests,
     };
 };
 

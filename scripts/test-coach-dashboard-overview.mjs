@@ -22,6 +22,7 @@ import {
     buildNeedsAttentionSection,
     buildSubscriptionsSection,
     formatUtcDateKey,
+    getUtcRollingEightDayRange,
     getUtcWeekRange,
 } from '../src/modules/coach-dashboard/coach-dashboard.helpers.js';
 
@@ -69,7 +70,7 @@ async function main() {
     const suffix = Date.now();
     const password = 'testpass123';
 
-    // --- Unit: week range (Mon–Sun UTC) ---
+    // --- Unit: calendar week (Mon–Sun UTC) still used by clients-growth ---
     const week = getUtcWeekRange(NOW);
     if (
         formatUtcDateKey(week.weekStart) === '2026-11-09' &&
@@ -81,6 +82,23 @@ async function main() {
         fail(
             'UTC week Mon–Sun for 2026-11-11',
             `${formatUtcDateKey(week.weekStart)}..${formatUtcDateKey(week.weekEnd)}`
+        );
+    }
+
+    // --- Unit: subscriptions timeline = today → today+7 UTC (8 columns) ---
+    const rolling = getUtcRollingEightDayRange(NOW);
+    if (
+        formatUtcDateKey(rolling.weekStart) === '2026-11-11' &&
+        formatUtcDateKey(rolling.weekEnd) === '2026-11-18' &&
+        formatUtcDateKey(rolling.days[0]) === '2026-11-11' &&
+        formatUtcDateKey(rolling.days[7]) === '2026-11-18' &&
+        rolling.days.length === 8
+    ) {
+        pass('UTC rolling eight-day window starts today for 2026-11-11');
+    } else {
+        fail(
+            'UTC rolling eight-day window starts today for 2026-11-11',
+            `${formatUtcDateKey(rolling.weekStart)}..${formatUtcDateKey(rolling.weekEnd)}`
         );
     }
 
@@ -270,12 +288,65 @@ async function main() {
     }
 
     if (
-        overviewA.subscriptions.week.convention === 'utc_monday_sunday' &&
-        overviewA.timezone === 'UTC'
+        overviewA.subscriptions.week.convention === 'utc_today_plus_7' &&
+        overviewA.timezone === 'UTC' &&
+        overviewA.subscriptions.week.days[0]?.date === '2026-11-11' &&
+        overviewA.subscriptions.week.days.length === 8
     ) {
-        pass('Timezone UTC and week convention documented');
+        pass('Timezone UTC and subscriptions week starts today (8 days)');
     } else {
-        fail('Timezone UTC and week convention documented', overviewA.timezone);
+        fail(
+            'Timezone UTC and subscriptions week starts today (8 days)',
+            JSON.stringify({
+                timezone: overviewA.timezone,
+                convention: overviewA.subscriptions.week.convention,
+                first: overviewA.subscriptions.week.days[0],
+                length: overviewA.subscriptions.week.days.length,
+            })
+        );
+    }
+
+    const rollingDays = overviewA.subscriptions.week.days.map((d) => d.date);
+    const rollingAscending = rollingDays.every(
+        (date, i) => i === 0 || date > rollingDays[i - 1]
+    );
+    if (rollingAscending && rollingDays[0] === '2026-11-11' && rollingDays[7] === '2026-11-18') {
+        pass('Subscriptions week days ascend from today through today+7');
+    } else {
+        fail('Subscriptions week days ascend from today through today+7', rollingDays.join(','));
+    }
+
+    // Day +7 (eighth column) is included in aggregation when a subscription ends that day.
+    const endsOnDaySeven = buildSubscriptionsSection(
+        [
+            {
+                _id: 'day7',
+                firstName: 'Day',
+                lastName: 'Seven',
+                endDate: '2026-11-18T12:00:00.000Z',
+                packageDuration: '1_month',
+                startDate: '2026-10-18T00:00:00.000Z',
+            },
+            {
+                _id: 'before',
+                firstName: 'Day',
+                lastName: 'Before',
+                endDate: '2026-11-10T12:00:00.000Z',
+                packageDuration: '1_month',
+                startDate: '2026-10-10T00:00:00.000Z',
+            },
+        ],
+        NOW
+    );
+    const daySeven = endsOnDaySeven.week.days.find((d) => d.date === '2026-11-18');
+    const dayBefore = endsOnDaySeven.week.days.find((d) => d.date === '2026-11-10');
+    if (daySeven?.expiringCount === 1 && !dayBefore && endsOnDaySeven.week.days.length === 8) {
+        pass('Eighth column includes today+7 expiries; prior day excluded');
+    } else {
+        fail(
+            'Eighth column includes today+7 expiries; prior day excluded',
+            JSON.stringify({ daySeven, days: endsOnDaySeven.week.days })
+        );
     }
 
     // Empty week helper: roster with no ends in week

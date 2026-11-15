@@ -1,10 +1,11 @@
 import Joi from 'joi';
 import { healthOptionIdList } from '../health-reference/health-reference.validator.js';
-import { normalizeProspectPhone } from './client-prospect-invitation.helpers.js';
+import { applyPhoneContractToValue } from '../../utils/phone.js';
 
 /**
  * POST /api/v1/client-prospect-invitations
  * Coach supplies prospect display name + WhatsApp phone only.
+ * Structured: phone + phoneCountryIso → E.164. Legacy: digits-only phone without ISO.
  */
 export const validateCreateClientProspectInvitation = Joi.object({
     clientName: Joi.string()
@@ -19,20 +20,12 @@ export const validateCreateClientProspectInvitation = Joi.object({
             'any.required': 'Client name is required',
         }),
 
-    phone: Joi.string()
-        .required()
-        .custom((value, helpers) => {
-            const normalized = normalizeProspectPhone(value);
-            if (!/^[0-9]{10,15}$/.test(normalized)) {
-                return helpers.error('any.invalid');
-            }
-            return normalized;
-        })
-        .messages({
-            'string.empty': 'Phone number is required',
-            'any.required': 'Phone number is required',
-            'any.invalid': 'Please provide a valid phone number (10-15 digits)',
-        }),
+    phone: Joi.string().required().messages({
+        'string.empty': 'Phone number is required',
+        'any.required': 'Phone number is required',
+    }),
+    phoneCountryIso: Joi.string().trim().uppercase().length(2).optional().allow('', null),
+    phoneCountryCode: Joi.string().trim().optional().allow('', null),
 
     // Block privilege / lifecycle injection
     trainerId: Joi.forbidden(),
@@ -44,7 +37,14 @@ export const validateCreateClientProspectInvitation = Joi.object({
     revokedAt: Joi.forbidden(),
     role: Joi.forbidden(),
     password: Joi.forbidden(),
-}).unknown(false);
+})
+    .custom((value, helpers) =>
+        applyPhoneContractToValue(value, helpers, {
+            required: true,
+            legacyStripNonDigits: true,
+        })
+    )
+    .unknown(false);
 
 /**
  * Public prospect registration — same fields as Add Client (`validateCreateClient`)
@@ -86,22 +86,9 @@ export const validateProspectRegistration = Joi.object({
             'any.required': 'Email is required',
         }),
 
-    phone: Joi.string()
-        .optional()
-        .allow('', null)
-        .custom((value, helpers) => {
-            if (value == null || value === '') {
-                return undefined;
-            }
-            const normalized = normalizeProspectPhone(value);
-            if (!/^[0-9]{10,15}$/.test(normalized)) {
-                return helpers.error('any.invalid');
-            }
-            return normalized;
-        })
-        .messages({
-            'any.invalid': 'Please provide a valid phone number (10-15 digits)',
-        }),
+    phone: Joi.string().optional().allow('', null),
+    phoneCountryIso: Joi.string().trim().uppercase().length(2).optional().allow('', null),
+    phoneCountryCode: Joi.string().trim().optional().allow('', null),
 
     dateOfBirth: Joi.date()
         .max('now')
@@ -246,4 +233,11 @@ export const validateProspectRegistration = Joi.object({
     token: Joi.forbidden(),
     tokenHash: Joi.forbidden(),
     status: Joi.forbidden(),
-}).unknown(false);
+})
+    .custom((value, helpers) =>
+        applyPhoneContractToValue(value, helpers, {
+            required: false,
+            legacyStripNonDigits: true,
+        })
+    )
+    .unknown(false);

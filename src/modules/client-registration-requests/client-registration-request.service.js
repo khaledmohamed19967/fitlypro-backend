@@ -24,8 +24,13 @@ import {
 } from '../health-reference/health-reference.helpers.js';
 import { paginateCollection } from '../../utils/pagination.js';
 import { ApiError } from '../../utils/ApiError.js';
+import {
+    buildPhoneInboxSearchClauses,
+    escapePhoneSearchRegex,
+    toPhoneResponseFields,
+} from '../../utils/phone.js';
 
-const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const escapeRegex = escapePhoneSearchRegex;
 
 const toIdString = (value) => (value == null ? null : String(value));
 
@@ -201,6 +206,8 @@ const buildApprovedClientData = (request) => {
 
     const optionalKeys = [
         'phone',
+        'phoneCountryIso',
+        'phoneCountryCode',
         'dateOfBirth',
         'gender',
         'currentWeight',
@@ -827,7 +834,7 @@ const mapListItem = (doc, invitationById, now) => {
         firstName: doc.firstName,
         lastName: doc.lastName,
         email: doc.email,
-        phone: doc.phone ?? null,
+        ...toPhoneResponseFields(doc),
         primaryFitnessGoal: doc.primaryFitnessGoal,
         approvalStatus: doc.approvalStatus,
         createdAt: toIsoDate(doc.createdAt),
@@ -841,7 +848,7 @@ const mapAwaitingFormListItem = (doc) => ({
     recordType: REGISTRATION_LIST_RECORD_TYPE.PROSPECT_INVITATION,
     id: String(doc._id),
     clientName: typeof doc.clientName === 'string' ? doc.clientName : '',
-    phone: doc.phone ?? null,
+    ...toPhoneResponseFields(doc),
     expiresAt: toIsoDate(doc.expiresAt),
     createdAt: toIsoDate(doc.createdAt),
     status: REGISTRATION_WORKFLOW_FILTER.AWAITING_FORM,
@@ -865,7 +872,7 @@ const mapDetailItem = async (doc, invitation) => {
         firstName: doc.firstName,
         lastName: doc.lastName,
         email: doc.email,
-        phone: doc.phone ?? null,
+        ...toPhoneResponseFields(doc),
         dateOfBirth: toIsoDate(doc.dateOfBirth),
         gender: doc.gender ?? null,
         primaryFitnessGoal: doc.primaryFitnessGoal,
@@ -968,7 +975,7 @@ const buildListFilter = (trainerId, { approvalStatus, search } = {}) => {
             { firstName: regex },
             { lastName: regex },
             { email: regex },
-            { phone: regex },
+            ...buildPhoneInboxSearchClauses(term),
         ];
     }
 
@@ -1003,7 +1010,7 @@ const buildAwaitingFormFilter = (
     const term = typeof search === 'string' ? search.trim() : '';
     if (term) {
         const regex = new RegExp(escapeRegex(term), 'i');
-        filter.$or = [{ clientName: regex }, { phone: regex }];
+        filter.$or = [{ clientName: regex }, ...buildPhoneInboxSearchClauses(term)];
     }
 
     return filter;

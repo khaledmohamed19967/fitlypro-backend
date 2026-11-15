@@ -51,10 +51,48 @@ const clientRegistrationRequestSchema = new mongoose.Schema(
             lowercase: true,
             trim: true,
         },
+        /**
+         * Optional phone: legacy digits-only OR structured E.164 (`+…`).
+         * phoneCountryIso / phoneCountryCode set only for structured writes.
+         */
         phone: {
             type: String,
             trim: true,
-            match: [/^[0-9]{10,15}$/, 'Please provide a valid phone number'],
+            validate: {
+                validator(value) {
+                    if (value == null || value === '') return true;
+                    return (
+                        /^[0-9]{10,15}$/.test(value) ||
+                        /^\+[1-9]\d{6,14}$/.test(value)
+                    );
+                },
+                message: 'Please provide a valid phone number',
+            },
+        },
+        phoneCountryIso: {
+            type: String,
+            trim: true,
+            uppercase: true,
+            default: null,
+            validate: {
+                validator(value) {
+                    if (value == null || value === '') return true;
+                    return /^[A-Z]{2}$/.test(value);
+                },
+                message: 'Phone country must be an ISO 3166-1 alpha-2 code',
+            },
+        },
+        phoneCountryCode: {
+            type: String,
+            trim: true,
+            default: null,
+            validate: {
+                validator(value) {
+                    if (value == null || value === '') return true;
+                    return /^\+[1-9]\d{0,3}$/.test(value);
+                },
+                message: 'Phone country code must look like +20',
+            },
         },
         dateOfBirth: {
             type: Date,

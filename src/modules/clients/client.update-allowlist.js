@@ -8,6 +8,8 @@ export const CLIENT_PERSONAL_UPDATE_FIELDS = [
     'firstName',
     'lastName',
     'phone',
+    'phoneCountryIso',
+    'phoneCountryCode',
     'dateOfBirth',
     'gender',
 ];

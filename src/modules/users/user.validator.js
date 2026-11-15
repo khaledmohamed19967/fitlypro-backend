@@ -1,4 +1,5 @@
 import Joi from 'joi';
+import { applyPhoneContractToValue } from '../../utils/phone.js';
 
 /**
  * User Validation Schemas
@@ -47,12 +48,9 @@ export const validateUser = Joi.object({
             'any.required': 'Password is required',
         }),
 
-    phone: Joi.string()
-        .pattern(/^[0-9]{10,15}$/)
-        .optional()
-        .messages({
-            'string.pattern.base': 'Please provide a valid phone number (10-15 digits)',
-        }),
+    phone: Joi.string().optional().allow('', null),
+    phoneCountryIso: Joi.string().trim().uppercase().length(2).optional().allow('', null),
+    phoneCountryCode: Joi.string().trim().optional().allow('', null),
 
     dateOfBirth: Joi.date()
         .max('now')
@@ -83,13 +81,17 @@ export const validateUser = Joi.object({
         .messages({
             'string.pattern.base': 'Invalid trainer ID format',
         }),
-});
+}).custom((value, helpers) =>
+    applyPhoneContractToValue(value, helpers, { required: false })
+);
 
 export const validateUpdateUser = Joi.object({
     firstName: Joi.string().min(2).max(50).trim().optional(),
     lastName: Joi.string().min(2).max(50).trim().optional(),
     email: Joi.string().email().lowercase().trim().optional(),
-    phone: Joi.string().pattern(/^[0-9]{10,15}$/).optional(),
+    phone: Joi.string().optional().allow('', null),
+    phoneCountryIso: Joi.string().trim().uppercase().length(2).optional().allow('', null),
+    phoneCountryCode: Joi.string().trim().optional().allow('', null),
     dateOfBirth: Joi.date().max('now').optional(),
     gender: Joi.string().valid('male', 'female', 'other').optional(),
     isActive: Joi.boolean().optional(),
@@ -101,4 +103,15 @@ export const validateUpdateUser = Joi.object({
         .messages({
             'string.pattern.base': 'Invalid trainer ID format',
         }),
-}).min(1); // At least one field must be provided for update
+})
+    .min(1) // At least one field must be provided for update
+    .custom((value, helpers) => {
+        if (
+            value.phone === undefined &&
+            value.phoneCountryIso === undefined &&
+            value.phoneCountryCode === undefined
+        ) {
+            return value;
+        }
+        return applyPhoneContractToValue(value, helpers, { required: false });
+    });
