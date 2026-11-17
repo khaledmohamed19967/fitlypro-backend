@@ -14,6 +14,7 @@ import {
     mapAssignmentToPublic,
     mapPlayerWorkoutAssignment,
     mapTrainerClientWorkoutAssignment,
+    mapClientDetailsWorkoutPlanSummary,
     buildWorkoutPlanListFilter,
     buildWorkoutPlanVisibilityFilter,
     canReadWorkoutPlan,
@@ -1016,14 +1017,14 @@ const getMyActiveAssignment = async (clientId) => {
 };
 
 /**
- * Trainer Client Details → Workout tab: active assignment for an owned client.
- * Summary DTO only (no workoutDays). Same multi-active ordering as `/me/workout-plan`.
+ * Shared active assignment + visible plan load for trainer Client Details surfaces.
+ * Newest-active ordering; draft/missing plans are not visible; archived remain visible.
  *
  * @param {string} clientId
- * @param {string} trainerId — req.user.id
- * @returns {Promise<object|null>}
+ * @param {string} trainerId
+ * @returns {Promise<{ assignment: import('mongoose').Document, plan: import('mongoose').Document }|null>}
  */
-const getClientActiveAssignment = async (clientId, trainerId) => {
+const loadVisibleClientActiveAssignment = async (clientId, trainerId) => {
     await assertTrainerAccessibleClient(clientId, trainerId);
 
     const assignments = await findNewestActiveAssignments({
@@ -1043,18 +1044,50 @@ const getClientActiveAssignment = async (clientId, trainerId) => {
 
     const assignment = assignments[0];
     const plan = await resolveAssignedPlan(assignment);
-    const mapped = mapTrainerClientWorkoutAssignmentIfVisible(assignment, plan);
 
-    if (!mapped) {
+    if (!plan || plan.status === 'draft') {
         console.warn(
             `[workout-plan] Active assignment ${assignment._id} references missing/draft plan; returning null for Client Details.`
         );
         return null;
     }
 
+    return { assignment, plan };
+};
+
+/**
+ * Trainer Client Details → Workout tab: active assignment for an owned client.
+ * Summary DTO only (no workoutDays). Same multi-active ordering as `/me/workout-plan`.
+ *
+ * @param {string} clientId
+ * @param {string} trainerId — req.user.id
+ * @returns {Promise<object|null>}
+ */
+const getClientActiveAssignment = async (clientId, trainerId) => {
+    const loaded = await loadVisibleClientActiveAssignment(clientId, trainerId);
+    if (!loaded) {
+        return null;
+    }
+
     // Archived plans remain visible in Client Details while the assignment is active
     // (consistent with player endpoint and "assignments survive archive").
-    return mapped;
+    return mapTrainerClientWorkoutAssignment(loaded.assignment, loaded.plan);
+};
+
+/**
+ * Allowlisted workout summary for GET /clients/:id (no progress / plan tree).
+ *
+ * @param {string} clientId
+ * @param {string} trainerId
+ * @returns {Promise<object|null>}
+ */
+const getClientDetailsWorkoutPlanSummary = async (clientId, trainerId) => {
+    const loaded = await loadVisibleClientActiveAssignment(clientId, trainerId);
+    if (!loaded) {
+        return null;
+    }
+
+    return mapClientDetailsWorkoutPlanSummary(loaded.assignment, loaded.plan);
 };
 
 /**
@@ -1175,6 +1208,7 @@ export default {
     getAssignments,
     getMyActiveAssignment,
     getClientActiveAssignment,
+    getClientDetailsWorkoutPlanSummary,
     getActiveAssignmentsForClients,
     cancelAssignment,
 };

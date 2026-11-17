@@ -202,3 +202,47 @@ export const mapNutritionAssignmentToPublic = (assignment, client = null) => {
         updatedAt: doc.updatedAt,
     };
 };
+
+/**
+ * Allowlisted Nutrition Plan summary embedded on GET /clients/:id.
+ * Requires a populated plan name — does not fabricate names.
+ *
+ * @param {object} publicAssignment — result of mapNutritionAssignmentToPublic
+ * @returns {object|null}
+ */
+export const mapClientDetailsNutritionPlanSummary = (publicAssignment) => {
+    if (!publicAssignment || typeof publicAssignment !== 'object') {
+        return null;
+    }
+
+    const planName =
+        publicAssignment.plan && typeof publicAssignment.plan.name === 'string'
+            ? publicAssignment.plan.name.trim()
+            : '';
+
+    if (!planName || !publicAssignment.id || !publicAssignment.planId) {
+        return null;
+    }
+
+    const toIso = (value) => {
+        if (value == null || value === '') return null;
+        const date = value instanceof Date ? value : new Date(value);
+        return Number.isNaN(date.getTime()) ? null : date.toISOString();
+    };
+
+    const startDate = toIso(publicAssignment.startDate);
+    const assignedAt = toIso(publicAssignment.createdAt);
+    if (!startDate || !assignedAt) {
+        return null;
+    }
+
+    return {
+        assignmentId: String(publicAssignment.id),
+        planId: String(publicAssignment.planId),
+        planName,
+        status: publicAssignment.status,
+        startDate,
+        endDate: toIso(publicAssignment.endDate),
+        assignedAt,
+    };
+};

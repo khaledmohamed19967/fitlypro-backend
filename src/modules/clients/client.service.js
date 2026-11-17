@@ -1,11 +1,13 @@
 import mongoose from 'mongoose';
 import User from '../users/user.model.js';
 import { ApiError } from '../../utils/ApiError.js';
-import { applyCoachingPackageEndDate } from './client.package-dates.js';
 import { resolveSubscriptionNeedsAttention } from './client.subscription-attention.js';
 import { buildClientListScopeQuery } from './client.list-scope.js';
 import { buildClientListSummary } from './client.list-summary.js';
 import workoutPlanService from '../workout-plans/workout-plan.service.js';
+import nutritionPlanAssignmentService from '../nutrition-plan-assignments/nutrition-plan-assignment.service.js';
+import clientSubscriptionService from '../client-subscriptions/client-subscription.service.js';
+import ClientSubscription from '../client-subscriptions/client-subscription.model.js';
 import {
     enrichClientPublicProfileWithInjuryAreas,
     validateHealthOptionIdsForCategory,
@@ -54,8 +56,10 @@ const buildClientResponse = async (client, clientId, trainerId) => {
 };
 
 /**
- * Attach nutrition restriction option IDs (canonical store: NutritionProfile).
- * Does not duplicate legacy string lists on the client DTO.
+ * Attach nutrition restriction IDs and display-ready option objects
+ * (canonical store: NutritionProfile). Reuses getNutritionProfile enrichment
+ * (allergyOptions / dietaryRestrictionOptions / unmapped* legacy strings).
+ * Does not create a NutritionProfile. Does not treat foodPreferences as allergies.
  */
 const enrichClientWithNutritionRestrictionIds = async (
     publicProfile,
@@ -78,8 +82,14 @@ const enrichClientWithNutritionRestrictionIds = async (
         return {
             ...publicProfile,
             allergyOptionIds: nutrition.allergyOptionIds ?? [],
+            allergyOptions: nutrition.allergyOptions ?? [],
             dietaryRestrictionOptionIds:
                 nutrition.dietaryRestrictionOptionIds ?? [],
+            dietaryRestrictionOptions:
+                nutrition.dietaryRestrictionOptions ?? [],
+            unmappedAllergies: nutrition.unmappedAllergies ?? [],
+            unmappedDietaryRestrictions:
+                nutrition.unmappedDietaryRestrictions ?? [],
         };
     } catch {
         return publicProfile;
@@ -148,14 +158,19 @@ const applyAllowlistedUserUpdates = (client, patch, allowedKeys) => {
         client.phoneCountryIso = undefined;
         client.phoneCountryCode = undefined;
     }
+};
 
-    if (
-        userPatch.startDate !== undefined ||
-        userPatch.packageDuration !== undefined ||
-        userPatch.endDate !== undefined
-    ) {
-        applyCoachingPackageEndDate(client);
-    }
+/**
+ * Roll back a client created in this request after a failed post-create step
+ * (nutrition profile or subscription). Never call for pre-existing clients.
+ *
+ * @param {import('mongoose').Types.ObjectId|string} clientId
+ * @param {import('mongoose').Types.ObjectId|string} trainerId
+ */
+const rollbackNewlyCreatedClient = async (clientId, trainerId) => {
+    await ClientSubscription.deleteMany({ clientId, trainerId });
+    await NutritionProfile.deleteMany({ clientId });
+    await User.findByIdAndDelete(clientId);
 };
 
 const applyInjuryUpdates = async (client, { injuryAreaOptionIds, injuryDetails }) => {
@@ -198,7 +213,9 @@ const applyNutritionRestrictionUpdates = async (
 };
 
 /**
- * Create a new client (creates User with role='client' and fitness data)
+ * Create a new client (creates User with role='client' and fitness data).
+ * Optional packageDuration creates a ClientSubscription via Subscription Service
+ * (dates + User snapshot sync). Does not write package fields directly.
  */
 const createClient = async (clientData, trainerId) => {
     const {
@@ -206,6 +223,9 @@ const createClient = async (clientData, trainerId) => {
         dietaryRestrictionOptionIds,
         injuryAreaOptionIds,
         injuryDetails,
+        packageDuration,
+        startDate: _ignoredStartDate,
+        endDate: _ignoredEndDate,
         ...restClientData
     } = clientData;
 
@@ -299,12 +319,9 @@ const createClient = async (clientData, trainerId) => {
         height: restClientData.height,
         experienceLevel: restClientData.experienceLevel,
 
-        // Program details (optional)
+        // Program details (optional; subscription snapshot owned by ClientSubscription)
         programType: restClientData.programType,
         sessionsPerWeek: restClientData.sessionsPerWeek,
-        startDate: restClientData.startDate,
-        packageDuration: restClientData.packageDuration,
-        endDate: restClientData.endDate,
 
         // Additional information (optional)
         additionalNotes: restClientData.additionalNotes,
@@ -324,8 +341,6 @@ const createClient = async (clientData, trainerId) => {
         delete userData.injuryAreaOptionIds;
     }
 
-    applyCoachingPackageEndDate(userData);
-
     let client;
     try {
         client = await User.create(userData);
@@ -337,11 +352,18 @@ const createClient = async (clientData, trainerId) => {
                 nutritionCreateBody
             );
         }
+
+        if (packageDuration) {
+            await clientSubscriptionService.createSubscription({
+                trainerId: String(trainerId),
+                clientId: client._id.toString(),
+                packageDuration,
+            });
+        }
     } catch (err) {
         if (client?._id) {
             try {
-                await NutritionProfile.deleteMany({ clientId: client._id });
-                await User.findByIdAndDelete(client._id);
+                await rollbackNewlyCreatedClient(client._id, trainerId);
             } catch (rollbackErr) {
                 const original = err?.message || String(err);
                 const rollback = rollbackErr?.message || String(rollbackErr);
@@ -354,9 +376,9 @@ const createClient = async (clientData, trainerId) => {
         throw err;
     }
 
-    // Populate trainer info and return
-    await client.populate('trainer', 'firstName lastName email');
-    const profile = client.getPublicProfile();
+    const refreshed = await User.findById(client._id);
+    await refreshed.populate('trainer', 'firstName lastName email');
+    const profile = refreshed.getPublicProfile();
     return enrichClientPublicProfileWithInjuryAreas(profile);
 };
 
@@ -491,15 +513,38 @@ const getClientById = async (clientId, trainerId = null) => {
 
     const profile = client.getPublicProfile();
     const withInjuries = await enrichClientPublicProfileWithInjuryAreas(profile);
-    return enrichClientWithNutritionRestrictionIds(
+    const enriched = await enrichClientWithNutritionRestrictionIds(
         withInjuries,
         clientId,
         trainerId
     );
+
+    if (!trainerId) {
+        return {
+            ...enriched,
+            workoutPlanSummary: null,
+            nutritionPlanSummary: null,
+        };
+    }
+
+    const [workoutPlanSummary, nutritionPlanSummary] = await Promise.all([
+        workoutPlanService.getClientDetailsWorkoutPlanSummary(clientId, trainerId),
+        nutritionPlanAssignmentService.getClientDetailsNutritionPlanSummary(
+            clientId,
+            trainerId
+        ),
+    ]);
+
+    return {
+        ...enriched,
+        workoutPlanSummary,
+        nutritionPlanSummary,
+    };
 };
 
 /**
- * Update client profile (personal, fitness, health, package, allergies/dietary restrictions).
+ * Update client profile (personal, fitness, health, allergies/dietary restrictions).
+ * Coaching subscription snapshot fields are not writable here.
  */
 const updateClient = async (clientId, updateData, trainerId = null) => {
     const client = await loadClientForCoachMutation(clientId, trainerId);
@@ -518,7 +563,8 @@ const updateClient = async (clientId, updateData, trainerId = null) => {
 };
 
 /**
- * Update coaching package / fitness fields only (BFF PUT /clients/:id/plan).
+ * Update fitness / non-subscription program fields (BFF PUT /clients/:id/plan).
+ * Does not create or mutate ClientSubscription / User package snapshot.
  */
 const updateClientPlan = async (clientId, updateData, trainerId = null) => {
     const client = await loadClientForCoachMutation(clientId, trainerId);

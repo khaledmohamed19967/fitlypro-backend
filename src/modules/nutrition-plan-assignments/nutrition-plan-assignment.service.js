@@ -10,6 +10,7 @@ import {
 import { loadAccessibleClientDocument } from '../nutrition-profiles/nutrition-profile.helpers.js';
 import {
     mapNutritionAssignmentToPublic,
+    mapClientDetailsNutritionPlanSummary,
     mapPlayerNutritionAssignment,
     mapPlayerNutritionPlan,
 } from './nutrition-plan-assignment.helpers.js';
@@ -275,6 +276,19 @@ const getActiveAssignmentByClient = async (clientId, trainerId) => {
 };
 
 /**
+ * Allowlisted nutrition summary for GET /clients/:id.
+ * Reuses getActiveAssignmentByClient selection (including multi-active integrity errors).
+ *
+ * @param {string} clientId
+ * @param {string} trainerId
+ * @returns {Promise<object|null>}
+ */
+const getClientDetailsNutritionPlanSummary = async (clientId, trainerId) => {
+    const assignment = await getActiveAssignmentByClient(clientId, trainerId);
+    return mapClientDetailsNutritionPlanSummary(assignment);
+};
+
+/**
  * Player: authenticated client's active nutrition assignment + live plan content.
  * Selection is client-scoped (`status === 'active'` only; endDate not applied).
  * Multiple actives → data-integrity 500 (do not pick newest/arbitrary).
@@ -372,6 +386,7 @@ export default {
     createAssignments,
     getAssignments,
     getActiveAssignmentByClient,
+    getClientDetailsNutritionPlanSummary,
     getMyActiveNutritionAssignment,
     cancelAssignment,
 };
