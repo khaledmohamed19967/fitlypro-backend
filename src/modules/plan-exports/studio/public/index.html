@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FitlyPro PDF Template Studio</title>
+  <link rel="stylesheet" href="/studio.css" />
+</head>
+<body>
+  <div class="shell">
+    <header class="header">
+      <p class="eyebrow">FitlyPro · Development</p>
+      <h1>PDF Template Studio</h1>
+      <p class="lede">
+        Preview registered PDF templates with fixtures or authorized real plans.
+      </p>
+    </header>
+
+    <section class="banner" role="status">
+      <strong>Phase C — Live Reload</strong>
+      <span>HTML/PDF previews auto-refresh when registered template files change. JWT stays in memory only.</span>
+    </section>
+
+    <main class="panel">
+      <div id="live-status" class="live-status" aria-live="polite">Live reload: connecting…</div>
+      <div id="status" class="status" aria-live="polite">Loading templates…</div>
+
+      <form class="controls" id="studio-form" hidden>
+        <label class="field">
+          <span>Plan type</span>
+          <select id="plan-type" name="planType"></select>
+        </label>
+
+        <label class="field">
+          <span>Template</span>
+          <select id="template" name="templateId"></select>
+        </label>
+
+        <label class="field">
+          <span>Page</span>
+          <select id="page" name="pageId"></select>
+        </label>
+
+        <label class="field">
+          <span>Source</span>
+          <select id="source" name="source">
+            <option value="fixture">Fixture</option>
+            <option value="plan">Real plan</option>
+          </select>
+        </label>
+
+        <label class="field" id="fixture-field">
+          <span>Fixture</span>
+          <select id="fixture" name="fixtureId"></select>
+        </label>
+
+        <label class="field" id="plan-field" hidden>
+          <span>Plan ID</span>
+          <input id="plan-id" name="planId" type="text" autocomplete="off" spellcheck="false" placeholder="24-char ObjectId" />
+        </label>
+
+        <label class="field" id="token-field" hidden>
+          <span>Trainer JWT</span>
+          <input id="jwt" name="jwt" type="text" autocomplete="off" spellcheck="false" placeholder="Paste Bearer token (not stored)" />
+        </label>
+
+        <label class="field">
+          <span>Format</span>
+          <select id="format" name="format">
+            <option value="html">HTML</option>
+            <option value="pdf">PDF</option>
+          </select>
+        </label>
+
+        <div class="actions">
+          <button type="submit" id="preview-btn">Preview</button>
+        </div>
+      </form>
+
+      <section class="meta" id="meta" hidden>
+        <h2>Selection</h2>
+        <dl id="meta-list"></dl>
+      </section>
+
+      <section class="preview" id="preview" hidden>
+        <h2>Preview</h2>
+        <div id="preview-status" class="status" aria-live="polite"></div>
+        <!-- HTML: empty sandbox (no allow-same-origin, no allow-scripts). -->
+        <iframe
+          id="preview-frame-html"
+          title="Studio HTML preview"
+          sandbox=""
+          hidden
+        ></iframe>
+        <!-- PDF: separate frame; allow-same-origin only for blob URL rendering. -->
+        <iframe
+          id="preview-frame-pdf"
+          title="Studio PDF preview"
+          sandbox="allow-same-origin"
+          hidden
+        ></iframe>
+      </section>
+    </main>
+  </div>
+  <script src="/studio.js" type="module"></script>
+</body>
+</html>

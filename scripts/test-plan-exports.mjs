@@ -22,8 +22,19 @@ import {
     buildClassicNutritionHtml,
     buildClassicWorkoutHtml,
 } from '../src/modules/plan-exports/templates/classic/index.js';
+import {
+    buildElevateWorkoutHtml,
+    renderElevateWorkoutPdf,
+} from '../src/modules/plan-exports/templates/elevate/index.js';
+import {
+    buildHighlightedTitleHtml,
+    fitElevateTitleLayout,
+} from '../src/modules/plan-exports/templates/elevate/page.js';
 import { escapeHtml } from '../src/modules/plan-exports/pdf/htmlEscape.js';
 import { renderHtmlToPdf, closeHtmlPdfBrowser } from '../src/modules/plan-exports/pdf/htmlPdfRenderer.js';
+import { mkdirSync, writeFileSync } from 'fs';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
 
 const BASE = process.env.API_URL || 'http://localhost:8000';
 const API = `${BASE}/api/v1`;
@@ -176,11 +187,85 @@ async function runUnitTests() {
     if (
         typeof resolveTemplateRenderer('classic', 'workout') === 'function' &&
         typeof resolveTemplateRenderer('classic', 'nutrition') === 'function' &&
+        typeof resolveTemplateRenderer('elevate', 'workout') === 'function' &&
+        resolveTemplateRenderer('elevate', 'nutrition') == null &&
         resolveTemplateRenderer('nope', 'workout') == null
     ) {
         pass('template renderer resolution');
     } else {
-        fail('template renderer resolution', 'classic renderers missing');
+        fail('template renderer resolution', 'classic/elevate renderers missing');
+    }
+
+    const coverMeta = getTemplateMeta('elevate');
+    const coverPreview = coverMeta?.assets?.workout?.previewImageUrl ?? null;
+    const workoutCoverListed = listExportTemplates('workout').find(
+        (t) => t.id === 'elevate'
+    );
+    const nutritionCoverListed = listExportTemplates('nutrition').find(
+        (t) => t.id === 'elevate'
+    );
+    if (
+        coverMeta &&
+        coverMeta.supportedPlanTypes.includes('workout') &&
+        !coverMeta.supportedPlanTypes.includes('nutrition') &&
+        typeof coverPreview === 'string' &&
+        coverMeta.name === 'Elevate' &&
+        coverPreview ===
+            'https://ik.imagekit.io/6nagrfhcm/template-cover.png' &&
+        workoutCoverListed?.previewUrl === coverPreview &&
+        workoutCoverListed?.name === 'Elevate' &&
+        !nutritionCoverListed
+    ) {
+        pass('elevate template registry + workout-only discovery');
+    } else {
+        fail(
+            'elevate template registry + workout-only discovery',
+            JSON.stringify({ coverMeta, workoutCoverListed, nutritionCoverListed })
+        );
+    }
+
+    const highlighted = buildHighlightedTitleHtml('Full Body <b>Foundations</b>');
+    if (
+        highlighted.includes('Full') &&
+        highlighted.includes('Body') &&
+        highlighted.includes('<span>&lt;b&gt;Foundations&lt;/b&gt;</span>') &&
+        !highlighted.includes('<b>Foundations</b>')
+    ) {
+        pass('elevate title highlight escapes user text');
+    } else {
+        fail('elevate title highlight escapes user text', highlighted);
+    }
+
+    const shortTitle = fitElevateTitleLayout('Full Body Foundations');
+    const mediumTitle = fitElevateTitleLayout('Full Body — Beginner Copy 5');
+    const longTitle = fitElevateTitleLayout(
+        'Very Long Progressive Overload Hypertrophy Foundations Program'
+    );
+    const longTokenTitle = fitElevateTitleLayout(
+        'SupercalifragilisticexpialidociousStrength'
+    );
+    if (
+        shortTitle.mode === 'split-last' &&
+        shortTitle.fontSize === 55 &&
+        shortTitle.titleHtml.includes('<br>') &&
+        shortTitle.titleHtml.includes('<span>Foundations</span>') &&
+        mediumTitle.fontSize < 55 &&
+        mediumTitle.mode === 'flow' &&
+        !mediumTitle.titleHtml.includes('<br>') &&
+        mediumTitle.titleHtml.includes('<span>5</span>') &&
+        mediumTitle.lineCount <= 2 &&
+        longTitle.fontSize <= mediumTitle.fontSize &&
+        longTitle.lineCount <= 3 &&
+        longTokenTitle.fontSize <= 30 &&
+        longTokenTitle.mode === 'flow' &&
+        longTokenTitle.titleHtml.includes('SupercalifragilisticexpialidociousStrength')
+    ) {
+        pass('elevate title layout scales with name length');
+    } else {
+        fail(
+            'elevate title layout scales with name length',
+            JSON.stringify({ shortTitle, mediumTitle, longTitle, longTokenTitle })
+        );
     }
 
     if (
@@ -337,6 +422,214 @@ async function runUnitTests() {
             pdfBuf?.slice?.(0, 20)?.toString?.()
         );
     }
+
+    const coverModel = {
+        type: 'workout',
+        plan: {
+            id: 'cover-1',
+            name: 'Full Body Foundations',
+            description: null,
+            duration: 8,
+            daysPerWeek: 3,
+            goal: 'general_fitness',
+            level: 'beginner',
+            notes: 'Keep rest times honest.',
+            status: 'active',
+            totalExercises: 6,
+            totalDays: 3,
+        },
+        trainer: { fullName: 'Coach', email: 'coach@example.com', phone: null },
+        content: {
+            workoutDays: [
+                {
+                    dayNumber: 1,
+                    name: 'Full Body A',
+                    exercises: [
+                        {
+                            name: 'Squat',
+                            order: 1,
+                            muscles: { primary: 'quadriceps', secondary: [] },
+                            sets: [{}, {}, {}],
+                        },
+                        {
+                            name: 'Bench',
+                            order: 2,
+                            muscles: { primary: 'chest', secondary: [] },
+                            sets: [{}, {}],
+                        },
+                    ],
+                },
+                {
+                    dayNumber: 2,
+                    name: 'Full Body B',
+                    exercises: [
+                        {
+                            name: 'Deadlift',
+                            order: 1,
+                            muscles: { primary: 'back', secondary: [] },
+                            sets: [{}, {}, {}],
+                        },
+                        {
+                            name: 'OHP',
+                            order: 2,
+                            muscles: { primary: 'shoulders', secondary: [] },
+                            sets: [{}, {}],
+                        },
+                    ],
+                },
+                {
+                    dayNumber: 3,
+                    name: 'Full Body C',
+                    exercises: [
+                        {
+                            name: 'Row',
+                            order: 1,
+                            muscles: { primary: 'back', secondary: [] },
+                            sets: [{}, {}],
+                        },
+                        {
+                            name: 'Curl',
+                            order: 2,
+                            muscles: { primary: 'biceps', secondary: [] },
+                            sets: [{}, {}],
+                        },
+                    ],
+                },
+            ],
+        },
+    };
+
+    const coverHtml = buildElevateWorkoutHtml(coverModel);
+    if (
+        coverHtml.includes('class="page page-cover"') &&
+        coverHtml.includes('class="left-stack"') &&
+        coverHtml.includes('class="title-stack"') &&
+        coverHtml.includes('--title-size:') &&
+        coverHtml.includes('elevate-html-source:templates/elevate/html/index.html') &&
+        coverHtml.includes('data-elevate-html-css="styles.css"') &&
+        coverHtml.includes('Full Body') &&
+        coverHtml.includes('Foundations') &&
+        coverHtml.includes('Program overview') &&
+        coverHtml.includes('class="steps"') &&
+        coverHtml.includes('How to log') &&
+        coverHtml.includes('Pick a workout') &&
+        coverHtml.includes('Log every set') &&
+        coverHtml.includes('Tap Finish') &&
+        coverHtml.includes('page-workouts') &&
+        coverHtml.includes('WORKOUTS') &&
+        coverHtml.includes('Full Body A') &&
+        coverHtml.includes('2 exercises · 5 sets') &&
+        coverHtml.includes('Quadriceps') &&
+        coverHtml.includes('Example only') &&
+        coverHtml.includes('Coach note: Keep rest times honest.') &&
+        coverHtml.includes('02 / 03') &&
+        coverHtml.includes('page-workout-details') &&
+        coverHtml.includes('Tick each set') &&
+        coverHtml.includes('Workout A') &&
+        coverHtml.includes('details-tick') &&
+        coverHtml.includes('03 / 03') &&
+        coverHtml.includes('8 weeks') &&
+        coverHtml.includes('Any order') &&
+        coverHtml.includes('data:image/png;base64,') &&
+        coverHtml.includes('data:font/woff2;base64,') &&
+        !coverHtml.includes('data-fitly-cover>') &&
+        !coverHtml.includes('calories') &&
+        !coverHtml.includes('ucarecdn.com') &&
+        !coverHtml.includes('rsms.me')
+    ) {
+        pass('elevate HTML content + offline assets');
+    } else {
+        fail('elevate HTML content + offline assets', coverHtml.slice(0, 400));
+    }
+
+    const mediumNameHtml = buildElevateWorkoutHtml({
+        ...coverModel,
+        plan: {
+            ...coverModel.plan,
+            name: 'Full Body — Beginner Copy 5',
+        },
+    });
+    const longNameHtml = buildElevateWorkoutHtml({
+        ...coverModel,
+        plan: {
+            ...coverModel.plan,
+            name: 'Very Long Progressive Overload Hypertrophy Foundations Program <script>',
+            description: 'Safe <b>desc</b>',
+        },
+    });
+    // Design has no description slot; names must still be escaped in title/overview.
+    if (
+        mediumNameHtml.includes('title-stack') &&
+        mediumNameHtml.includes('--title-size:') &&
+        !mediumNameHtml.includes('--title-size:55px') &&
+        mediumNameHtml.includes('<span>5</span>') &&
+        longNameHtml.includes('&lt;script&gt;') &&
+        !longNameHtml.includes('<script>') &&
+        longNameHtml.includes('Program overview') &&
+        longNameHtml.includes('--title-size:')
+    ) {
+        pass('elevate escapes long names and descriptions');
+    } else {
+        fail(
+            'elevate escapes long names and descriptions',
+            longNameHtml.slice(0, 300)
+        );
+    }
+
+    const coverOutDir = join(dirname(fileURLToPath(import.meta.url)), '.preview');
+    mkdirSync(coverOutDir, { recursive: true });
+    const titleCases = [
+        {
+            name: 'Full Body Foundations',
+            file: 'elevate-title-short.pdf',
+        },
+        {
+            name: 'Full Body — Beginner Copy 5',
+            file: 'elevate-title-medium.pdf',
+        },
+        {
+            name: 'Very Long Progressive Overload Hypertrophy Foundations Program',
+            file: 'elevate-title-long.pdf',
+        },
+    ];
+
+    let titlePdfsOk = true;
+    for (const titleCase of titleCases) {
+        const pdf = await renderElevateWorkoutPdf({
+            ...coverModel,
+            plan: { ...coverModel.plan, name: titleCase.name },
+        });
+        if (!(Buffer.isBuffer(pdf) && pdf.slice(0, 5).toString() === '%PDF-')) {
+            titlePdfsOk = false;
+            fail(
+                'elevate PDF buffer valid',
+                `${titleCase.name}: ${pdf?.slice?.(0, 20)?.toString?.()}`
+            );
+            break;
+        }
+        writeFileSync(join(coverOutDir, titleCase.file), pdf);
+        const pageMatches = pdf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) || [];
+        if (pageMatches.length !== 3) {
+            titlePdfsOk = false;
+            fail(
+                'elevate PDF is three pages',
+                `${titleCase.name}: pages≈${pageMatches.length}`
+            );
+            break;
+        }
+    }
+    if (titlePdfsOk) {
+        writeFileSync(
+            join(coverOutDir, 'elevate-three-page.pdf'),
+            await renderElevateWorkoutPdf(coverModel)
+        );
+        writeFileSync(
+            join(coverOutDir, 'elevate-two-page.pdf'),
+            await renderElevateWorkoutPdf(coverModel)
+        );
+        pass('elevate PDF is three pages');
+        pass('elevate PDF buffer valid');
+    }
 }
 
 async function main() {
@@ -482,8 +775,13 @@ async function main() {
         const workoutTemplate = templatesRes.json?.data?.templates?.find(
             (t) => t.id === 'classic'
         );
+        const coverTemplate = templatesRes.json?.data?.templates?.find(
+            (t) => t.id === 'elevate'
+        );
         const expectedWorkoutPreview =
             getTemplateMeta('classic')?.assets?.workout?.previewImageUrl ?? null;
+        const expectedCoverPreview =
+            getTemplateMeta('elevate')?.assets?.workout?.previewImageUrl ?? null;
         if (
             templatesRes.status === 200 &&
             Array.isArray(templatesRes.json?.data?.templates) &&
@@ -494,6 +792,15 @@ async function main() {
             pass('GET workout templates returns preview image URL');
         } else {
             fail('GET workout templates returns preview image URL', JSON.stringify(templatesRes.json));
+        }
+        if (
+            coverTemplate &&
+            coverTemplate.previewUrl === expectedCoverPreview &&
+            coverTemplate.assets?.previewImageUrl === expectedCoverPreview
+        ) {
+            pass('GET workout templates includes elevate');
+        } else {
+            fail('GET workout templates includes elevate', JSON.stringify(coverTemplate));
         }
 
         const nutritionTemplatesRes = await request(
@@ -566,6 +873,62 @@ async function main() {
             fail(
                 'nutrition export PDF',
                 `status=${nutritionExport.status} head=${nutritionExport.buffer.slice(0, 80).toString()}`
+            );
+        }
+
+        const coverExport = await request('POST', '/plan-exports', {
+            token: tokenA,
+            body: {
+                planType: 'workout',
+                planId: workout._id.toString(),
+                templateId: 'elevate',
+            },
+            raw: true,
+        });
+        if (
+            coverExport.status === 200 &&
+            (coverExport.headers.get('content-type') || '').includes('application/pdf') &&
+            coverExport.buffer.slice(0, 5).toString() === '%PDF-'
+        ) {
+            pass('elevate workout export PDF');
+        } else {
+            fail(
+                'elevate workout export PDF',
+                `status=${coverExport.status} head=${coverExport.buffer.slice(0, 80).toString()}`
+            );
+        }
+
+        const coverOnNutrition = await request('POST', '/plan-exports', {
+            token: tokenA,
+            body: {
+                planType: 'nutrition',
+                planId: nutrition._id.toString(),
+                templateId: 'elevate',
+            },
+        });
+        if (coverOnNutrition.status === 400) {
+            pass('elevate rejected for nutrition');
+        } else {
+            fail(
+                'elevate rejected for nutrition',
+                JSON.stringify(coverOnNutrition.json)
+            );
+        }
+
+        const coverUnauthorized = await request('POST', '/plan-exports', {
+            token: tokenB,
+            body: {
+                planType: 'workout',
+                planId: workout._id.toString(),
+                templateId: 'elevate',
+            },
+        });
+        if (coverUnauthorized.status === 404) {
+            pass('elevate unauthorized plan rejected');
+        } else {
+            fail(
+                'elevate unauthorized plan rejected',
+                JSON.stringify(coverUnauthorized.json)
             );
         }
 

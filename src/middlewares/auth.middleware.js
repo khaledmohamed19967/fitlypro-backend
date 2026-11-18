@@ -1,53 +1,35 @@
-import jwt from 'jsonwebtoken';
-import config from '../config/index.js';
 import { ApiError } from '../utils/ApiError.js';
-import User from '../modules/users/user.model.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import {
+    extractBearerToken,
+    verifyAccessToken,
+} from '../utils/verifyAccessToken.js';
 
 /**
  * Protect routes - Verify JWT token
+ *
+ * Status-code compatibility: any verification failure is returned as 401,
+ * including deactivated accounts (historical `protect` catch-all behavior).
  */
 export const protect = asyncHandler(async (req, res, next) => {
-    let token;
-
-    // Check header for token
-    if (
-        req.headers.authorization &&
-        req.headers.authorization.startsWith('Bearer')
-    ) {
-        token = req.headers.authorization.split(' ')[1];
-    }
+    const token = extractBearerToken(req.headers.authorization);
 
     if (!token) {
         throw new ApiError(401, 'Not authorized to access this route');
     }
 
     try {
-        // Verify token
-        const decoded = jwt.verify(token, config.jwt.secret);
-
-        // Find user
-        const user = await User.findById(decoded.id);
-
-        if (!user) {
-            throw new ApiError(401, 'User not found');
-        }
-
-        if (!user.isActive) {
-            throw new ApiError(403, 'Your account has been deactivated');
-        }
-
-        // Attach user to request
-        req.user = user;
+        req.user = await verifyAccessToken(token);
         next();
-    } catch (error) {
+    } catch {
+        // Preserve legacy protect semantics: never leak 403 through this middleware.
         throw new ApiError(401, 'Not authorized to access this route');
     }
 });
 
 /**
  * Authorize roles
- * @param {...String} roles - Roles allowed to access the route
+ * @param {...String} roles - Roles allowed to access this route
  */
 export const authorize = (...roles) => {
     return (req, res, next) => {

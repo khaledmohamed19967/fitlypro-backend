@@ -1,0 +1,56 @@
+{
+  "type": "nutrition",
+  "plan": {
+    "id": "fixture-nutrition-basic",
+    "name": "Studio Fixture <i>Nutrition</i>",
+    "description": "Deterministic nutrition export model for Studio previews.",
+    "duration": 4,
+    "daysCount": 1,
+    "goal": "fat_loss",
+    "scheduleMode": "daily",
+    "notes": "Hydrate. Ignore <b>raw HTML</b>.",
+    "status": "active",
+    "isTemplate": false,
+    "totalMeals": 1,
+    "totalFoodItems": 1,
+    "avgDailyCalories": 420,
+    "macroTargets": { "calories": 2000, "protein": 150, "carbs": 180, "fat": 60 },
+    "computedMacros": { "calories": 420, "protein": 32, "carbs": 28, "fat": 18 }
+  },
+  "trainer": {
+    "id": "fixture-trainer",
+    "fullName": "Studio Coach",
+    "email": "studio-coach@example.com",
+    "phone": "+1 555 0100"
+  },
+  "content": {
+    "nutritionDays": [
+      {
+        "dayNumber": 1,
+        "name": null,
+        "notes": null,
+        "dailyTotals": { "calories": 420, "protein": 32, "carbs": 28, "fat": 18 },
+        "meals": [
+          {
+            "order": 1,
+            "name": "Breakfast",
+            "mealType": "breakfast",
+            "suggestedTime": "08:00",
+            "notes": null,
+            "mealTotals": { "calories": 420, "protein": 32, "carbs": 28, "fat": 18 },
+            "foodItems": [
+              {
+                "name": "Greek Yogurt",
+                "brand": "Fixture Farms",
+                "quantity": 200,
+                "unit": "g",
+                "notes": null,
+                "itemMacros": { "calories": 420, "protein": 32, "carbs": 28, "fat": 18 }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

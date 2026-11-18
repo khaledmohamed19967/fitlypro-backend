@@ -1,0 +1,110 @@
+[
+  {
+    "count": 3,
+    "pageWidth": 794,
+    "pageHeight": 1123,
+    "cover": {
+      "width": 794,
+      "height": 1123
+    },
+    "rowCount": 3,
+    "listHeight": 156,
+    "contentBottom": 1099,
+    "stacked": true,
+    "overlapPairs": [],
+    "clipped": false,
+    "overflowPx": 0,
+    "pdfPages": 2,
+    "sectionTops": {
+      "logo": 32,
+      "title": 70,
+      "dek": 107.6,
+      "list": 158.2,
+      "week": 324.2,
+      "notes": 468.2,
+      "photo": 831,
+      "footer": 1085
+    }
+  },
+  {
+    "count": 6,
+    "pageWidth": 794,
+    "pageHeight": 1123,
+    "cover": {
+      "width": 794,
+      "height": 1123
+    },
+    "rowCount": 6,
+    "listHeight": 303,
+    "contentBottom": 1099,
+    "stacked": true,
+    "overlapPairs": [],
+    "clipped": false,
+    "overflowPx": 0,
+    "pdfPages": 2,
+    "sectionTops": {
+      "logo": 32,
+      "title": 70,
+      "dek": 107.6,
+      "list": 158.2,
+      "week": 471.2,
+      "notes": 615.2,
+      "photo": 831,
+      "footer": 1085
+    }
+  },
+  {
+    "count": 8,
+    "pageWidth": 794,
+    "pageHeight": 1123,
+    "cover": {
+      "width": 794,
+      "height": 1123
+    },
+    "rowCount": 8,
+    "listHeight": 401,
+    "contentBottom": 1099,
+    "stacked": true,
+    "overlapPairs": [],
+    "clipped": false,
+    "overflowPx": 0,
+    "pdfPages": 2,
+    "sectionTops": {
+      "logo": 32,
+      "title": 70,
+      "dek": 107.6,
+      "list": 158.2,
+      "week": 569.2,
+      "notes": 713.2,
+      "photo": 847.8,
+      "footer": 1085
+    }
+  },
+  {
+    "count": 10,
+    "pageWidth": 794,
+    "pageHeight": 1123,
+    "cover": {
+      "width": 794,
+      "height": 1123
+    },
+    "rowCount": 10,
+    "listHeight": 499,
+    "contentBottom": 1099,
+    "stacked": true,
+    "overlapPairs": [],
+    "clipped": false,
+    "overflowPx": 0,
+    "pdfPages": 2,
+    "sectionTops": {
+      "logo": 32,
+      "title": 70,
+      "dek": 107.6,
+      "list": 158.2,
+      "week": 667.2,
+      "notes": 811.2,
+      "photo": 945.8,
+      "footer": 1085
+    }
+  }
+]

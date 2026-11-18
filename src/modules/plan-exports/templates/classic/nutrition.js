@@ -16,7 +16,10 @@ import {
 } from '../../pdf/htmlEscape.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const NUTRITION_STYLES = readFileSync(join(__dirname, 'nutrition.css'), 'utf8');
+const NUTRITION_CSS_PATH = join(__dirname, 'nutrition.css');
+
+/** Read CSS on every HTML build (Studio-friendly; no process restart). */
+const loadNutritionStyles = () => readFileSync(NUTRITION_CSS_PATH, 'utf8');
 
 /**
  * @param {object} exportModel
@@ -296,7 +299,7 @@ const wrapNutritionDocument = ({
   <title>${pageTitle}</title>
   <link rel="preconnect" href="https://rsms.me/" />
   <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
-  <style>${NUTRITION_STYLES}</style>
+  <style>${loadNutritionStyles()}</style>
 </head>
 <body>
   <div class="page-wrap">

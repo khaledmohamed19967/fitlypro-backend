@@ -79,24 +79,47 @@ export const buildWorkoutExportModel = (plan, trainer) => ({
             dayNumber: day.dayNumber,
             name: day.name,
             description: day.description ?? null,
-            exercises: (day.exercises ?? []).map((exercise) => ({
-                name:
-                    exercise.exercise?.name ||
-                    exercise.exerciseSnapshot?.name ||
-                    'Exercise',
-                order: exercise.order,
-                restBetweenSets: exercise.restBetweenSets ?? 0,
-                notes: exercise.notes ?? null,
-                tempo: exercise.tempo ?? null,
-                sets: (exercise.sets ?? []).map((set) => ({
-                    setNumber: set.setNumber,
-                    reps: set.reps,
-                    weight: set.weight,
-                    weightUnit: set.weightUnit ?? 'kg',
-                    isWarmup: Boolean(set.isWarmup),
-                    isDropset: Boolean(set.isDropset),
-                })),
-            })),
+            exercises: (day.exercises ?? []).map((exercise) => {
+                const muscles = exercise.exercise?.muscles;
+                const thumbnailUrl =
+                    exercise.exercise?.thumbnailUrl ||
+                    exercise.exercise?.media?.thumbnailUrl ||
+                    exercise.exerciseSnapshot?.thumbnailUrl ||
+                    null;
+                return {
+                    name:
+                        exercise.exercise?.name ||
+                        exercise.exerciseSnapshot?.name ||
+                        'Exercise',
+                    order: exercise.order,
+                    restBetweenSets: exercise.restBetweenSets ?? 0,
+                    notes: exercise.notes ?? null,
+                    tempo: exercise.tempo ?? null,
+                    thumbnailUrl:
+                        typeof thumbnailUrl === 'string' && thumbnailUrl.trim()
+                            ? thumbnailUrl.trim()
+                            : null,
+                    muscles:
+                        muscles &&
+                        typeof muscles === 'object' &&
+                        muscles.primary
+                            ? {
+                                  primary: muscles.primary,
+                                  secondary: Array.isArray(muscles.secondary)
+                                      ? [...muscles.secondary]
+                                      : [],
+                              }
+                            : null,
+                    sets: (exercise.sets ?? []).map((set) => ({
+                        setNumber: set.setNumber,
+                        reps: set.reps,
+                        weight: set.weight,
+                        weightUnit: set.weightUnit ?? 'kg',
+                        isWarmup: Boolean(set.isWarmup),
+                        isDropset: Boolean(set.isDropset),
+                    })),
+                };
+            }),
         })),
     },
 });

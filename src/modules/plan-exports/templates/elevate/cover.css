@@ -1,0 +1,329 @@
+/**
+ * Fitly Cover — single A4 workout plan cover page.
+ * All colors/fonts are self-contained (no network).
+ */
+
+@page {
+  size: A4;
+  margin: 0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 210mm;
+  height: 297mm;
+  background: #000;
+  color: #fff;
+  font-family: Arial, Helvetica, sans-serif;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.cover {
+  position: relative;
+  width: 210mm;
+  height: 297mm;
+  overflow: hidden;
+  background: #000;
+}
+
+/* --- Hero band --- */
+.hero {
+  position: relative;
+  height: 148mm;
+  overflow: hidden;
+  background: #000;
+}
+
+.hero-photo {
+  position: absolute;
+  inset: 0 0 0 34%;
+  background-image: var(--hero-image);
+  background-size: cover;
+  background-position: center top;
+  background-repeat: no-repeat;
+  filter: grayscale(1) contrast(1.05);
+  clip-path: polygon(18% 0, 100% 0, 100% 100%, 0 100%);
+}
+
+.hero-photo::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    rgba(0, 0, 0, 1) 0%,
+    rgba(0, 0, 0, 0.55) 28%,
+    rgba(0, 0, 0, 0.15) 55%,
+    rgba(0, 0, 0, 0.35) 100%
+  );
+}
+
+.hero-content {
+  position: relative;
+  z-index: 2;
+  height: 100%;
+  padding: 10mm 12mm 0 12mm;
+}
+
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: 0;
+  font-size: 16pt;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+
+.brand-fitly {
+  color: #fff;
+}
+
+.brand-pro {
+  color: #c8f500;
+}
+
+.kicker {
+  margin: 14mm 0 0;
+  font-size: 8pt;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.title {
+  margin: 3.5mm 0 0;
+  max-width: 112mm;
+  font-size: 28pt;
+  font-weight: 900;
+  line-height: 1.05;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  word-break: break-word;
+}
+
+.title-word {
+  color: #fff;
+}
+
+.title-word.is-accent {
+  color: #c8f500;
+}
+
+.summary {
+  margin: 3.5mm 0 0;
+  max-width: 105mm;
+  font-size: 8.5pt;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.description {
+  margin: 2.5mm 0 0;
+  max-width: 105mm;
+  font-size: 8pt;
+  font-weight: 400;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.72);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.overview {
+  position: absolute;
+  left: 12mm;
+  bottom: 8mm;
+  z-index: 3;
+  width: 78mm;
+  padding: 4.5mm 5mm;
+  border-radius: 4mm;
+  background: rgba(18, 18, 18, 0.88);
+  border: 0.35mm solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(2px);
+}
+
+.overview-head {
+  display: flex;
+  align-items: center;
+  gap: 2mm;
+  margin-bottom: 3mm;
+  font-size: 8.5pt;
+  font-weight: 700;
+}
+
+.overview-icon {
+  position: relative;
+  width: 4.4mm;
+  height: 4.4mm;
+  border-radius: 50%;
+  border: 0.45mm solid #c8f500;
+  flex-shrink: 0;
+}
+
+.overview-icon::before,
+.overview-icon::after {
+  content: '';
+  position: absolute;
+  background: #c8f500;
+}
+
+.overview-icon::before {
+  left: 50%;
+  top: 0.7mm;
+  bottom: 0.7mm;
+  width: 0.35mm;
+  transform: translateX(-50%);
+}
+
+.overview-icon::after {
+  top: 50%;
+  left: 0.7mm;
+  right: 0.7mm;
+  height: 0.35mm;
+  transform: translateY(-50%);
+}
+
+.overview-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.overview-table th,
+.overview-table td {
+  padding: 1.4mm 0;
+  font-size: 7.5pt;
+  line-height: 1.2;
+  vertical-align: top;
+  text-align: left;
+}
+
+.overview-table th {
+  width: 24mm;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.overview-table td {
+  font-weight: 700;
+  color: #fff;
+  word-break: break-word;
+}
+
+/* --- Body --- */
+.body {
+  position: relative;
+  z-index: 1;
+  padding: 7mm 12mm 0;
+  height: 149mm;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 3.5mm;
+}
+
+.stat {
+  display: flex;
+  align-items: center;
+  gap: 3mm;
+  min-height: 16mm;
+  padding: 3mm 3.5mm;
+  border-radius: 3mm;
+  background: #141414;
+  border: 0.3mm solid rgba(255, 255, 255, 0.06);
+}
+
+.stat-icon {
+  width: 7mm;
+  height: 7mm;
+  flex-shrink: 0;
+  color: #c8f500;
+}
+
+.stat-icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.stat-value {
+  font-size: 16pt;
+  font-weight: 800;
+  line-height: 1;
+  color: #fff;
+}
+
+.stat-label {
+  margin-top: 1mm;
+  font-size: 7pt;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.55);
+  text-transform: lowercase;
+}
+
+.instructions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 3.5mm;
+  margin-top: 5mm;
+}
+
+.instruction {
+  min-height: 28mm;
+  padding: 4.5mm 4mm;
+  border-radius: 3.5mm;
+  background: #171717;
+  border: 0.3mm solid rgba(255, 255, 255, 0.06);
+}
+
+.instruction-icon {
+  width: 7mm;
+  height: 7mm;
+  margin-bottom: 3mm;
+  color: #c8f500;
+}
+
+.instruction-icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.instruction-title {
+  margin: 0;
+  font-size: 9.5pt;
+  font-weight: 800;
+  color: #fff;
+}
+
+.instruction-copy {
+  margin: 1.5mm 0 0;
+  font-size: 7.5pt;
+  font-weight: 500;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+/* --- Footer --- */
+.footer {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 34mm;
+  background: linear-gradient(115deg, #b6e600 0%, #d4ff2e 45%, #c8f500 100%);
+  clip-path: polygon(0 42%, 100% 0, 100% 100%, 0 100%);
+}

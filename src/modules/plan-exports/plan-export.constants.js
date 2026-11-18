@@ -4,7 +4,7 @@
 
 export const PLAN_EXPORT_TYPES = Object.freeze(['workout', 'nutrition']);
 
-export const PLAN_EXPORT_TEMPLATE_IDS = Object.freeze(['classic']);
+export const PLAN_EXPORT_TEMPLATE_IDS = Object.freeze(['classic', 'elevate']);
 
 export const DEFAULT_PLAN_EXPORT_TEMPLATE_ID = 'classic';
 
@@ -34,6 +34,20 @@ export const PLAN_EXPORT_TEMPLATES = Object.freeze([
             workout: Object.freeze({
                 previewImageUrl:
                     'https://ucarecdn.com/c4fdab05-2c4e-46cb-b196-b375c3af8f69/-/preview/720x852/',
+            }),
+        }),
+    },
+    {
+        id: 'elevate',
+        name: 'Elevate',
+        description:
+            'A modern, bold workout plan template with a premium athletic design.',
+        supportedPlanTypes: Object.freeze(['workout']),
+        assets: Object.freeze({
+            workout: Object.freeze({
+                // Modal thumbnail only — not rendered into the PDF.
+                previewImageUrl:
+                    'https://ik.imagekit.io/6nagrfhcm/template-cover.png',
             }),
         }),
     },
