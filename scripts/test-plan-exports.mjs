@@ -8,8 +8,10 @@ import mongoose from 'mongoose';
 import User from '../src/modules/users/user.model.js';
 import WorkoutPlan from '../src/modules/workout-plans/workout-plan.model.js';
 import NutritionPlan from '../src/modules/nutrition-plans/nutrition-plan.model.js';
+import config from '../src/config/index.js';
 import {
     buildExportFilename,
+    buildWorkoutExportModel,
     sanitizeFilenamePart,
 } from '../src/modules/plan-exports/plan-export.helpers.js';
 import {
@@ -23,6 +25,7 @@ import {
     buildClassicWorkoutHtml,
 } from '../src/modules/plan-exports/templates/classic/index.js';
 import { escapeHtml } from '../src/modules/plan-exports/pdf/htmlEscape.js';
+import { buildPublicExerciseUrl } from '../src/modules/plan-exports/pdf/publicExerciseUrl.js';
 import { renderHtmlToPdf, closeHtmlPdfBrowser } from '../src/modules/plan-exports/pdf/htmlPdfRenderer.js';
 
 const BASE = process.env.API_URL || 'http://localhost:8000';
@@ -192,6 +195,77 @@ async function runUnitTests() {
         fail('html escape', escapeHtml('<script>'));
     }
 
+    const clientBase = String(config.clientApp.url || '').replace(/\/+$/, '');
+    const slugUrl = buildPublicExerciseUrl({
+        exerciseId: 'abc123',
+        slug: 'barbell-bench-press',
+        ownershipType: 'system',
+        status: 'active',
+    });
+    if (slugUrl === `${clientBase}/exercises/barbell-bench-press`) {
+        pass('public exercise URL prefers slug');
+    } else {
+        fail('public exercise URL prefers slug', slugUrl);
+    }
+
+    const idUrl = buildPublicExerciseUrl({
+        exerciseId: '507f1f77bcf86cd799439011',
+        slug: null,
+        ownershipType: 'system',
+        status: 'active',
+    });
+    if (idUrl === `${clientBase}/exercises/507f1f77bcf86cd799439011`) {
+        pass('public exercise URL falls back to id');
+    } else {
+        fail('public exercise URL falls back to id', idUrl);
+    }
+
+    if (
+        buildPublicExerciseUrl({
+            exerciseId: 'abc123',
+            slug: 'custom-move',
+            ownershipType: 'trainer',
+            status: 'active',
+        }) == null
+    ) {
+        pass('trainer-owned exercise has no public URL');
+    } else {
+        fail('trainer-owned exercise has no public URL', 'unexpected url');
+    }
+
+    if (
+        buildPublicExerciseUrl({
+            exerciseId: 'abc123',
+            slug: 'old-move',
+            ownershipType: 'system',
+            status: 'archived',
+        }) == null
+    ) {
+        pass('archived system exercise has no public URL');
+    } else {
+        fail('archived system exercise has no public URL', 'unexpected url');
+    }
+
+    if (
+        buildPublicExerciseUrl({
+            exerciseId: null,
+            slug: null,
+            ownershipType: 'system',
+            status: 'active',
+        }) == null &&
+        buildPublicExerciseUrl({}) == null
+    ) {
+        pass('missing/unresolved exercise has no public URL');
+    } else {
+        fail('missing/unresolved exercise has no public URL', 'unexpected url');
+    }
+
+    if (clientBase && !clientBase.includes('/api/')) {
+        pass('public exercise URL uses configured client app base');
+    } else {
+        fail('public exercise URL uses configured client app base', clientBase);
+    }
+
     const sampleNutrition = {
         type: 'nutrition',
         plan: {
@@ -269,6 +343,12 @@ async function runUnitTests() {
         );
     }
 
+    const linkedExerciseUrl = buildPublicExerciseUrl({
+        exerciseId: '507f1f77bcf86cd799439011',
+        slug: 'barbell-squat',
+        ownershipType: 'system',
+        status: 'active',
+    });
     const workoutHtml = buildClassicWorkoutHtml({
         type: 'workout',
         plan: {
@@ -293,13 +373,28 @@ async function runUnitTests() {
                     name: 'Push',
                     exercises: [
                         {
+                            exerciseId: '507f1f77bcf86cd799439011',
+                            slug: 'barbell-squat',
+                            ownershipType: 'system',
+                            status: 'active',
                             name: 'Squat',
                             order: 1,
                             restBetweenSets: 60,
+                            notes: 'Keep chest up',
                             sets: [
                                 { setNumber: 1, reps: 10 },
                                 { setNumber: 2, reps: 10 },
                             ],
+                        },
+                        {
+                            exerciseId: 'trainer-ex-1',
+                            slug: 'my-custom-press',
+                            ownershipType: 'trainer',
+                            status: 'active',
+                            name: 'Custom Press',
+                            order: 2,
+                            restBetweenSets: 45,
+                            sets: [{ setNumber: 1, reps: 8 }],
                         },
                     ],
                 },
@@ -312,7 +407,7 @@ async function runUnitTests() {
         workoutHtml.includes('class="plan-info-table"') &&
         workoutHtml.includes('>Contact</th>') &&
         workoutHtml.includes('>Weekly Workout Plan</h2>') &&
-        workoutHtml.includes('cell-meal" rowspan="1">Push</td>') &&
+        workoutHtml.includes('cell-meal" rowspan="2">Push</td>') &&
         workoutHtml.includes('Squat') &&
         workoutHtml.includes('coach@example.com') &&
         workoutHtml.includes('info-status') &&
@@ -328,6 +423,80 @@ async function runUnitTests() {
         );
     }
 
+    if (
+        linkedExerciseUrl &&
+        workoutHtml.includes(
+            `<a class="food-name exercise-link" href="${escapeHtml(linkedExerciseUrl)}">Squat</a>`
+        ) &&
+        workoutHtml.includes('<div class="exercise-note">Keep chest up</div>') &&
+        !workoutHtml.includes(`href="${escapeHtml(linkedExerciseUrl)}">Keep chest up`)
+    ) {
+        pass('eligible exercise name is linked; notes stay unlinked');
+    } else {
+        fail(
+            'eligible exercise name is linked; notes stay unlinked',
+            workoutHtml.match(/cell-food[\s\S]{0,240}/)?.[0] || 'missing cell'
+        );
+    }
+
+    if (
+        workoutHtml.includes('<span class="food-name">Custom Press</span>') &&
+        !workoutHtml.includes('my-custom-press')
+    ) {
+        pass('ineligible exercise name stays plain text');
+    } else {
+        fail(
+            'ineligible exercise name stays plain text',
+            workoutHtml.match(/Custom Press[\s\S]{0,80}/)?.[0] || 'missing'
+        );
+    }
+
+    const exportModel = buildWorkoutExportModel(
+        {
+            id: 'plan-1',
+            name: 'Export Map Plan',
+            duration: 4,
+            daysPerWeek: 2,
+            goal: 'strength',
+            level: 'beginner',
+            status: 'active',
+            workoutDays: [
+                {
+                    dayNumber: 1,
+                    name: 'A',
+                    exercises: [
+                        {
+                            exerciseId: '507f1f77bcf86cd799439011',
+                            exercise: {
+                                id: '507f1f77bcf86cd799439011',
+                                name: 'Bench Press',
+                                slug: 'barbell-bench-press',
+                                ownershipType: 'system',
+                                status: 'active',
+                            },
+                            order: 1,
+                            restBetweenSets: 90,
+                            sets: [{ setNumber: 1, reps: 5 }],
+                        },
+                    ],
+                },
+            ],
+        },
+        { fullName: 'Coach' }
+    );
+    const mapped = exportModel.content.workoutDays[0].exercises[0];
+    if (
+        mapped.exerciseId === '507f1f77bcf86cd799439011' &&
+        mapped.slug === 'barbell-bench-press' &&
+        mapped.ownershipType === 'system' &&
+        mapped.status === 'active' &&
+        mapped.name === 'Bench Press'
+    ) {
+        pass('workout export model includes public-link fields');
+    } else {
+        fail('workout export model includes public-link fields', JSON.stringify(mapped));
+    }
+
     const pdfBuf = await renderHtmlToPdf(nutritionHtml);
     if (Buffer.isBuffer(pdfBuf) && pdfBuf.slice(0, 5).toString() === '%PDF-') {
         pass('Chromium HTML→PDF produces valid PDF');
@@ -335,6 +504,22 @@ async function runUnitTests() {
         fail(
             'Chromium HTML→PDF produces valid PDF',
             pdfBuf?.slice?.(0, 20)?.toString?.()
+        );
+    }
+
+    const workoutPdfBuf = await renderHtmlToPdf(workoutHtml);
+    const workoutPdfText = workoutPdfBuf?.toString?.('latin1') || '';
+    if (
+        Buffer.isBuffer(workoutPdfBuf) &&
+        workoutPdfBuf.slice(0, 5).toString() === '%PDF-' &&
+        linkedExerciseUrl &&
+        workoutPdfText.includes(linkedExerciseUrl)
+    ) {
+        pass('workout PDF embeds clickable public exercise URL');
+    } else {
+        fail(
+            'workout PDF embeds clickable public exercise URL',
+            linkedExerciseUrl || 'missing url'
         );
     }
 }

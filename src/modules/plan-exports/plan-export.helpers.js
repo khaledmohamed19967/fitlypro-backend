@@ -79,24 +79,39 @@ export const buildWorkoutExportModel = (plan, trainer) => ({
             dayNumber: day.dayNumber,
             name: day.name,
             description: day.description ?? null,
-            exercises: (day.exercises ?? []).map((exercise) => ({
-                name:
-                    exercise.exercise?.name ||
-                    exercise.exerciseSnapshot?.name ||
-                    'Exercise',
-                order: exercise.order,
-                restBetweenSets: exercise.restBetweenSets ?? 0,
-                notes: exercise.notes ?? null,
-                tempo: exercise.tempo ?? null,
-                sets: (exercise.sets ?? []).map((set) => ({
-                    setNumber: set.setNumber,
-                    reps: set.reps,
-                    weight: set.weight,
-                    weightUnit: set.weightUnit ?? 'kg',
-                    isWarmup: Boolean(set.isWarmup),
-                    isDropset: Boolean(set.isDropset),
-                })),
-            })),
+            exercises: (day.exercises ?? []).map((exercise) => {
+                const hydrated = exercise.exercise || null;
+                return {
+                    exerciseId:
+                        exercise.exerciseId != null
+                            ? String(exercise.exerciseId)
+                            : hydrated?.id != null
+                              ? String(hydrated.id)
+                              : null,
+                    slug:
+                        typeof hydrated?.slug === 'string' && hydrated.slug.trim()
+                            ? hydrated.slug.trim()
+                            : null,
+                    ownershipType: hydrated?.ownershipType ?? null,
+                    status: hydrated?.status ?? null,
+                    name:
+                        hydrated?.name ||
+                        exercise.exerciseSnapshot?.name ||
+                        'Exercise',
+                    order: exercise.order,
+                    restBetweenSets: exercise.restBetweenSets ?? 0,
+                    notes: exercise.notes ?? null,
+                    tempo: exercise.tempo ?? null,
+                    sets: (exercise.sets ?? []).map((set) => ({
+                        setNumber: set.setNumber,
+                        reps: set.reps,
+                        weight: set.weight,
+                        weightUnit: set.weightUnit ?? 'kg',
+                        isWarmup: Boolean(set.isWarmup),
+                        isDropset: Boolean(set.isDropset),
+                    })),
+                };
+            }),
         })),
     },
 });

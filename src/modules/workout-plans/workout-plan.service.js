@@ -566,8 +566,10 @@ const loadExercisesForPlan = async (plan) => {
         exerciseMap.set(exercise._id.toString(), {
             id: exercise._id.toString(),
             name: exercise.name,
+            slug: typeof exercise.slug === 'string' ? exercise.slug : null,
             thumbnailUrl: exercise.media?.thumbnailUrl ?? null,
             status: exercise.status,
+            ownershipType: exercise.ownership?.type ?? null,
             muscles: {
                 primary: exercise.muscles?.primary ?? null,
                 secondary: Array.isArray(exercise.muscles?.secondary)

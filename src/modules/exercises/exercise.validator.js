@@ -187,3 +187,26 @@ export const validateExerciseQuery = Joi.object({
     page: Joi.number().integer().min(1).default(1),
     limit: Joi.number().integer().min(1).max(100).default(24),
 });
+
+/**
+ * Public catalog query — ownership/status are server-forced (system + active).
+ */
+export const validatePublicExerciseQuery = Joi.object({
+    search: Joi.string().trim().max(100).optional().allow(''),
+    primaryMuscle: Joi.string()
+        .valid(...MUSCLES)
+        .optional(),
+    equipment: Joi.string()
+        .valid(...EQUIPMENT)
+        .optional(),
+    difficulty: Joi.string()
+        .valid(...DIFFICULTIES)
+        .optional(),
+    category: Joi.string()
+        .valid(...CATEGORIES)
+        .optional(),
+    ownership: Joi.forbidden(),
+    status: Joi.forbidden(),
+    page: Joi.number().integer().min(1).default(1),
+    limit: Joi.number().integer().min(1).max(100).default(24),
+});

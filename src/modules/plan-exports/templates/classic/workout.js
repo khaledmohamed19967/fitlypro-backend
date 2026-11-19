@@ -11,6 +11,7 @@ import {
     formatGeneratedDate,
     formatLabel,
 } from '../../pdf/htmlEscape.js';
+import { buildPublicExerciseUrl } from '../../pdf/publicExerciseUrl.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const WORKOUT_STYLES = readFileSync(join(__dirname, 'workout.css'), 'utf8');
@@ -114,12 +115,20 @@ const buildPlanDetailsSection = (plan, trainer) =>
     ${buildPlanInfoTable(plan, trainer)}
   </section>`;
 
-const buildExerciseCell = (exercise) => {
+const buildExerciseNameHtml = (exercise) => {
     const name = escapeHtml(exercise.name || 'Exercise');
+    const publicUrl = buildPublicExerciseUrl(exercise);
+    if (!publicUrl) {
+        return `<span class="food-name">${name}</span>`;
+    }
+    return `<a class="food-name exercise-link" href="${escapeHtml(publicUrl)}">${name}</a>`;
+};
+
+const buildExerciseCell = (exercise) => {
     const note = exercise.notes
         ? `<div class="exercise-note">${escapeHtml(exercise.notes)}</div>`
         : '';
-    return `<td class="cell-food"><span class="food-name">${name}</span>${note}</td>`;
+    return `<td class="cell-food">${buildExerciseNameHtml(exercise)}${note}</td>`;
 };
 
 const buildDayRows = (day) => {
