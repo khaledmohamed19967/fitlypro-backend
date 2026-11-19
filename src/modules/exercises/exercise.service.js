@@ -54,6 +54,7 @@ const buildListFilter = (query, trainerId) => {
         equipment,
         difficulty,
         category,
+        excludeCategory,
         ownership = 'all',
         status = 'active',
     } = query;
@@ -78,6 +79,10 @@ const buildListFilter = (query, trainerId) => {
 
     if (category) {
         conditions.push({ category });
+    }
+
+    if (Array.isArray(excludeCategory) && excludeCategory.length) {
+        conditions.push({ category: { $nin: excludeCategory } });
     }
 
     if (search && String(search).trim()) {

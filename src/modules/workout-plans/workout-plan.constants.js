@@ -59,3 +59,42 @@ export const OWNERSHIP_FILTERS = Object.freeze(['system', 'trainer', 'all']);
 
 /** Default Iconify identifier for workout plans without an explicit icon (Heroicons solid). */
 export const DEFAULT_WORKOUT_PLAN_ICON = 'heroicons:bolt-20-solid';
+
+/** Warm-up section presets — aligned with frontend BuilderWarmupActivityType. */
+export const WARMUP_ACTIVITY_TYPES = Object.freeze([
+    'walking',
+    'light_treadmill',
+    'arm_circles',
+    'leg_swings',
+    'dynamic_mobility',
+    'other',
+]);
+
+/** Cardio section presets — aligned with frontend BuilderCardioActivityType. */
+export const CARDIO_ACTIVITY_TYPES = Object.freeze([
+    'treadmill',
+    'outdoor_running',
+    'walking',
+    'cycling',
+    'elliptical',
+    'rowing',
+    'hiit',
+    'other',
+]);
+
+/** Shared warm-up / cardio intensity — distinct from Exercise difficulty. */
+export const ACTIVITY_INTENSITIES = Object.freeze(['low', 'moderate', 'high']);
+
+/** Cardio protocol. */
+export const CARDIO_PROTOCOLS = Object.freeze(['continuous', 'interval']);
+
+/** Duration limits (minutes) — matches frontend builder clamp. */
+export const ACTIVITY_DURATION_MINUTES_MIN = 1;
+export const ACTIVITY_DURATION_MINUTES_MAX = 300;
+
+/** Max warm-up or cardio rows per workout day. */
+export const MAX_DAY_ACTIVITIES = 20;
+
+/** Exercise catalog category required when linking exerciseId into a section. */
+export const WARMUP_EXERCISE_CATEGORY = 'warmup';
+export const CARDIO_EXERCISE_CATEGORY = 'cardio';

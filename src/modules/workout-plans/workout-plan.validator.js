@@ -6,11 +6,19 @@ import {
     WEIGHT_UNITS,
     WORKOUT_PLAN_SORT_OPTIONS,
     OWNERSHIP_FILTERS,
+    WARMUP_ACTIVITY_TYPES,
+    CARDIO_ACTIVITY_TYPES,
+    ACTIVITY_INTENSITIES,
+    CARDIO_PROTOCOLS,
+    ACTIVITY_DURATION_MINUTES_MIN,
+    ACTIVITY_DURATION_MINUTES_MAX,
+    MAX_DAY_ACTIVITIES,
 } from './workout-plan.constants.js';
 import {
     validateUniqueDayNumbers,
     validateUniqueExerciseOrders,
     validateUniqueSetNumbers,
+    validateUniqueActivityOrders,
 } from './workout-plan.helpers.js';
 
 /**
@@ -114,6 +122,145 @@ const planExerciseArraySchema = Joi.array()
     })
     .default([]);
 
+const activitySnapshotSchema = Joi.object({
+    name: Joi.string().trim().min(1).max(120).required().messages({
+        'any.required': 'Activity snapshot name is required',
+    }),
+    thumbnailUrl: Joi.string().uri().allow(null, '').optional(),
+});
+
+const warmupActivitySchema = Joi.object({
+    _id: objectIdSchema.optional(),
+    activityType: Joi.string()
+        .valid(...WARMUP_ACTIVITY_TYPES)
+        .required()
+        .messages({
+            'any.required': 'Warm-up activity type is required',
+            'any.only': 'Invalid warm-up activity type',
+        }),
+    order: Joi.number().integer().min(1).required().messages({
+        'any.required': 'Warm-up activity order is required',
+        'number.min': 'Warm-up activity order must be at least 1',
+    }),
+    durationMinutes: Joi.number()
+        .integer()
+        .min(ACTIVITY_DURATION_MINUTES_MIN)
+        .max(ACTIVITY_DURATION_MINUTES_MAX)
+        .required()
+        .messages({
+            'any.required': 'Warm-up duration is required',
+            'number.min': `Warm-up duration must be at least ${ACTIVITY_DURATION_MINUTES_MIN} minute`,
+            'number.max': `Warm-up duration cannot exceed ${ACTIVITY_DURATION_MINUTES_MAX} minutes`,
+        }),
+    intensity: Joi.string()
+        .valid(...ACTIVITY_INTENSITIES)
+        .required()
+        .messages({
+            'any.required': 'Warm-up intensity is required',
+            'any.only': 'Intensity must be low, moderate, or high',
+        }),
+    notes: Joi.string().trim().max(500).optional().allow('', null),
+    exerciseId: objectIdSchema.optional().allow(null),
+    activitySnapshot: activitySnapshotSchema.optional().allow(null),
+});
+
+const warmupActivityArraySchema = Joi.array()
+    .items(warmupActivitySchema)
+    .max(MAX_DAY_ACTIVITIES)
+    .custom((activities, helpers) => {
+        const result = validateUniqueActivityOrders(activities, 'Warm-up');
+        if (!result.valid) {
+            return helpers.error('warmupActivities.uniqueOrders');
+        }
+        return activities;
+    })
+    .messages({
+        'warmupActivities.uniqueOrders':
+            'Warm-up activity order values must be unique within each day',
+    });
+
+const cardioActivitySchema = Joi.object({
+    _id: objectIdSchema.optional(),
+    activityType: Joi.string()
+        .valid(...CARDIO_ACTIVITY_TYPES)
+        .required()
+        .messages({
+            'any.required': 'Cardio activity type is required',
+            'any.only': 'Invalid cardio activity type',
+        }),
+    protocol: Joi.string()
+        .valid(...CARDIO_PROTOCOLS)
+        .default('continuous')
+        .messages({
+            'any.only': 'Cardio protocol must be continuous or interval',
+        }),
+    order: Joi.number().integer().min(1).required().messages({
+        'any.required': 'Cardio activity order is required',
+        'number.min': 'Cardio activity order must be at least 1',
+    }),
+    durationMinutes: Joi.number()
+        .integer()
+        .min(ACTIVITY_DURATION_MINUTES_MIN)
+        .max(ACTIVITY_DURATION_MINUTES_MAX)
+        .required()
+        .messages({
+            'any.required': 'Cardio duration is required',
+            'number.min': `Cardio duration must be at least ${ACTIVITY_DURATION_MINUTES_MIN} minute`,
+            'number.max': `Cardio duration cannot exceed ${ACTIVITY_DURATION_MINUTES_MAX} minutes`,
+        }),
+    intensity: Joi.string()
+        .valid(...ACTIVITY_INTENSITIES)
+        .required()
+        .messages({
+            'any.required': 'Cardio intensity is required',
+            'any.only': 'Intensity must be low, moderate, or high',
+        }),
+    distanceKm: Joi.number().min(0).max(1000).optional().allow(null),
+    targetHeartRate: Joi.number().integer().min(0).max(250).optional().allow(null),
+    workSeconds: Joi.number().integer().min(1).max(3600).optional().allow(null),
+    recoverySeconds: Joi.number().integer().min(1).max(3600).optional().allow(null),
+    rounds: Joi.number().integer().min(1).max(100).optional().allow(null),
+    notes: Joi.string().trim().max(500).optional().allow('', null),
+    exerciseId: objectIdSchema.optional().allow(null),
+    activitySnapshot: activitySnapshotSchema.optional().allow(null),
+}).custom((value, helpers) => {
+    const protocol = value.protocol || 'continuous';
+    const hasIntervalField =
+        value.workSeconds != null || value.recoverySeconds != null || value.rounds != null;
+
+    if (protocol === 'interval') {
+        if (value.workSeconds == null || value.recoverySeconds == null || value.rounds == null) {
+            return helpers.error('cardio.intervalFieldsRequired');
+        }
+    }
+
+    if (protocol === 'continuous' && hasIntervalField) {
+        return helpers.error('cardio.continuousForbidsIntervalFields');
+    }
+
+    return value;
+}).messages({
+    'cardio.intervalFieldsRequired':
+        'Interval cardio requires workSeconds, recoverySeconds, and rounds',
+    'cardio.continuousForbidsIntervalFields':
+        'Continuous cardio cannot include workSeconds, recoverySeconds, or rounds',
+});
+
+const cardioActivityArraySchema = Joi.array()
+    .items(cardioActivitySchema)
+    .max(MAX_DAY_ACTIVITIES)
+    .custom((activities, helpers) => {
+        const result = validateUniqueActivityOrders(activities, 'Cardio');
+        if (!result.valid) {
+            return helpers.error('cardioActivities.uniqueOrders');
+        }
+        return activities;
+    })
+    .messages({
+        'cardioActivities.uniqueOrders':
+            'Cardio activity order values must be unique within each day',
+    });
+
 const workoutDaySchema = Joi.object({
     _id: objectIdSchema.optional(),
     dayNumber: Joi.number().integer().min(1).max(7).required().messages({
@@ -126,7 +273,10 @@ const workoutDaySchema = Joi.object({
         'string.min': 'Day name is required',
     }),
     description: Joi.string().trim().max(2000).optional().allow('', null),
+    // Optional without default: omit preserves on update; create treats omit as [].
+    warmupActivities: warmupActivityArraySchema.optional(),
     exercises: planExerciseArraySchema,
+    cardioActivities: cardioActivityArraySchema.optional(),
 });
 
 const workoutDaysSchema = Joi.array()

@@ -582,6 +582,89 @@ async function runUnitTests() {
         fail('workout export model includes public-link fields', JSON.stringify(mapped));
     }
 
+    const exportDay = exportModel.content.workoutDays[0];
+    if (
+        Array.isArray(exportDay.warmupActivities) &&
+        exportDay.warmupActivities.length === 0 &&
+        Array.isArray(exportDay.cardioActivities) &&
+        exportDay.cardioActivities.length === 0
+    ) {
+        pass('workout export model includes empty warm-up/cardio arrays');
+    } else {
+        fail(
+            'workout export model includes empty warm-up/cardio arrays',
+            JSON.stringify({
+                warmup: exportDay.warmupActivities,
+                cardio: exportDay.cardioActivities,
+            })
+        );
+    }
+
+    const exportWithActivities = buildWorkoutExportModel(
+        {
+            id: 'plan-acts',
+            name: 'Activities Export',
+            duration: 4,
+            daysPerWeek: 1,
+            goal: 'general_fitness',
+            level: 'beginner',
+            status: 'active',
+            totalExercises: 1,
+            totalDays: 1,
+            workoutDays: [
+                {
+                    dayNumber: 1,
+                    name: 'A',
+                    warmupActivities: [
+                        {
+                            activityType: 'walking',
+                            order: 1,
+                            durationMinutes: 5,
+                            intensity: 'low',
+                            notes: 'Easy',
+                            activitySnapshot: { name: 'Walking', thumbnailUrl: null },
+                        },
+                    ],
+                    exercises: [
+                        {
+                            exerciseId: '507f1f77bcf86cd799439011',
+                            exerciseSnapshot: { name: 'Bench Press' },
+                            order: 1,
+                            restBetweenSets: 90,
+                            sets: [{ setNumber: 1, reps: 5 }],
+                        },
+                    ],
+                    cardioActivities: [
+                        {
+                            activityType: 'treadmill',
+                            protocol: 'continuous',
+                            order: 1,
+                            durationMinutes: 20,
+                            intensity: 'moderate',
+                            activitySnapshot: { name: 'Treadmill', thumbnailUrl: null },
+                        },
+                    ],
+                },
+            ],
+        },
+        { fullName: 'Coach' }
+    );
+    const actDay = exportWithActivities.content.workoutDays[0];
+    if (
+        actDay.warmupActivities?.[0]?.name === 'Walking' &&
+        actDay.warmupActivities[0].durationMinutes === 5 &&
+        actDay.cardioActivities?.[0]?.name === 'Treadmill' &&
+        actDay.exercises?.[0]?.name === 'Bench Press' &&
+        exportWithActivities.plan.totalExercises === 1
+    ) {
+        pass('workout export model maps warm-up/cardio separately from exercises');
+    } else {
+        fail(
+            'workout export model maps warm-up/cardio separately from exercises',
+            JSON.stringify(actDay)
+        );
+    }
+
     const pdfBuf = await renderHtmlToPdf(nutritionHtml);
     if (Buffer.isBuffer(pdfBuf) && pdfBuf.slice(0, 5).toString() === '%PDF-') {
         pass('Chromium HTML→PDF produces valid PDF');

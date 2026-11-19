@@ -164,6 +164,26 @@ export const validateDuplicateExercise = Joi.object({
 /**
  * List/search query schema (Phase 2 will wire this; no middleware in Phase 1)
  */
+/**
+ * Comma-separated category list → validated string[].
+ * Used for excludeCategory (e.g. warmup,cardio) on picker "exercise" context.
+ */
+const parseCategoryList = (value, helpers) => {
+    const parts = String(value)
+        .split(',')
+        .map((part) => part.trim())
+        .filter(Boolean);
+    if (!parts.length) {
+        return helpers.error('any.invalid');
+    }
+    for (const part of parts) {
+        if (!CATEGORIES.includes(part)) {
+            return helpers.error('any.only');
+        }
+    }
+    return parts;
+};
+
 export const validateExerciseQuery = Joi.object({
     search: Joi.string().trim().max(100).optional().allow(''),
     primaryMuscle: Joi.string()
@@ -178,6 +198,8 @@ export const validateExerciseQuery = Joi.object({
     category: Joi.string()
         .valid(...CATEGORIES)
         .optional(),
+    /** Comma-separated categories to exclude (e.g. "warmup,cardio"). */
+    excludeCategory: Joi.string().custom(parseCategoryList).optional(),
     ownership: Joi.string()
         .valid(...OWNERSHIP_FILTERS)
         .default('all'),

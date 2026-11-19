@@ -261,6 +261,20 @@ export const normalizeExerciseOrder = (exercises = []) => {
 };
 
 /**
+ * Sort warm-up / cardio activities by order ascending.
+ *
+ * @param {object[]} activities
+ * @returns {object[]}
+ */
+export const normalizeActivityOrder = (activities = []) => {
+    if (!Array.isArray(activities)) {
+        return [];
+    }
+
+    return [...activities].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+};
+
+/**
  * Sort days by dayNumber ascending and normalize nested exercises/sets.
  *
  * @param {object[]} workoutDays
@@ -273,10 +287,22 @@ export const normalizeWorkoutDays = (workoutDays = []) => {
 
     return [...workoutDays]
         .sort((a, b) => (a.dayNumber ?? 0) - (b.dayNumber ?? 0))
-        .map((day) => ({
-            ...day,
-            exercises: normalizeExerciseOrder(day.exercises),
-        }));
+        .map((day) => {
+            const next = {
+                ...day,
+                exercises: normalizeExerciseOrder(day.exercises),
+            };
+
+            // Preserve undefined vs [] so update can omit→keep / []→clear sections.
+            if (Array.isArray(day.warmupActivities)) {
+                next.warmupActivities = normalizeActivityOrder(day.warmupActivities);
+            }
+            if (Array.isArray(day.cardioActivities)) {
+                next.cardioActivities = normalizeActivityOrder(day.cardioActivities);
+            }
+
+            return next;
+        });
 };
 
 /**
@@ -320,6 +346,35 @@ export const normalizeWorkoutPlanInput = (input = {}) => {
                 if (typeof nextDay.description === 'string') {
                     const trimmed = nextDay.description.trim();
                     nextDay.description = trimmed || null;
+                }
+
+                for (const activityField of ['warmupActivities', 'cardioActivities']) {
+                    if (!Array.isArray(nextDay[activityField])) {
+                        continue;
+                    }
+
+                    nextDay[activityField] = nextDay[activityField].map((activity) => {
+                        const nextActivity = { ...activity };
+
+                        if (typeof nextActivity.notes === 'string') {
+                            const trimmed = nextActivity.notes.trim();
+                            nextActivity.notes = trimmed || null;
+                        }
+
+                        if (nextActivity.activitySnapshot) {
+                            const snapshot = { ...nextActivity.activitySnapshot };
+                            if (typeof snapshot.name === 'string') {
+                                snapshot.name = snapshot.name.trim();
+                            }
+                            if (typeof snapshot.thumbnailUrl === 'string') {
+                                const trimmed = snapshot.thumbnailUrl.trim();
+                                snapshot.thumbnailUrl = trimmed || null;
+                            }
+                            nextActivity.activitySnapshot = snapshot;
+                        }
+
+                        return nextActivity;
+                    });
                 }
 
                 if (Array.isArray(nextDay.exercises)) {
@@ -419,6 +474,55 @@ export const validateUniqueExerciseOrders = (exercises = []) => {
 };
 
 /**
+ * @param {object[]} activities
+ * @param {string} [sectionLabel]
+ * @returns {{ valid: boolean, message?: string }}
+ */
+export const validateUniqueActivityOrders = (activities = [], sectionLabel = 'Activity') => {
+    if (!Array.isArray(activities)) {
+        return { valid: true };
+    }
+
+    const seen = new Set();
+
+    for (const activity of activities) {
+        if (activity?.order == null) {
+            continue;
+        }
+
+        if (seen.has(activity.order)) {
+            return {
+                valid: false,
+                message: `${sectionLabel} activity order values must be unique within each day`,
+            };
+        }
+
+        seen.add(activity.order);
+    }
+
+    return { valid: true };
+};
+
+/**
+ * Humanize preset activityType for snapshot fallback (e.g. dynamic_mobility → Dynamic Mobility).
+ *
+ * @param {string} activityType
+ * @returns {string}
+ */
+export const formatActivityTypeLabel = (activityType) => {
+    const parts = String(activityType ?? '')
+        .split('_')
+        .map((part) => part.trim())
+        .filter(Boolean);
+
+    if (parts.length === 0) {
+        return 'Activity';
+    }
+
+    return parts.map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
+};
+
+/**
  * @param {object[]} sets
  * @returns {{ valid: boolean, message?: string }}
  */
@@ -506,6 +610,62 @@ const mapPlanExerciseToPublic = (exercise) => ({
 });
 
 /**
+ * Map embedded warm-up / cardio activity to public API shape.
+ *
+ * @param {object} activity
+ * @returns {object}
+ */
+const mapPlanActivityToPublic = (activity) => ({
+    id: toIdString(activity._id ?? activity.id),
+    activityType: activity.activityType,
+    protocol: activity.protocol ?? undefined,
+    order: activity.order,
+    durationMinutes: activity.durationMinutes,
+    intensity: activity.intensity,
+    distanceKm: activity.distanceKm ?? null,
+    targetHeartRate: activity.targetHeartRate ?? null,
+    workSeconds: activity.workSeconds ?? null,
+    recoverySeconds: activity.recoverySeconds ?? null,
+    rounds: activity.rounds ?? null,
+    notes: activity.notes ?? null,
+    exerciseId: toIdString(activity.exerciseId),
+    activitySnapshot: activity.activitySnapshot
+        ? {
+              name: activity.activitySnapshot.name,
+              thumbnailUrl: activity.activitySnapshot.thumbnailUrl ?? null,
+          }
+        : null,
+});
+
+/**
+ * Map warm-up activity (no cardio-only fields).
+ *
+ * @param {object} activity
+ * @returns {object}
+ */
+const mapWarmupActivityToPublic = (activity) => {
+    const mapped = mapPlanActivityToPublic(activity);
+    delete mapped.protocol;
+    delete mapped.distanceKm;
+    delete mapped.targetHeartRate;
+    delete mapped.workSeconds;
+    delete mapped.recoverySeconds;
+    delete mapped.rounds;
+    return mapped;
+};
+
+/**
+ * Map cardio activity including protocol fields.
+ *
+ * @param {object} activity
+ * @returns {object}
+ */
+const mapCardioActivityToPublic = (activity) => ({
+    ...mapPlanActivityToPublic(activity),
+    protocol: activity.protocol || 'continuous',
+});
+
+/**
  * Map embedded workout day to public API shape.
  *
  * @param {object} day
@@ -516,8 +676,14 @@ const mapWorkoutDayToPublic = (day) => ({
     dayNumber: day.dayNumber,
     name: day.name,
     description: day.description ?? null,
+    warmupActivities: Array.isArray(day.warmupActivities)
+        ? normalizeActivityOrder(day.warmupActivities).map(mapWarmupActivityToPublic)
+        : [],
     exercises: Array.isArray(day.exercises)
         ? normalizeExerciseOrder(day.exercises).map(mapPlanExerciseToPublic)
+        : [],
+    cardioActivities: Array.isArray(day.cardioActivities)
+        ? normalizeActivityOrder(day.cardioActivities).map(mapCardioActivityToPublic)
         : [],
 });
 
@@ -643,6 +809,28 @@ const buildHydratedExercise = (exerciseId, exerciseSnapshot, exerciseMap) => {
  * @param {Map<string, object>} [exerciseMap]
  * @returns {object|null}
  */
+/**
+ * Hydrate optional activity exerciseId; omit `exercise` when no catalog reference.
+ *
+ * @param {object} activity
+ * @param {Map<string, object>} exerciseMap
+ * @returns {object}
+ */
+const hydratePlanActivity = (activity, exerciseMap) => {
+    if (!activity.exerciseId) {
+        return activity;
+    }
+
+    return {
+        ...activity,
+        exercise: buildHydratedExercise(
+            activity.exerciseId,
+            activity.activitySnapshot,
+            exerciseMap
+        ),
+    };
+};
+
 export const mapWorkoutPlanToDetail = (plan, exerciseMap = new Map()) => {
     const base = mapWorkoutPlanToPublic(plan);
     if (!base) {
@@ -653,6 +841,9 @@ export const mapWorkoutPlanToDetail = (plan, exerciseMap = new Map()) => {
         ...base,
         workoutDays: base.workoutDays.map((day) => ({
             ...day,
+            warmupActivities: day.warmupActivities.map((activity) =>
+                hydratePlanActivity(activity, exerciseMap)
+            ),
             exercises: day.exercises.map((exercise) => ({
                 ...exercise,
                 exercise: buildHydratedExercise(
@@ -661,6 +852,9 @@ export const mapWorkoutPlanToDetail = (plan, exerciseMap = new Map()) => {
                     exerciseMap
                 ),
             })),
+            cardioActivities: day.cardioActivities.map((activity) =>
+                hydratePlanActivity(activity, exerciseMap)
+            ),
         })),
     };
 };
@@ -779,13 +973,82 @@ const mapPlayerPlanExercise = (exercise) => ({
  * @param {object} day
  * @returns {object}
  */
+/**
+ * Player-safe warm-up / cardio activity (includes hydrated exercise when present).
+ *
+ * @param {object} activity
+ * @returns {object}
+ */
+const mapPlayerPlanActivity = (activity) => ({
+    id: activity.id ?? null,
+    activityType: activity.activityType,
+    protocol: activity.protocol,
+    order: activity.order,
+    durationMinutes: activity.durationMinutes,
+    intensity: activity.intensity,
+    distanceKm: activity.distanceKm ?? null,
+    targetHeartRate: activity.targetHeartRate ?? null,
+    workSeconds: activity.workSeconds ?? null,
+    recoverySeconds: activity.recoverySeconds ?? null,
+    rounds: activity.rounds ?? null,
+    notes: activity.notes ?? null,
+    exerciseId: activity.exerciseId ?? null,
+    activitySnapshot: activity.activitySnapshot
+        ? {
+              name: activity.activitySnapshot.name,
+              thumbnailUrl: activity.activitySnapshot.thumbnailUrl ?? null,
+          }
+        : null,
+    exercise: activity.exercise
+        ? {
+              id: activity.exercise.id ?? null,
+              name: activity.exercise.name,
+              thumbnailUrl: activity.exercise.thumbnailUrl ?? null,
+              status: activity.exercise.status ?? null,
+              muscles:
+                  activity.exercise.muscles &&
+                  typeof activity.exercise.muscles === 'object' &&
+                  activity.exercise.muscles.primary
+                      ? {
+                            primary: activity.exercise.muscles.primary,
+                            secondary: Array.isArray(activity.exercise.muscles.secondary)
+                                ? activity.exercise.muscles.secondary
+                                : [],
+                        }
+                      : null,
+          }
+        : null,
+});
+
+const mapPlayerWarmupActivity = (activity) => {
+    const mapped = mapPlayerPlanActivity(activity);
+    delete mapped.protocol;
+    delete mapped.distanceKm;
+    delete mapped.targetHeartRate;
+    delete mapped.workSeconds;
+    delete mapped.recoverySeconds;
+    delete mapped.rounds;
+    return mapped;
+};
+
+const mapPlayerCardioActivity = (activity) => ({
+    ...mapPlayerPlanActivity(activity),
+    protocol: activity.protocol || 'continuous',
+});
+
 const mapPlayerWorkoutDay = (day) => ({
     id: day.id ?? null,
     dayNumber: day.dayNumber,
     name: day.name,
     description: day.description ?? null,
+    warmupActivities: Array.isArray(day.warmupActivities)
+        ? day.warmupActivities.map(mapPlayerWarmupActivity)
+        : [],
     exercises: Array.isArray(day.exercises)
         ? day.exercises.map(mapPlayerPlanExercise)
+        : [],
+    cardioActivities: Array.isArray(day.cardioActivities)
+        ? day.cardioActivities.map(mapPlayerCardioActivity)
         : [],
 });
 

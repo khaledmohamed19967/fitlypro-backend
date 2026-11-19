@@ -79,6 +79,9 @@ export const buildWorkoutExportModel = (plan, trainer) => ({
             dayNumber: day.dayNumber,
             name: day.name,
             description: day.description ?? null,
+            warmupActivities: (day.warmupActivities ?? []).map((activity) =>
+                mapActivityForExport(activity)
+            ),
             exercises: (day.exercises ?? []).map((exercise) => {
                 const hydrated = exercise.exercise || null;
                 const muscles = hydrated?.muscles;
@@ -133,9 +136,49 @@ export const buildWorkoutExportModel = (plan, trainer) => ({
                     })),
                 };
             }),
+            cardioActivities: (day.cardioActivities ?? []).map((activity) =>
+                mapActivityForExport(activity)
+            ),
         })),
     },
 });
+
+/**
+ * Warm-up / cardio export DTO (separate from strength exercises).
+ *
+ * @param {object} activity
+ * @returns {object}
+ */
+function mapActivityForExport(activity) {
+    const hydrated = activity.exercise || null;
+    const thumbnailUrl =
+        hydrated?.thumbnailUrl ||
+        hydrated?.media?.thumbnailUrl ||
+        activity.activitySnapshot?.thumbnailUrl ||
+        null;
+
+    return {
+        activityType: activity.activityType,
+        protocol: activity.protocol ?? undefined,
+        name:
+            hydrated?.name ||
+            activity.activitySnapshot?.name ||
+            'Activity',
+        order: activity.order,
+        durationMinutes: activity.durationMinutes,
+        intensity: activity.intensity,
+        notes: activity.notes ?? null,
+        distanceKm: activity.distanceKm ?? null,
+        targetHeartRate: activity.targetHeartRate ?? null,
+        workSeconds: activity.workSeconds ?? null,
+        recoverySeconds: activity.recoverySeconds ?? null,
+        rounds: activity.rounds ?? null,
+        thumbnailUrl:
+            typeof thumbnailUrl === 'string' && thumbnailUrl.trim()
+                ? thumbnailUrl.trim()
+                : null,
+    };
+}
 
 /**
  * Normalize nutrition plan detail into export DTO.

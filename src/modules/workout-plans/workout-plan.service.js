@@ -22,8 +22,14 @@ import {
     canCloneWorkoutPlan,
     generateCloneName,
     isSystemWorkoutPlan,
+    formatActivityTypeLabel,
 } from './workout-plan.helpers.js';
-import { DEFAULT_WORKOUT_PLAN_ICON, CANCELLABLE_ASSIGNMENT_STATUSES } from './workout-plan.constants.js';
+import {
+    DEFAULT_WORKOUT_PLAN_ICON,
+    CANCELLABLE_ASSIGNMENT_STATUSES,
+    WARMUP_EXERCISE_CATEGORY,
+    CARDIO_EXERCISE_CATEGORY,
+} from './workout-plan.constants.js';
 
 /**
  * Workout Plan Service — CRUD, assignments, templates/clone (Phase 2 + 4A)
@@ -350,12 +356,254 @@ const validateAndLoadExercise = async (exerciseId, trainerId, fieldPath) => {
 };
 
 /**
+ * Resolve nested activity _id: create accepts client ids; update only allows ids on this plan.
+ *
+ * @param {string|undefined|null} submittedId
+ * @param {Set<string>|null} allowedIds — null = create mode
+ * @param {string} fieldPath
+ */
+const resolveActivityObjectId = (submittedId, allowedIds, fieldPath) => {
+    if (!submittedId || !isValidObjectId(submittedId)) {
+        return new mongoose.Types.ObjectId();
+    }
+
+    const idStr = String(submittedId);
+
+    if (allowedIds === null) {
+        return new mongoose.Types.ObjectId(idStr);
+    }
+
+    if (allowedIds.has(idStr)) {
+        return new mongoose.Types.ObjectId(idStr);
+    }
+
+    throw new ApiError(400, 'Invalid activity ID', [
+        {
+            field: fieldPath,
+            message: 'Activity ID must belong to the current workout plan',
+        },
+    ]);
+};
+
+/**
+ * @param {object|null|undefined} day
+ * @returns {object}
+ */
+const toPlainDay = (day) =>
+    typeof day?.toObject === 'function' ? day.toObject({ virtuals: true }) : day ?? {};
+
+/**
+ * Copy existing activity docs without regenerating ids (omit-section preserve).
+ *
+ * @param {object[]|undefined|null} activities
+ * @returns {object[]}
+ */
+const preserveExistingActivities = (activities) => {
+    if (!Array.isArray(activities)) {
+        return [];
+    }
+
+    return activities.map((activity) => {
+        const plain =
+            typeof activity?.toObject === 'function'
+                ? activity.toObject({ virtuals: true })
+                : { ...activity };
+
+        return {
+            ...plain,
+            _id: plain._id,
+            exerciseId: plain.exerciseId ?? null,
+            activitySnapshot: plain.activitySnapshot
+                ? {
+                      name: plain.activitySnapshot.name,
+                      thumbnailUrl: plain.activitySnapshot.thumbnailUrl ?? null,
+                  }
+                : null,
+        };
+    });
+};
+
+/**
+ * Deep-clone a warm-up or cardio activity with a fresh nested ObjectId.
+ *
+ * @param {object} activity
+ * @param {'warmup'|'cardio'} section
+ * @returns {object}
+ */
+const deepCloneActivity = (activity, section) => {
+    const base = {
+        _id: new mongoose.Types.ObjectId(),
+        activityType: activity.activityType,
+        order: activity.order,
+        durationMinutes: activity.durationMinutes,
+        intensity: activity.intensity,
+        notes: activity.notes ?? null,
+        exerciseId: activity.exerciseId ?? null,
+        activitySnapshot: activity.activitySnapshot
+            ? {
+                  name: activity.activitySnapshot.name,
+                  thumbnailUrl: activity.activitySnapshot.thumbnailUrl ?? null,
+              }
+            : null,
+    };
+
+    if (section !== 'cardio') {
+        return base;
+    }
+
+    return {
+        ...base,
+        protocol: activity.protocol || 'continuous',
+        distanceKm: activity.distanceKm ?? null,
+        targetHeartRate: activity.targetHeartRate ?? null,
+        workSeconds: activity.workSeconds ?? null,
+        recoverySeconds: activity.recoverySeconds ?? null,
+        rounds: activity.rounds ?? null,
+    };
+};
+
+/**
+ * @param {object[]} existingDays
+ * @param {object} day
+ * @returns {object|null}
+ */
+const findExistingDayForUpdate = (existingDays, day) => {
+    if (!Array.isArray(existingDays) || existingDays.length === 0) {
+        return null;
+    }
+
+    if (day._id && isValidObjectId(day._id)) {
+        const byId = existingDays.find((candidate) => String(candidate._id) === String(day._id));
+        if (byId) {
+            return toPlainDay(byId);
+        }
+    }
+
+    return null;
+};
+
+/**
+ * @param {object} activity
+ * @param {import('mongoose').Document} catalogExercise
+ * @returns {{ name: string, thumbnailUrl: string|null }}
+ */
+const buildActivitySnapshot = (activity, catalogExercise = null) => {
+    if (catalogExercise) {
+        return {
+            name: catalogExercise.name,
+            thumbnailUrl: catalogExercise.media?.thumbnailUrl ?? null,
+        };
+    }
+
+    const snapshotName =
+        (typeof activity.activitySnapshot?.name === 'string' &&
+            activity.activitySnapshot.name.trim()) ||
+        formatActivityTypeLabel(activity.activityType);
+
+    const thumbnail =
+        typeof activity.activitySnapshot?.thumbnailUrl === 'string' &&
+        activity.activitySnapshot.thumbnailUrl.trim()
+            ? activity.activitySnapshot.thumbnailUrl.trim()
+            : null;
+
+    return {
+        name: snapshotName,
+        thumbnailUrl: thumbnail,
+    };
+};
+
+/**
+ * Process warm-up or cardio activity arrays for a day.
+ *
+ * @param {object[]} activities
+ * @param {string} trainerId
+ * @param {string} dayFieldPath
+ * @param {'warmup'|'cardio'} section
+ * @param {Set<string>|null} allowedIds
+ */
+const processDayActivities = async (
+    activities,
+    trainerId,
+    dayFieldPath,
+    section,
+    allowedIds
+) => {
+    const sorted = [...(activities ?? [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    const requiredCategory =
+        section === 'warmup' ? WARMUP_EXERCISE_CATEGORY : CARDIO_EXERCISE_CATEGORY;
+    const processed = [];
+
+    for (let index = 0; index < sorted.length; index += 1) {
+        const activity = sorted[index];
+        const fieldPath = `${dayFieldPath}.${index}`;
+        const activityDocId = resolveActivityObjectId(
+            activity._id,
+            allowedIds,
+            `${fieldPath}._id`
+        );
+
+        let catalogExercise = null;
+        let exerciseObjectId = null;
+
+        if (activity.exerciseId) {
+            catalogExercise = await validateAndLoadExercise(
+                activity.exerciseId,
+                trainerId,
+                `${fieldPath}.exerciseId`
+            );
+
+            if (catalogExercise.category !== requiredCategory) {
+                throw new ApiError(400, 'Exercise category is not compatible', [
+                    {
+                        field: `${fieldPath}.exerciseId`,
+                        message: `Exercise category must be ${requiredCategory} for ${section} activities`,
+                    },
+                ]);
+            }
+
+            exerciseObjectId = catalogExercise._id;
+        }
+
+        const base = {
+            _id: activityDocId,
+            activityType: activity.activityType,
+            order: index + 1,
+            durationMinutes: activity.durationMinutes,
+            intensity: activity.intensity,
+            notes: emptyToNull(activity.notes),
+            exerciseId: exerciseObjectId,
+            activitySnapshot: buildActivitySnapshot(activity, catalogExercise),
+        };
+
+        if (section === 'cardio') {
+            const protocol = activity.protocol || 'continuous';
+            processed.push({
+                ...base,
+                protocol,
+                distanceKm: activity.distanceKm ?? null,
+                targetHeartRate: activity.targetHeartRate ?? null,
+                workSeconds: protocol === 'interval' ? activity.workSeconds : null,
+                recoverySeconds: protocol === 'interval' ? activity.recoverySeconds : null,
+                rounds: protocol === 'interval' ? activity.rounds : null,
+            });
+        } else {
+            processed.push(base);
+        }
+    }
+
+    return processed;
+};
+
+/**
  * Validate, snapshot, renumber, and resolve subdocument ids for nested plan tree.
  *
  * @param {object[]} workoutDays
  * @param {string} trainerId
+ * @param {{ existingDays?: object[]|null }} [options]
  */
-const processWorkoutDays = async (workoutDays, trainerId) => {
+const processWorkoutDays = async (workoutDays, trainerId, options = {}) => {
+    const existingDays = options.existingDays ?? null;
+    const isUpdate = Array.isArray(existingDays);
     const normalized = normalizeWorkoutPlanInput({ workoutDays }).workoutDays ?? [];
     const sortedDays = [...normalized].sort((a, b) => (a.dayNumber ?? 0) - (b.dayNumber ?? 0));
 
@@ -364,6 +612,9 @@ const processWorkoutDays = async (workoutDays, trainerId) => {
     for (let dayIndex = 0; dayIndex < sortedDays.length; dayIndex += 1) {
         const day = sortedDays[dayIndex];
         const dayId = resolveObjectId(day._id);
+        const existingDay = isUpdate ? findExistingDayForUpdate(existingDays, day) : null;
+        const dayFieldPath = `workoutDays.${dayIndex}`;
+
         const sortedExercises = [...(day.exercises ?? [])].sort(
             (a, b) => (a.order ?? 0) - (b.order ?? 0)
         );
@@ -379,7 +630,7 @@ const processWorkoutDays = async (workoutDays, trainerId) => {
                 idMap.set(String(exercise._id), exerciseDocId);
             }
 
-            const fieldPath = `workoutDays.${dayIndex}.exercises.${exerciseIndex}.exerciseId`;
+            const fieldPath = `${dayFieldPath}.exercises.${exerciseIndex}.exerciseId`;
             const catalogExercise = await validateAndLoadExercise(
                 exercise.exerciseId,
                 trainerId,
@@ -460,12 +711,59 @@ const processWorkoutDays = async (workoutDays, trainerId) => {
             exercise.supersetWith = new mongoose.Types.ObjectId(targetId);
         }
 
+        let warmupActivities;
+        if (day.warmupActivities === undefined) {
+            // Omitted section: preserve existing rows as-is (create → []).
+            warmupActivities = isUpdate
+                ? preserveExistingActivities(existingDay?.warmupActivities)
+                : [];
+        } else {
+            const allowedWarmupIds = isUpdate
+                ? new Set(
+                      (existingDay?.warmupActivities ?? []).map((activity) =>
+                          String(activity._id)
+                      )
+                  )
+                : null;
+            warmupActivities = await processDayActivities(
+                day.warmupActivities,
+                trainerId,
+                `${dayFieldPath}.warmupActivities`,
+                'warmup',
+                allowedWarmupIds
+            );
+        }
+
+        let cardioActivities;
+        if (day.cardioActivities === undefined) {
+            cardioActivities = isUpdate
+                ? preserveExistingActivities(existingDay?.cardioActivities)
+                : [];
+        } else {
+            const allowedCardioIds = isUpdate
+                ? new Set(
+                      (existingDay?.cardioActivities ?? []).map((activity) =>
+                          String(activity._id)
+                      )
+                  )
+                : null;
+            cardioActivities = await processDayActivities(
+                day.cardioActivities,
+                trainerId,
+                `${dayFieldPath}.cardioActivities`,
+                'cardio',
+                allowedCardioIds
+            );
+        }
+
         processedDays.push({
             _id: dayId,
             dayNumber: dayIndex + 1,
             name: day.name,
             description: emptyToNull(day.description),
+            warmupActivities,
             exercises: processedExercises,
+            cardioActivities,
         });
     }
 
@@ -535,7 +833,13 @@ const deepCloneWorkoutDays = (workoutDays = []) => {
             dayNumber: day.dayNumber,
             name: day.name,
             description: day.description ?? null,
+            warmupActivities: (day.warmupActivities ?? []).map((activity) =>
+                deepCloneActivity(activity, 'warmup')
+            ),
             exercises: clonedExercises,
+            cardioActivities: (day.cardioActivities ?? []).map((activity) =>
+                deepCloneActivity(activity, 'cardio')
+            ),
         });
     }
 
@@ -545,7 +849,14 @@ const deepCloneWorkoutDays = (workoutDays = []) => {
 /**
  * @param {import('mongoose').Document} plan
  */
-const loadExercisesForPlan = async (plan) => {
+/**
+ * Bulk-load catalog exercises referenced by strength + warm-up/cardio rows.
+ * Uses visibility filter so inaccessible/private exercises fall back to snapshots.
+ *
+ * @param {import('mongoose').Document|object} plan
+ * @param {string} trainerId
+ */
+const loadExercisesForPlan = async (plan, trainerId) => {
     const exerciseIds = new Set();
 
     for (const day of plan.workoutDays ?? []) {
@@ -554,13 +865,31 @@ const loadExercisesForPlan = async (plan) => {
                 exerciseIds.add(String(exercise.exerciseId));
             }
         }
+        for (const activity of day.warmupActivities ?? []) {
+            if (activity.exerciseId) {
+                exerciseIds.add(String(activity.exerciseId));
+            }
+        }
+        for (const activity of day.cardioActivities ?? []) {
+            if (activity.exerciseId) {
+                exerciseIds.add(String(activity.exerciseId));
+            }
+        }
     }
 
     if (exerciseIds.size === 0) {
         return new Map();
     }
 
-    const exercises = await Exercise.find({ _id: { $in: [...exerciseIds] } });
+    const filter = {
+        $and: [{ _id: { $in: [...exerciseIds] } }],
+    };
+
+    if (trainerId && isValidObjectId(String(trainerId))) {
+        filter.$and.push(buildExerciseVisibilityFilter(trainerId));
+    }
+
+    const exercises = await Exercise.find(filter);
     const exerciseMap = new Map();
 
     for (const exercise of exercises) {
@@ -589,7 +918,7 @@ const loadExercisesForPlan = async (plan) => {
  */
 const getWorkoutPlanById = async (planId, trainerId) => {
     const plan = await loadReadablePlan(planId, trainerId);
-    const exerciseMap = await loadExercisesForPlan(plan);
+    const exerciseMap = await loadExercisesForPlan(plan, trainerId);
     return mapWorkoutPlanToDetail(plan, exerciseMap);
 };
 
@@ -625,7 +954,7 @@ const createWorkoutPlan = async (body, trainerId) => {
 
     await plan.save();
 
-    const exerciseMap = await loadExercisesForPlan(plan);
+    const exerciseMap = await loadExercisesForPlan(plan, trainerId);
     return mapWorkoutPlanToDetail(plan, exerciseMap);
 };
 
@@ -654,13 +983,15 @@ const updateWorkoutPlan = async (planId, body, trainerId) => {
     if (normalized.notes !== undefined) plan.notes = emptyToNull(normalized.notes);
 
     if (normalized.workoutDays !== undefined) {
-        plan.workoutDays = await processWorkoutDays(normalized.workoutDays, trainerId);
+        plan.workoutDays = await processWorkoutDays(normalized.workoutDays, trainerId, {
+            existingDays: plan.workoutDays ?? [],
+        });
         plan.markModified('workoutDays');
     }
 
     await plan.save();
 
-    const exerciseMap = await loadExercisesForPlan(plan);
+    const exerciseMap = await loadExercisesForPlan(plan, trainerId);
     return mapWorkoutPlanToDetail(plan, exerciseMap);
 };
 
@@ -672,7 +1003,7 @@ const archiveWorkoutPlan = async (planId, trainerId) => {
     const plan = await loadModifiablePlan(planId, trainerId);
     plan.status = 'archived';
     await plan.save();
-    return mapWorkoutPlanToDetail(plan, await loadExercisesForPlan(plan));
+    return mapWorkoutPlanToDetail(plan, await loadExercisesForPlan(plan, trainerId));
 };
 
 /**
@@ -737,7 +1068,7 @@ const cloneWorkoutPlan = async (sourcePlanId, trainerId, payload = {}) => {
 
     await plan.save();
 
-    const exerciseMap = await loadExercisesForPlan(plan);
+    const exerciseMap = await loadExercisesForPlan(plan, trainerId);
     return mapWorkoutPlanToDetail(plan, exerciseMap);
 };
 
@@ -1012,7 +1343,9 @@ const getMyActiveAssignment = async (clientId) => {
         throw new ApiError(404, 'Assigned workout plan not found');
     }
 
-    const exerciseMap = await loadExercisesForPlan(plan);
+    const viewerId =
+        assignment.trainerId != null ? String(assignment.trainerId) : clientId;
+    const exerciseMap = await loadExercisesForPlan(plan, viewerId);
     const planDetail = mapWorkoutPlanToDetail(plan, exerciseMap);
 
     return mapPlayerWorkoutAssignment(assignment, planDetail);

@@ -6,6 +6,13 @@ import {
     WEIGHT_UNITS,
     OWNERSHIP_TYPES,
     DEFAULT_WORKOUT_PLAN_ICON,
+    WARMUP_ACTIVITY_TYPES,
+    CARDIO_ACTIVITY_TYPES,
+    ACTIVITY_INTENSITIES,
+    CARDIO_PROTOCOLS,
+    ACTIVITY_DURATION_MINUTES_MIN,
+    ACTIVITY_DURATION_MINUTES_MAX,
+    MAX_DAY_ACTIVITIES,
 } from './workout-plan.constants.js';
 
 /**
@@ -147,6 +154,175 @@ export const planExerciseSchema = new mongoose.Schema(
 );
 
 /**
+ * Display snapshot for warm-up / cardio activity rows.
+ * Same lightweight shape as exerciseSnapshot for PDF/UI fallback.
+ */
+export const activitySnapshotSchema = new mongoose.Schema(
+    {
+        name: {
+            type: String,
+            required: [true, 'Activity snapshot name is required'],
+            trim: true,
+            maxlength: [120, 'Activity snapshot name cannot exceed 120 characters'],
+        },
+        thumbnailUrl: {
+            type: String,
+            trim: true,
+            default: null,
+        },
+    },
+    { _id: false }
+);
+
+/**
+ * Warm-up activity on a workout day (duration/intensity; optional Exercise link).
+ */
+export const warmupActivitySchema = new mongoose.Schema(
+    {
+        activityType: {
+            type: String,
+            required: [true, 'Warm-up activity type is required'],
+            enum: {
+                values: WARMUP_ACTIVITY_TYPES,
+                message: 'Invalid warm-up activity type',
+            },
+        },
+        order: {
+            type: Number,
+            required: [true, 'Warm-up activity order is required'],
+            min: [1, 'Warm-up activity order must be at least 1'],
+        },
+        durationMinutes: {
+            type: Number,
+            required: [true, 'Warm-up duration is required'],
+            min: [
+                ACTIVITY_DURATION_MINUTES_MIN,
+                `Warm-up duration must be at least ${ACTIVITY_DURATION_MINUTES_MIN} minute`,
+            ],
+            max: [
+                ACTIVITY_DURATION_MINUTES_MAX,
+                `Warm-up duration cannot exceed ${ACTIVITY_DURATION_MINUTES_MAX} minutes`,
+            ],
+        },
+        intensity: {
+            type: String,
+            required: [true, 'Warm-up intensity is required'],
+            enum: {
+                values: ACTIVITY_INTENSITIES,
+                message: 'Intensity must be low, moderate, or high',
+            },
+        },
+        notes: {
+            type: String,
+            trim: true,
+            maxlength: [500, 'Warm-up notes cannot exceed 500 characters'],
+            default: null,
+        },
+        exerciseId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Exercise',
+            default: null,
+        },
+        activitySnapshot: {
+            type: activitySnapshotSchema,
+            required: [true, 'Warm-up activity snapshot is required'],
+        },
+    },
+    { _id: true }
+);
+
+/**
+ * Cardio activity on a workout day (duration/intensity/protocol; optional Exercise link).
+ */
+export const cardioActivitySchema = new mongoose.Schema(
+    {
+        activityType: {
+            type: String,
+            required: [true, 'Cardio activity type is required'],
+            enum: {
+                values: CARDIO_ACTIVITY_TYPES,
+                message: 'Invalid cardio activity type',
+            },
+        },
+        protocol: {
+            type: String,
+            required: [true, 'Cardio protocol is required'],
+            enum: {
+                values: CARDIO_PROTOCOLS,
+                message: 'Cardio protocol must be continuous or interval',
+            },
+            default: 'continuous',
+        },
+        order: {
+            type: Number,
+            required: [true, 'Cardio activity order is required'],
+            min: [1, 'Cardio activity order must be at least 1'],
+        },
+        durationMinutes: {
+            type: Number,
+            required: [true, 'Cardio duration is required'],
+            min: [
+                ACTIVITY_DURATION_MINUTES_MIN,
+                `Cardio duration must be at least ${ACTIVITY_DURATION_MINUTES_MIN} minute`,
+            ],
+            max: [
+                ACTIVITY_DURATION_MINUTES_MAX,
+                `Cardio duration cannot exceed ${ACTIVITY_DURATION_MINUTES_MAX} minutes`,
+            ],
+        },
+        intensity: {
+            type: String,
+            required: [true, 'Cardio intensity is required'],
+            enum: {
+                values: ACTIVITY_INTENSITIES,
+                message: 'Intensity must be low, moderate, or high',
+            },
+        },
+        distanceKm: {
+            type: Number,
+            min: [0, 'Distance cannot be negative'],
+            default: null,
+        },
+        targetHeartRate: {
+            type: Number,
+            min: [0, 'Target heart rate cannot be negative'],
+            default: null,
+        },
+        workSeconds: {
+            type: Number,
+            min: [0, 'Work seconds cannot be negative'],
+            default: null,
+        },
+        recoverySeconds: {
+            type: Number,
+            min: [0, 'Recovery seconds cannot be negative'],
+            default: null,
+        },
+        rounds: {
+            type: Number,
+            min: [0, 'Rounds cannot be negative'],
+            default: null,
+        },
+        notes: {
+            type: String,
+            trim: true,
+            maxlength: [500, 'Cardio notes cannot exceed 500 characters'],
+            default: null,
+        },
+        exerciseId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Exercise',
+            default: null,
+        },
+        activitySnapshot: {
+            type: activitySnapshotSchema,
+            required: [true, 'Cardio activity snapshot is required'],
+        },
+    },
+    { _id: true }
+);
+
+/**
  * Embedded workout day within a plan.
  */
 export const workoutDaySchema = new mongoose.Schema(
@@ -170,6 +346,16 @@ export const workoutDaySchema = new mongoose.Schema(
             maxlength: [2000, 'Day description cannot exceed 2000 characters'],
             default: null,
         },
+        warmupActivities: {
+            type: [warmupActivitySchema],
+            default: [],
+            validate: {
+                validator(value) {
+                    return !value || value.length <= MAX_DAY_ACTIVITIES;
+                },
+                message: `Warm-up activities cannot exceed ${MAX_DAY_ACTIVITIES} items per day`,
+            },
+        },
         exercises: {
             type: [planExerciseSchema],
             default: [],
@@ -178,6 +364,16 @@ export const workoutDaySchema = new mongoose.Schema(
                     return !value || value.length <= 50;
                 },
                 message: 'Exercises cannot exceed 50 items per day',
+            },
+        },
+        cardioActivities: {
+            type: [cardioActivitySchema],
+            default: [],
+            validate: {
+                validator(value) {
+                    return !value || value.length <= MAX_DAY_ACTIVITIES;
+                },
+                message: `Cardio activities cannot exceed ${MAX_DAY_ACTIVITIES} items per day`,
             },
         },
     },
@@ -385,6 +581,41 @@ workoutPlanSchema.pre('validate', function validateExerciseOrders() {
                 return;
             }
             seen.add(exercise.order);
+        }
+    }
+});
+
+/**
+ * Unique warm-up / cardio activity order within each day section.
+ */
+workoutPlanSchema.pre('validate', function validateActivityOrders() {
+    const days = this.workoutDays;
+    if (!Array.isArray(days)) {
+        return;
+    }
+
+    for (const day of days) {
+        for (const [field, label] of [
+            ['warmupActivities', 'Warm-up'],
+            ['cardioActivities', 'Cardio'],
+        ]) {
+            const activities = day?.[field];
+            if (!Array.isArray(activities) || activities.length === 0) {
+                continue;
+            }
+
+            const seen = new Set();
+            for (const activity of activities) {
+                if (activity?.order == null) continue;
+                if (seen.has(activity.order)) {
+                    this.invalidate(
+                        'workoutDays',
+                        `${label} activity order values must be unique within each day`
+                    );
+                    return;
+                }
+                seen.add(activity.order);
+            }
         }
     }
 });
