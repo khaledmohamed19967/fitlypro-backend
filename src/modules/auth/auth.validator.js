@@ -1,4 +1,5 @@
 import Joi from 'joi';
+import { applyPhoneContractToValue } from '../../utils/phone.js';
 
 /**
  * Auth Validation Schemas
@@ -50,12 +51,9 @@ export const validateRegister = Joi.object({
             'any.required': 'Password is required',
         }),
 
-    phone: Joi.string()
-        .pattern(/^[0-9]{10,15}$/)
-        .optional()
-        .messages({
-            'string.pattern.base': 'Please provide a valid phone number (10-15 digits)',
-        }),
+    phone: Joi.string().optional().allow('', null),
+    phoneCountryIso: Joi.string().trim().uppercase().length(2).optional().allow('', null),
+    phoneCountryCode: Joi.string().trim().optional().allow('', null),
 
     dateOfBirth: Joi.date()
         .max('now')
@@ -85,7 +83,9 @@ export const validateRegister = Joi.object({
     trainerId: Joi.forbidden(),
     isActive: Joi.forbidden(),
     trainer: Joi.forbidden(),
-});
+}).custom((value, helpers) =>
+    applyPhoneContractToValue(value, helpers, { required: false })
+);
 
 /**
  * Login validation schema
@@ -116,14 +116,21 @@ export const validateUpdateProfile = Joi.object({
     firstName: Joi.string().min(2).max(50).trim().optional(),
     lastName: Joi.string().min(2).max(50).trim().optional(),
     email: Joi.string().email().lowercase().trim().optional(),
-    phone: Joi.string()
-        .pattern(/^[0-9]{10,15}$/)
-        .optional()
-        .allow(null, '')
-        .messages({
-            'string.pattern.base': 'Please provide a valid phone number (10-15 digits)',
-        }),
-}).min(1);
+    phone: Joi.string().optional().allow(null, ''),
+    phoneCountryIso: Joi.string().trim().uppercase().length(2).optional().allow('', null),
+    phoneCountryCode: Joi.string().trim().optional().allow('', null),
+})
+    .min(1)
+    .custom((value, helpers) => {
+        if (
+            value.phone === undefined &&
+            value.phoneCountryIso === undefined &&
+            value.phoneCountryCode === undefined
+        ) {
+            return value;
+        }
+        return applyPhoneContractToValue(value, helpers, { required: false });
+    });
 
 /**
  * Update password validation schema

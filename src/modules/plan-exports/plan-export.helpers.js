@@ -81,6 +81,12 @@ export const buildWorkoutExportModel = (plan, trainer) => ({
             description: day.description ?? null,
             exercises: (day.exercises ?? []).map((exercise) => {
                 const hydrated = exercise.exercise || null;
+                const muscles = hydrated?.muscles;
+                const thumbnailUrl =
+                    hydrated?.thumbnailUrl ||
+                    hydrated?.media?.thumbnailUrl ||
+                    exercise.exerciseSnapshot?.thumbnailUrl ||
+                    null;
                 return {
                     exerciseId:
                         exercise.exerciseId != null
@@ -102,6 +108,21 @@ export const buildWorkoutExportModel = (plan, trainer) => ({
                     restBetweenSets: exercise.restBetweenSets ?? 0,
                     notes: exercise.notes ?? null,
                     tempo: exercise.tempo ?? null,
+                    thumbnailUrl:
+                        typeof thumbnailUrl === 'string' && thumbnailUrl.trim()
+                            ? thumbnailUrl.trim()
+                            : null,
+                    muscles:
+                        muscles &&
+                        typeof muscles === 'object' &&
+                        muscles.primary
+                            ? {
+                                  primary: muscles.primary,
+                                  secondary: Array.isArray(muscles.secondary)
+                                      ? [...muscles.secondary]
+                                      : [],
+                              }
+                            : null,
                     sets: (exercise.sets ?? []).map((set) => ({
                         setNumber: set.setNumber,
                         reps: set.reps,

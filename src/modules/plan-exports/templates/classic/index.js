@@ -7,10 +7,10 @@ import { buildClassicNutritionHtml } from './nutrition.js';
 import { buildClassicWorkoutHtml } from './workout.js';
 
 /** Classic PDF: margins live in CSS @page (applied on every printed page). */
-const CLASSIC_PDF_OPTIONS = {
+export const CLASSIC_PDF_OPTIONS = Object.freeze({
     margin: { top: '0', right: '0', bottom: '0', left: '0' },
     preferCSSPageSize: true,
-};
+});
 
 /**
  * @param {object} exportModel

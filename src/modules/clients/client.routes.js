@@ -25,6 +25,7 @@ import {
 } from '../nutrition-calculator/nutrition-calculator.routes.js';
 import nutritionPlanAssignmentClientRoutes from '../nutrition-plan-assignments/nutrition-plan-assignment.client.routes.js';
 import workoutPlanClientRoutes from '../workout-plans/workout-plan.client.routes.js';
+import clientSubscriptionClientRoutes from '../client-subscriptions/client-subscription.client.routes.js';
 import { createClientInvitation } from '../client-invitations/client-invitation.controller.js';
 import { validateCreateClientInvitation } from '../client-invitations/client-invitation.validator.js';
 
@@ -55,6 +56,7 @@ router.use('/:id/nutrition-calculator', calculatorRouter);
 router.use('/:id/nutrition-recommendations', recommendationRouter);
 router.use('/:id/nutrition-plan-assignment', nutritionPlanAssignmentClientRoutes);
 router.use('/:id/workout-plan-assignment', workoutPlanClientRoutes);
+router.use('/:id/subscription', clientSubscriptionClientRoutes);
 
 router.post(
     '/:id/invitation',

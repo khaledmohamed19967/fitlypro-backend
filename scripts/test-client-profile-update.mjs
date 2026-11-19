@@ -63,6 +63,8 @@ async function main() {
     await mongoose.connect(process.env.APP_DB_URL);
     const suffix = Date.now();
     const password = 'testpass123';
+    let noNutritionClient = null;
+    let inactiveOpt = null;
 
     const trainerA = await User.create({
         firstName: 'Prof',
@@ -155,18 +157,39 @@ async function main() {
         created.id,
         trainerA._id.toString()
     );
+    const peanutOpt = detailAfterCreate.allergyOptions?.find(
+        (o) => o.id === peanut._id.toString()
+    );
+    const halalOpt = detailAfterCreate.dietaryRestrictionOptions?.find(
+        (o) => o.id === halal._id.toString()
+    );
     if (
         Array.isArray(detailAfterCreate.allergyOptionIds) &&
         detailAfterCreate.allergyOptionIds.length === 1 &&
-        detailAfterCreate.dietaryRestrictionOptionIds?.length === 1
+        detailAfterCreate.dietaryRestrictionOptionIds?.length === 1 &&
+        detailAfterCreate.allergyOptions?.length === 1 &&
+        detailAfterCreate.dietaryRestrictionOptions?.length === 1 &&
+        peanutOpt?.label === peanut.label &&
+        peanutOpt?.code === 'peanuts' &&
+        peanutOpt?.category === 'allergy' &&
+        peanutOpt?.id === peanut._id.toString() &&
+        halalOpt?.label === halal.label &&
+        halalOpt?.category === 'dietary_restriction' &&
+        Array.isArray(detailAfterCreate.unmappedAllergies) &&
+        Array.isArray(detailAfterCreate.unmappedDietaryRestrictions)
     ) {
-        pass('0. GET client enriches nutrition restriction option IDs');
+        pass('0. GET client enriches nutrition restriction IDs and option objects');
     } else {
         fail(
-            '0. GET client enriches nutrition restriction option IDs',
+            '0. GET client enriches nutrition restriction IDs and option objects',
             JSON.stringify({
                 allergyOptionIds: detailAfterCreate.allergyOptionIds,
-                dietaryRestrictionOptionIds: detailAfterCreate.dietaryRestrictionOptionIds,
+                allergyOptions: detailAfterCreate.allergyOptions,
+                dietaryRestrictionOptionIds:
+                    detailAfterCreate.dietaryRestrictionOptionIds,
+                dietaryRestrictionOptions:
+                    detailAfterCreate.dietaryRestrictionOptions,
+                unmappedAllergies: detailAfterCreate.unmappedAllergies,
             })
         );
     }
@@ -261,18 +284,180 @@ async function main() {
         fail('4. Allergies / dietary restrictions via nutrition profile', JSON.stringify(nutrition));
     }
 
-    const packageUpdate = await clientService.updateClientPlan(
+    const detailComplete = await clientService.getClientById(
+        created.id,
+        trainerA._id.toString()
+    );
+    if (
+        detailComplete.injuryAreaOptions?.length === 1 &&
+        detailComplete.injuryAreaOptions[0]?.id === leftKnee._id.toString() &&
+        detailComplete.allergyOptions?.length === 2 &&
+        detailComplete.dietaryRestrictionOptions?.length === 1 &&
+        detailComplete.allergyOptions.every(
+            (o) => o.id && o.code && o.label && o.category === 'allergy'
+        ) &&
+        detailComplete.dietaryRestrictionOptions[0]?.category ===
+            'dietary_restriction' &&
+        detailComplete.foodPreferences === undefined
+    ) {
+        pass('4b. GET details: injury + allergy + dietary labels; foodPreferences not on DTO');
+    } else {
+        fail(
+            '4b. GET details: injury + allergy + dietary labels; foodPreferences not on DTO',
+            JSON.stringify({
+                injuryAreaOptions: detailComplete.injuryAreaOptions,
+                allergyOptions: detailComplete.allergyOptions,
+                dietaryRestrictionOptions: detailComplete.dietaryRestrictionOptions,
+                foodPreferences: detailComplete.foodPreferences,
+            })
+        );
+    }
+
+    await nutritionProfileService.upsertNutritionProfile(
+        created.id,
+        {
+            allergies: ['Custom Mystery Allergy', peanut.label],
+            dietaryRestrictions: ['Custom Diet Rule', halal.label],
+            foodPreferences: ['Avocado'],
+        },
+        trainerA._id.toString()
+    );
+    const detailUnmapped = await clientService.getClientById(
+        created.id,
+        trainerA._id.toString()
+    );
+    if (
+        detailUnmapped.unmappedAllergies?.includes('Custom Mystery Allergy') &&
+        !detailUnmapped.unmappedAllergies?.includes(peanut.label) &&
+        detailUnmapped.unmappedDietaryRestrictions?.includes('Custom Diet Rule') &&
+        detailUnmapped.foodPreferences === undefined
+    ) {
+        pass('4c. GET details includes unmapped legacy allergy/dietary strings only');
+    } else {
+        fail(
+            '4c. GET details includes unmapped legacy allergy/dietary strings only',
+            JSON.stringify({
+                unmappedAllergies: detailUnmapped.unmappedAllergies,
+                unmappedDietaryRestrictions:
+                    detailUnmapped.unmappedDietaryRestrictions,
+            })
+        );
+    }
+
+    noNutritionClient = await clientService.createClient(
+        {
+            firstName: 'No',
+            lastName: 'Nutrition',
+            email: `prof-nonut-${suffix}@test.com`,
+            password,
+            primaryFitnessGoal: 'general_fitness',
+            medicalConditions: 'None reported',
+        },
+        trainerA._id.toString()
+    );
+    const nutritionDocsBefore = await NutritionProfile.countDocuments({
+        clientId: noNutritionClient.id,
+    });
+    const detailNoNutrition = await clientService.getClientById(
+        noNutritionClient.id,
+        trainerA._id.toString()
+    );
+    const nutritionDocsAfter = await NutritionProfile.countDocuments({
+        clientId: noNutritionClient.id,
+    });
+    if (
+        detailNoNutrition.medicalConditions === 'None reported' &&
+        detailNoNutrition.allergyOptionIds === undefined &&
+        detailNoNutrition.allergyOptions === undefined &&
+        detailNoNutrition.dietaryRestrictionOptionIds === undefined &&
+        nutritionDocsBefore === 0 &&
+        nutritionDocsAfter === 0
+    ) {
+        pass('4d. Missing NutritionProfile: GET succeeds; no profile created; nutrition fields omitted');
+    } else {
+        fail(
+            '4d. Missing NutritionProfile: GET succeeds; no profile created; nutrition fields omitted',
+            JSON.stringify({
+                allergyOptionIds: detailNoNutrition.allergyOptionIds,
+                allergyOptions: detailNoNutrition.allergyOptions,
+                docsBefore: nutritionDocsBefore,
+                docsAfter: nutritionDocsAfter,
+            })
+        );
+    }
+
+    inactiveOpt = await HealthReferenceOption.create({
+        category: 'allergy',
+        code: `inactive_profile_${suffix}`,
+        label: 'Inactive Profile Allergy',
+        status: 'active',
+        sortOrder: 999,
+    });
+    await clientService.updateClient(
+        created.id,
+        {
+            allergyOptionIds: [
+                peanut._id.toString(),
+                inactiveOpt._id.toString(),
+            ],
+        },
+        trainerA._id.toString()
+    );
+    inactiveOpt.status = 'inactive';
+    await inactiveOpt.save();
+    const detailInactive = await clientService.getClientById(
+        created.id,
+        trainerA._id.toString()
+    );
+    const inactiveResolved = detailInactive.allergyOptions?.find(
+        (o) => o.id === inactiveOpt._id.toString()
+    );
+    if (
+        inactiveResolved?.label === 'Inactive Profile Allergy' &&
+        inactiveResolved?.code === `inactive_profile_${suffix}`
+    ) {
+        pass('4e. Previously selected inactive allergy still resolves label on GET details');
+    } else {
+        fail(
+            '4e. Previously selected inactive allergy still resolves label on GET details',
+            JSON.stringify(detailInactive.allergyOptions)
+        );
+    }
+
+    await expectApiError(
+        clientService.getClientById(created.id, trainerB._id.toString()),
+        403,
+        '4f. Foreign trainer denied GET client details health data'
+    );
+
+    const beforePackage = await User.findById(created.id)
+        .select('startDate endDate packageDuration')
+        .lean();
+    const packageBlocked = await clientService.updateClientPlan(
         created.id,
         {
             packageDuration: '1_month',
             startDate: '2026-01-06T00:00:00.000Z',
+            sessionsPerWeek: 5,
         },
         trainerA._id.toString()
     );
-    if (toIso(packageUpdate.endDate) === '2026-02-06T00:00:00.000Z') {
-        pass('5. Plan update recalculates endDate');
+    const afterPackage = await User.findById(created.id)
+        .select('startDate endDate packageDuration')
+        .lean();
+    if (
+        packageBlocked.sessionsPerWeek === 5 &&
+        String(afterPackage?.packageDuration ?? null) ===
+            String(beforePackage?.packageDuration ?? null) &&
+        toIso(afterPackage?.startDate) === toIso(beforePackage?.startDate) &&
+        toIso(afterPackage?.endDate) === toIso(beforePackage?.endDate)
+    ) {
+        pass('5. Plan update ignores subscription snapshot fields');
     } else {
-        fail('5. Plan update recalculates endDate', JSON.stringify(packageUpdate.endDate));
+        fail(
+            '5. Plan update ignores subscription snapshot fields',
+            JSON.stringify({ beforePackage, afterPackage, packageBlocked })
+        );
     }
 
     const partial = await clientService.updateClient(
@@ -411,12 +596,18 @@ async function main() {
         console.log('SKIP: HTTP tests (login failed — start API for full HTTP coverage)');
     }
 
+    const cleanupClientIds = [created.id, noNutritionClient?.id].filter(Boolean);
     await User.deleteMany({
-        _id: { $in: [trainerA._id, trainerB._id, created.id] },
+        _id: { $in: [trainerA._id, trainerB._id, ...cleanupClientIds] },
     });
-    await NutritionProfile.deleteMany({ clientId: created.id });
-    await PlanAssignment.deleteMany({ clientId: created.id });
-    await NutritionPlanAssignment.deleteMany({ clientId: created.id });
+    await NutritionProfile.deleteMany({ clientId: { $in: cleanupClientIds } });
+    await PlanAssignment.deleteMany({ clientId: { $in: cleanupClientIds } });
+    await NutritionPlanAssignment.deleteMany({
+        clientId: { $in: cleanupClientIds },
+    });
+    if (inactiveOpt?._id) {
+        await HealthReferenceOption.deleteOne({ _id: inactiveOpt._id });
+    }
 
     const failed = results.filter((r) => !r.ok);
     console.log('\n---');

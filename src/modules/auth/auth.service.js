@@ -27,6 +27,8 @@ const register = async (userData) => {
         email: userData.email,
         password: userData.password,
         phone: userData.phone,
+        phoneCountryIso: userData.phoneCountryIso,
+        phoneCountryCode: userData.phoneCountryCode,
         dateOfBirth: userData.dateOfBirth,
         gender: userData.gender,
         role,
@@ -83,12 +85,21 @@ const updateProfile = async (userId, updateData) => {
     if (updateData.lastName !== undefined) payload.lastName = updateData.lastName;
     if (updateData.email !== undefined) payload.email = updateData.email;
 
-    const clearPhone =
-        updateData.phone !== undefined &&
-        (updateData.phone === '' || updateData.phone == null);
+    /**
+     * Joi empty-phone contract sets `phone` to undefined while keeping the own key.
+     * Detect clear via hasOwnProperty so `phone: '' | null | undefined` all clear.
+     */
+    const phoneSubmitted = Object.prototype.hasOwnProperty.call(updateData, 'phone');
+    const clearPhone = phoneSubmitted && (updateData.phone === '' || updateData.phone == null);
 
-    if (updateData.phone !== undefined && !clearPhone) {
+    if (phoneSubmitted && !clearPhone) {
         payload.phone = updateData.phone;
+        if (updateData.phoneCountryIso !== undefined) {
+            payload.phoneCountryIso = updateData.phoneCountryIso;
+        }
+        if (updateData.phoneCountryCode !== undefined) {
+            payload.phoneCountryCode = updateData.phoneCountryCode;
+        }
     }
 
     if (updateData.email) {
@@ -102,7 +113,22 @@ const updateProfile = async (userId, updateData) => {
 
     Object.assign(user, payload);
     if (clearPhone) {
+        // Assigning undefined → Mongoose $unset on save (do not persist null placeholders).
         user.phone = undefined;
+        user.phoneCountryIso = undefined;
+        user.phoneCountryCode = undefined;
+    } else if (
+        phoneSubmitted &&
+        updateData.phoneCountryIso === undefined &&
+        updateData.phoneCountryCode === undefined
+    ) {
+        /**
+         * Legacy-only phone write: validated body has phone but cleared country
+         * fields (undefined). Object.assign skips those keys, so stale ISO/code
+         * must be $unset explicitly.
+         */
+        user.phoneCountryIso = undefined;
+        user.phoneCountryCode = undefined;
     }
     await user.save();
 

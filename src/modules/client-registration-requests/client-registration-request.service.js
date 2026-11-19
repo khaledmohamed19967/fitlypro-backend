@@ -17,15 +17,21 @@ import { CLIENT_INVITATION_STATUS } from '../client-invitations/client-invitatio
 import clientInvitationService from '../client-invitations/client-invitation.service.js';
 import ClientProspectInvitation from '../client-prospect-invitations/client-prospect-invitation.model.js';
 import { CLIENT_PROSPECT_INVITATION_STATUS } from '../client-prospect-invitations/client-prospect-invitation.constants.js';
-import { applyCoachingPackageEndDate } from '../clients/client.package-dates.js';
+import ClientSubscription from '../client-subscriptions/client-subscription.model.js';
+import clientSubscriptionService from '../client-subscriptions/client-subscription.service.js';
 import {
     loadHealthOptionsMap,
     mapOrderedHealthOptions,
 } from '../health-reference/health-reference.helpers.js';
 import { paginateCollection } from '../../utils/pagination.js';
 import { ApiError } from '../../utils/ApiError.js';
+import {
+    buildPhoneInboxSearchClauses,
+    escapePhoneSearchRegex,
+    toPhoneResponseFields,
+} from '../../utils/phone.js';
 
-const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const escapeRegex = escapePhoneSearchRegex;
 
 const toIdString = (value) => (value == null ? null : String(value));
 
@@ -166,23 +172,50 @@ const revertApprovalClaim = async (requestId) => {
 };
 
 /**
- * Same cleanup as direct Add Client when the user was created but nutrition setup failed.
+ * Roll back a client created in this approval attempt (nutrition / subscription failure).
+ * Only deletes the User when it is linked to this registration request.
  *
  * @param {import('mongoose').Types.ObjectId} requestId
  * @param {import('mongoose').Types.ObjectId|string} userId
  */
 const rollbackNewClient = async (requestId, userId) => {
     if (userId) {
-        await NutritionProfile.deleteMany({ clientId: userId });
-        await User.findByIdAndDelete(userId);
+        const linked = await User.findById(userId).select(
+            '_id trainer registrationRequestId'
+        );
+        if (
+            linked &&
+            linked.registrationRequestId &&
+            String(linked.registrationRequestId) === String(requestId)
+        ) {
+            if (linked.trainer) {
+                await ClientSubscription.deleteMany({
+                    clientId: linked._id,
+                    trainerId: linked.trainer,
+                });
+            }
+            await NutritionProfile.deleteMany({ clientId: linked._id });
+            await User.findByIdAndDelete(linked._id);
+        }
     }
     await revertApprovalClaim(requestId);
+};
+
+const wrapRollbackFailure = (originalErr, rollbackErr) => {
+    const original = originalErr?.message || String(originalErr);
+    const rollback = rollbackErr?.message || String(rollbackErr);
+    return new ApiError(
+        500,
+        `Registration approval failed (${original}) and rollback failed (${rollback})`
+    );
 };
 
 const idList = (values) => (Array.isArray(values) ? values.map((id) => String(id)) : []);
 
 /**
  * Copy submitted profile fields. Password is intentionally omitted.
+ * Package snapshot fields (startDate / endDate / packageDuration) are NOT copied —
+ * Subscription Service owns those via createSubscription after User create.
  *
  * @param {import('mongoose').Document} request
  */
@@ -201,6 +234,8 @@ const buildApprovedClientData = (request) => {
 
     const optionalKeys = [
         'phone',
+        'phoneCountryIso',
+        'phoneCountryCode',
         'dateOfBirth',
         'gender',
         'currentWeight',
@@ -209,8 +244,6 @@ const buildApprovedClientData = (request) => {
         'experienceLevel',
         'programType',
         'sessionsPerWeek',
-        'startDate',
-        'packageDuration',
         'additionalNotes',
         'medicalConditions',
         'injuries',
@@ -231,7 +264,6 @@ const buildApprovedClientData = (request) => {
             ? null
             : request.injuryDetails;
 
-    applyCoachingPackageEndDate(data);
     return data;
 };
 
@@ -303,7 +335,74 @@ const ensureNutritionProfile = async (request, user, createdInThisCall) => {
             return;
         }
         if (createdInThisCall) {
-            await rollbackNewClient(request._id, user._id);
+            try {
+                await rollbackNewClient(request._id, user._id);
+            } catch (rollbackErr) {
+                throw wrapRollbackFailure(err, rollbackErr);
+            }
+        }
+        throw err;
+    }
+};
+
+/**
+ * If the registration request has a packageDuration preference, create a real
+ * ClientSubscription via Subscription Service (dates + User snapshot sync).
+ * Idempotent: skips when any subscription already exists for the trainer/client pair.
+ *
+ * @param {import('mongoose').Document} request
+ * @param {import('mongoose').Document} user
+ * @param {boolean} createdInThisCall
+ */
+const ensureClientSubscription = async (request, user, createdInThisCall) => {
+    const packageDuration = request.packageDuration;
+    if (packageDuration == null || packageDuration === '') {
+        return;
+    }
+
+    const trainerId = String(request.trainerId);
+    const clientId = user._id.toString();
+
+    const existing = await ClientSubscription.findOne({
+        trainerId: request.trainerId,
+        clientId: user._id,
+    }).select('_id');
+
+    if (existing) {
+        return;
+    }
+
+    try {
+        await clientSubscriptionService.createSubscription({
+            trainerId,
+            clientId,
+            packageDuration,
+        });
+    } catch (err) {
+        // Only treat concurrent duplicate-active conflicts as success.
+        // Snapshot-sync failures leave a row behind and must roll back when we
+        // created the client in this attempt (deleteMany in rollbackNewClient).
+        const conflictCode = err?.errors?.[0]?.code;
+        const isConcurrentActiveConflict =
+            err?.statusCode === 409 &&
+            conflictCode === 'ACTIVE_SUBSCRIPTION_EXISTS';
+
+        if (isConcurrentActiveConflict) {
+            const raced = await ClientSubscription.findOne({
+                trainerId: request.trainerId,
+                clientId: user._id,
+            }).select('_id');
+            if (raced) {
+                return;
+            }
+        }
+
+        if (createdInThisCall) {
+            try {
+                await rollbackNewClient(request._id, user._id);
+            } catch (rollbackErr) {
+                throw wrapRollbackFailure(err, rollbackErr);
+            }
         }
         throw err;
     }
@@ -573,7 +672,8 @@ const toApprovalResponse = (request, user, invitation) => ({
 });
 
 /**
- * Finish an approved request: one client, nutrition only when needed, then invitation.
+ * Finish an approved request: one client, nutrition only when needed,
+ * optional subscription via Subscription Service, then invitation.
  * Safe to call again after a crash or a failed invitation.
  *
  * @param {import('mongoose').Document} request
@@ -581,6 +681,7 @@ const toApprovalResponse = (request, user, invitation) => ({
 const provisionApprovedRequest = async (request) => {
     const { user, createdInThisCall } = await createOrRecoverClient(request);
     await ensureNutritionProfile(request, user, createdInThisCall);
+    await ensureClientSubscription(request, user, createdInThisCall);
     await persistCreatedUserId(request._id, user._id);
 
     // Reload so invitation claim fields are current after concurrent approvals.
@@ -827,7 +928,7 @@ const mapListItem = (doc, invitationById, now) => {
         firstName: doc.firstName,
         lastName: doc.lastName,
         email: doc.email,
-        phone: doc.phone ?? null,
+        ...toPhoneResponseFields(doc),
         primaryFitnessGoal: doc.primaryFitnessGoal,
         approvalStatus: doc.approvalStatus,
         createdAt: toIsoDate(doc.createdAt),
@@ -841,7 +942,7 @@ const mapAwaitingFormListItem = (doc) => ({
     recordType: REGISTRATION_LIST_RECORD_TYPE.PROSPECT_INVITATION,
     id: String(doc._id),
     clientName: typeof doc.clientName === 'string' ? doc.clientName : '',
-    phone: doc.phone ?? null,
+    ...toPhoneResponseFields(doc),
     expiresAt: toIsoDate(doc.expiresAt),
     createdAt: toIsoDate(doc.createdAt),
     status: REGISTRATION_WORKFLOW_FILTER.AWAITING_FORM,
@@ -865,7 +966,7 @@ const mapDetailItem = async (doc, invitation) => {
         firstName: doc.firstName,
         lastName: doc.lastName,
         email: doc.email,
-        phone: doc.phone ?? null,
+        ...toPhoneResponseFields(doc),
         dateOfBirth: toIsoDate(doc.dateOfBirth),
         gender: doc.gender ?? null,
         primaryFitnessGoal: doc.primaryFitnessGoal,
@@ -968,7 +1069,7 @@ const buildListFilter = (trainerId, { approvalStatus, search } = {}) => {
             { firstName: regex },
             { lastName: regex },
             { email: regex },
-            { phone: regex },
+            ...buildPhoneInboxSearchClauses(term),
         ];
     }
 
@@ -1003,7 +1104,7 @@ const buildAwaitingFormFilter = (
     const term = typeof search === 'string' ? search.trim() : '';
     if (term) {
         const regex = new RegExp(escapeRegex(term), 'i');
-        filter.$or = [{ clientName: regex }, { phone: regex }];
+        filter.$or = [{ clientName: regex }, ...buildPhoneInboxSearchClauses(term)];
     }
 
     return filter;

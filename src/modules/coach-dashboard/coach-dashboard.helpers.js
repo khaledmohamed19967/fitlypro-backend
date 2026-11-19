@@ -11,6 +11,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * UTC calendar week containing `now`: Monday 00:00Z through Sunday 00:00Z (day ms).
+ * Used by clients-growth bucketing (not the Subscriptions dashboard timeline).
  *
  * @param {Date} [now]
  * @returns {{ weekStart: Date, weekEnd: Date, weekStartMs: number, weekEndMs: number, days: Date[] }}
@@ -35,6 +36,34 @@ export const getUtcWeekRange = (now = new Date()) => {
         weekStart: new Date(weekStartMs),
         weekEnd: new Date(weekEndMs),
         weekStartMs,
+        weekEndMs,
+        days,
+    };
+};
+
+/**
+ * Subscriptions timeline window: today (UTC) through today+7 days (8 columns).
+ * First column is always today; remaining columns ascend chronologically.
+ *
+ * @param {Date} [now]
+ * @returns {{ weekStart: Date, weekEnd: Date, weekStartMs: number, weekEndMs: number, days: Date[] }}
+ */
+export const getUtcRollingEightDayRange = (now = new Date()) => {
+    const todayMs = utcCalendarDayMs(now);
+    if (todayMs === null) {
+        throw new Error('Invalid now date for rolling eight-day range');
+    }
+
+    const weekEndMs = todayMs + 7 * DAY_MS;
+    const days = [];
+    for (let i = 0; i < 8; i += 1) {
+        days.push(new Date(todayMs + i * DAY_MS));
+    }
+
+    return {
+        weekStart: new Date(todayMs),
+        weekEnd: new Date(weekEndMs),
+        weekStartMs: todayMs,
         weekEndMs,
         days,
     };
@@ -68,7 +97,7 @@ export const buildSubscriptionsSection = (
     now = new Date(),
     previewLimit = DASHBOARD_PREVIEW_LIMIT
 ) => {
-    const week = getUtcWeekRange(now);
+    const week = getUtcRollingEightDayRange(now);
     const countByDate = new Map(week.days.map((d) => [formatUtcDateKey(d), 0]));
     const previewEntries = [];
 
@@ -134,7 +163,7 @@ export const buildSubscriptionsSection = (
         week: {
             weekStart: week.weekStart.toISOString(),
             weekEnd: week.weekEnd.toISOString(),
-            convention: 'utc_monday_sunday',
+            convention: 'utc_today_plus_7',
             days: week.days.map((d) => {
                 const date = formatUtcDateKey(d);
                 return {

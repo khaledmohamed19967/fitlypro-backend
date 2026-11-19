@@ -8,6 +8,8 @@ export const CLIENT_PERSONAL_UPDATE_FIELDS = [
     'firstName',
     'lastName',
     'phone',
+    'phoneCountryIso',
+    'phoneCountryCode',
     'dateOfBirth',
     'gender',
 ];
@@ -21,13 +23,16 @@ export const CLIENT_FITNESS_UPDATE_FIELDS = [
     'experienceLevel',
 ];
 
-/** @type {readonly string[]} */
+/**
+ * Program fields editable via profile/plan updates.
+ * Coaching subscription snapshot fields (startDate / endDate / packageDuration)
+ * are owned by ClientSubscription and must not be written here.
+ *
+ * @type {readonly string[]}
+ */
 export const CLIENT_PROGRAM_UPDATE_FIELDS = [
     'programType',
     'sessionsPerWeek',
-    'startDate',
-    'packageDuration',
-    'endDate',
     'additionalNotes',
 ];
 

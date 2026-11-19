@@ -16,9 +16,14 @@ import clientInvitationService from '../src/modules/client-invitations/client-in
 import { CLIENT_INVITATION_STATUS } from '../src/modules/client-invitations/client-invitation.constants.js';
 import ClientProspectInvitation from '../src/modules/client-prospect-invitations/client-prospect-invitation.model.js';
 import { CLIENT_PROSPECT_INVITATION_STATUS } from '../src/modules/client-prospect-invitations/client-prospect-invitation.constants.js';
+import clientProspectInvitationService from '../src/modules/client-prospect-invitations/client-prospect-invitation.service.js';
+import { hashInvitationToken } from '../src/modules/client-invitations/client-invitation.helpers.js';
 import NutritionProfile from '../src/modules/nutrition-profiles/nutrition-profile.model.js';
 import HealthReferenceOption from '../src/modules/health-reference/health-reference.model.js';
+import ClientSubscription from '../src/modules/client-subscriptions/client-subscription.model.js';
+import clientSubscriptionService from '../src/modules/client-subscriptions/client-subscription.service.js';
 import clientService from '../src/modules/clients/client.service.js';
+import { utcCalendarDayMs } from '../src/modules/clients/client.subscription-attention.js';
 
 const BASE = process.env.API_URL || 'http://localhost:8000';
 const API = `${BASE}/api/v1`;
@@ -249,10 +254,28 @@ async function main() {
         status: CLIENT_INVITATION_STATUS.PENDING,
     });
     const responseText = JSON.stringify(approved.json);
+    const approvedSubs = await ClientSubscription.find({
+        trainerId: trainer._id,
+        clientId: approvedUser?._id,
+    });
+    const directSubs = await ClientSubscription.find({
+        trainerId: trainer._id,
+        clientId: directUser?._id,
+    });
     const endDatesMatch =
         approvedUser?.endDate instanceof Date &&
         directUser?.endDate instanceof Date &&
-        approvedUser.endDate.toISOString() === directUser.endDate.toISOString();
+        utcCalendarDayMs(approvedUser.endDate) === utcCalendarDayMs(directUser.endDate);
+    const snapshotFromSubscription =
+        approvedSubs.length === 1 &&
+        approvedSubs[0].status === 'active' &&
+        approvedSubs[0].packageDuration === '6_months' &&
+        approvedUser.packageDuration === '6_months' &&
+        utcCalendarDayMs(approvedUser.startDate) ===
+            utcCalendarDayMs(approvedSubs[0].startDate) &&
+        utcCalendarDayMs(approvedUser.endDate) === utcCalendarDayMs(approvedSubs[0].endDate) &&
+        // Request preference startDate must NOT be copied onto User — Subscription Service owns dates
+        utcCalendarDayMs(approvedUser.startDate) !== utcCalendarDayMs(startDate);
 
     if (
         approved.status === 200 &&
@@ -275,15 +298,17 @@ async function main() {
         storedRequest.approvalStatus === 'approved' &&
         String(storedRequest.reviewedBy) === String(trainer._id) &&
         endDatesMatch &&
+        snapshotFromSubscription &&
+        directSubs.length === 1 &&
         approvedUser.phone === '15550001002' &&
         invitationCount === 1 &&
         prospectAfter.status === CLIENT_PROSPECT_INVITATION_STATUS.USED
     ) {
-        pass('5. Owning trainer approval creates one passwordless active client and an invitation');
+        pass('5. Owning trainer approval creates one passwordless active client, subscription, and invitation');
     } else {
         fail(
-            '5. Owning trainer approval creates one passwordless active client and an invitation',
-            `status=${approved.status} endMatch=${endDatesMatch} role=${approvedUser?.role} password=${approvedUser?.password} invites=${invitationCount}`
+            '5. Owning trainer approval creates one passwordless active client, subscription, and invitation',
+            `status=${approved.status} endMatch=${endDatesMatch} snap=${snapshotFromSubscription} subs=${approvedSubs.length} role=${approvedUser?.role} invites=${invitationCount}`
         );
     }
 
@@ -309,6 +334,10 @@ async function main() {
     const usersForRequest = await User.countDocuments({
         registrationRequestId: packageRequest._id,
     });
+    const subsAfterRepeat = await ClientSubscription.countDocuments({
+        trainerId: trainer._id,
+        clientId: approvedUser._id,
+    });
     if (
         again.status === 200 &&
         again.json?.data?.invitation?.state === 'reused' &&
@@ -318,13 +347,14 @@ async function main() {
         stillPending.length === 1 &&
         String(stillPending[0]._id) === String(firstInvitation._id) &&
         firstInvitation.status === CLIENT_INVITATION_STATUS.PENDING &&
-        usersForRequest === 1
+        usersForRequest === 1 &&
+        subsAfterRepeat === 1
     ) {
-        pass('7. Repeated approval reuses the pending invitation and does not create another user');
+        pass('7. Repeated approval reuses the pending invitation and does not create another user or subscription');
     } else {
         fail(
-            '7. Repeated approval reuses the pending invitation and does not create another user',
-            `status=${again.status} state=${again.json?.data?.invitation?.state} pending=${stillPending.length} users=${usersForRequest}`
+            '7. Repeated approval reuses the pending invitation and does not create another user or subscription',
+            `status=${again.status} state=${again.json?.data?.invitation?.state} pending=${stillPending.length} users=${usersForRequest} subs=${subsAfterRepeat}`
         );
     }
 
@@ -929,6 +959,322 @@ async function main() {
             `status=${rejectApproved.status}`
         );
     }
+
+    // --- Phase 6.4: subscription integration ---
+
+    const noPkgRequest = await makeRequest(trainer._id, {
+        email: email('no-pkg'),
+        primaryFitnessGoal: 'general_fitness',
+    });
+    const noPkg = await clientRegistrationRequestService.approve(
+        noPkgRequest._id.toString(),
+        trainer._id.toString()
+    );
+    const noPkgUser = await User.findById(noPkg.clientId);
+    trackUser(noPkgUser?._id);
+    const noPkgSubs = await ClientSubscription.countDocuments({
+        trainerId: trainer._id,
+        clientId: noPkgUser?._id,
+    });
+    if (
+        noPkgUser &&
+        noPkgSubs === 0 &&
+        noPkgUser.packageDuration == null &&
+        noPkgUser.startDate == null &&
+        noPkgUser.endDate == null
+    ) {
+        pass('19. Approval without packageDuration creates user with empty snapshot and no subscription');
+    } else {
+        fail(
+            '19. Approval without packageDuration creates user with empty snapshot and no subscription',
+            `subs=${noPkgSubs} duration=${noPkgUser?.packageDuration}`
+        );
+    }
+
+    const durations = ['1_month', '3_months', '6_months', '12_months', 'ongoing'];
+    let durationOk = true;
+    let durationDetail = '';
+    for (const duration of durations) {
+        const reqDoc = await makeRequest(trainer._id, {
+            email: email(`dur-${duration}`),
+            packageDuration: duration,
+            primaryFitnessGoal: 'general_fitness',
+        });
+        const result = await clientRegistrationRequestService.approve(
+            reqDoc._id.toString(),
+            trainer._id.toString()
+        );
+        const user = await User.findById(result.clientId);
+        trackUser(user?._id);
+        const subs = await ClientSubscription.find({
+            trainerId: trainer._id,
+            clientId: user._id,
+        });
+        const stored = await ClientRegistrationRequest.findById(reqDoc._id);
+        const ongoingOk =
+            duration !== 'ongoing' ||
+            (subs[0]?.endDate == null && user.endDate == null);
+        const finiteOk =
+            duration === 'ongoing' ||
+            (subs[0]?.endDate instanceof Date && user.endDate instanceof Date);
+        if (
+            !(
+                subs.length === 1 &&
+                subs[0].status === 'active' &&
+                subs[0].packageDuration === duration &&
+                String(subs[0].trainerId) === String(trainer._id) &&
+                String(subs[0].clientId) === String(user._id) &&
+                user.packageDuration === duration &&
+                utcCalendarDayMs(user.startDate) === utcCalendarDayMs(subs[0].startDate) &&
+                ongoingOk &&
+                finiteOk &&
+                stored.approvalStatus === 'approved'
+            )
+        ) {
+            durationOk = false;
+            durationDetail = `${duration} subs=${subs.length} userDur=${user.packageDuration}`;
+            break;
+        }
+    }
+    if (durationOk) {
+        pass('20. Approval with each supported packageDuration creates one matching subscription + snapshot');
+    } else {
+        fail(
+            '20. Approval with each supported packageDuration creates one matching subscription + snapshot',
+            durationDetail
+        );
+    }
+
+    const failSubRequest = await makeRequest(trainer._id, {
+        email: email('sub-fail'),
+        packageDuration: '1_month',
+        primaryFitnessGoal: 'general_fitness',
+    });
+    const originalCreateSub = clientSubscriptionService.createSubscription;
+    clientSubscriptionService.createSubscription = async () => {
+        throw new Error('forced subscription failure');
+    };
+    let subFailErr = null;
+    try {
+        await clientRegistrationRequestService.approve(
+            failSubRequest._id.toString(),
+            trainer._id.toString()
+        );
+    } catch (err) {
+        subFailErr = err;
+    } finally {
+        clientSubscriptionService.createSubscription = originalCreateSub;
+    }
+    const failSubAfter = await ClientRegistrationRequest.findById(failSubRequest._id);
+    const failSubUser = await User.findOne({ email: email('sub-fail') });
+    trackUser(failSubUser?._id);
+    const failSubCount = await ClientSubscription.countDocuments({
+        trainerId: trainer._id,
+        clientId: failSubUser?._id,
+    });
+    if (
+        subFailErr &&
+        failSubAfter.approvalStatus === 'pending' &&
+        failSubAfter.createdUserId == null &&
+        !failSubUser &&
+        failSubCount === 0
+    ) {
+        pass('21. Subscription creation failure rolls back client and leaves request pending');
+    } else {
+        fail(
+            '21. Subscription creation failure rolls back client and leaves request pending',
+            `err=${Boolean(subFailErr)} status=${failSubAfter?.approvalStatus} user=${Boolean(failSubUser)}`
+        );
+    }
+
+    const retrySubRequest = await makeRequest(trainer._id, {
+        email: email('sub-retry'),
+        packageDuration: '3_months',
+        primaryFitnessGoal: 'general_fitness',
+    });
+    const retryAfterFail = await clientRegistrationRequestService.approve(
+        retrySubRequest._id.toString(),
+        trainer._id.toString()
+    );
+    trackUser(retryAfterFail.clientId);
+    const retrySubs = await ClientSubscription.countDocuments({
+        trainerId: trainer._id,
+        clientId: retryAfterFail.clientId,
+    });
+    if (retryAfterFail.approvalStatus === 'approved' && retrySubs === 1) {
+        pass('22. Retry after a prior unrelated failure path can approve with subscription');
+    } else {
+        fail(
+            '22. Retry after a prior unrelated failure path can approve with subscription',
+            `status=${retryAfterFail.approvalStatus} subs=${retrySubs}`
+        );
+    }
+
+    const concurrentPkgRequest = await makeRequest(trainer._id, {
+        email: email('concurrent-pkg'),
+        packageDuration: '1_month',
+        primaryFitnessGoal: 'general_fitness',
+    });
+    const concurrentPkgSettled = await Promise.allSettled([
+        clientRegistrationRequestService.approve(
+            concurrentPkgRequest._id.toString(),
+            trainer._id.toString()
+        ),
+        clientRegistrationRequestService.approve(
+            concurrentPkgRequest._id.toString(),
+            trainer._id.toString()
+        ),
+    ]);
+    const concurrentPkgUsers = await User.find({
+        registrationRequestId: concurrentPkgRequest._id,
+    });
+    concurrentPkgUsers.forEach((user) => trackUser(user._id));
+    const concurrentPkgSubs = await ClientSubscription.find({
+        trainerId: trainer._id,
+        clientId: { $in: concurrentPkgUsers.map((u) => u._id) },
+        status: 'active',
+    });
+    const concurrentPkgFulfilled = concurrentPkgSettled.filter(
+        (item) => item.status === 'fulfilled'
+    ).length;
+    if (
+        concurrentPkgUsers.length === 1 &&
+        concurrentPkgSubs.length === 1 &&
+        concurrentPkgFulfilled >= 1
+    ) {
+        pass('23. Concurrent package approvals create one user and one active subscription');
+    } else {
+        fail(
+            '23. Concurrent package approvals create one user and one active subscription',
+            `users=${concurrentPkgUsers.length} subs=${concurrentPkgSubs.length} fulfilled=${concurrentPkgFulfilled}`
+        );
+    }
+
+    // Prospect registration stores package preference only (no User / Subscription)
+    const prospectRaw = crypto.randomBytes(32).toString('hex');
+    const prospectInvite = await ClientProspectInvitation.create({
+        trainerId: trainer._id,
+        clientName: 'Pref Only',
+        phone: '15550001998',
+        tokenHash: hashInvitationToken(prospectRaw),
+        status: CLIENT_PROSPECT_INVITATION_STATUS.PENDING,
+        expiresAt: new Date(Date.now() + 86400000),
+    });
+    createdProspectIds.push(prospectInvite._id);
+    const usersBeforeProspect = await User.countDocuments();
+    const subsBeforeProspect = await ClientSubscription.countDocuments({
+        trainerId: trainer._id,
+    });
+    const prospectReg = await clientProspectInvitationService.registerFromProspectInvitation(
+        prospectRaw,
+        {
+            firstName: 'Pref',
+            lastName: 'Only',
+            email: email('prospect-pref'),
+            primaryFitnessGoal: 'general_fitness',
+            packageDuration: '12_months',
+            startDate: new Date('2026-01-01T00:00:00.000Z'),
+        }
+    );
+    trackRequest(prospectReg.registrationRequestId);
+    const prefRequest = await ClientRegistrationRequest.findById(
+        prospectReg.registrationRequestId
+    );
+    const prospectUser = await User.findOne({ email: email('prospect-pref') });
+    trackUser(prospectUser?._id);
+    const usersAfterProspect = await User.countDocuments();
+    const subsAfterProspect = await ClientSubscription.countDocuments({
+        trainerId: trainer._id,
+    });
+    if (
+        prospectReg.approvalStatus === 'pending' &&
+        prefRequest?.packageDuration === '12_months' &&
+        String(prefRequest.trainerId) === String(trainer._id) &&
+        !prospectUser &&
+        usersAfterProspect === usersBeforeProspect &&
+        subsAfterProspect === subsBeforeProspect
+    ) {
+        pass('24. Prospect registration stores package preference on request only (no User/Subscription)');
+    } else {
+        fail(
+            '24. Prospect registration stores package preference on request only (no User/Subscription)',
+            `status=${prospectReg.approvalStatus} dur=${prefRequest?.packageDuration} user=${Boolean(prospectUser)}`
+        );
+    }
+
+    const noPrefRaw = crypto.randomBytes(32).toString('hex');
+    const noPrefInvite = await ClientProspectInvitation.create({
+        trainerId: trainer._id,
+        clientName: 'No Pref',
+        phone: '15550001997',
+        tokenHash: hashInvitationToken(noPrefRaw),
+        status: CLIENT_PROSPECT_INVITATION_STATUS.PENDING,
+        expiresAt: new Date(Date.now() + 86400000),
+    });
+    createdProspectIds.push(noPrefInvite._id);
+    const noPrefReg = await clientProspectInvitationService.registerFromProspectInvitation(
+        noPrefRaw,
+        {
+            firstName: 'No',
+            lastName: 'Pref',
+            email: email('prospect-nopref'),
+            primaryFitnessGoal: 'general_fitness',
+        }
+    );
+    trackRequest(noPrefReg.registrationRequestId);
+    const noPrefDoc = await ClientRegistrationRequest.findById(
+        noPrefReg.registrationRequestId
+    );
+    if (
+        noPrefReg.approvalStatus === 'pending' &&
+        (noPrefDoc.packageDuration == null || noPrefDoc.packageDuration === undefined)
+    ) {
+        pass('25. Prospect registration without packageDuration still works');
+    } else {
+        fail(
+            '25. Prospect registration without packageDuration still works',
+            `status=${noPrefReg.approvalStatus} dur=${noPrefDoc?.packageDuration}`
+        );
+    }
+
+    const badPrefRaw = crypto.randomBytes(32).toString('hex');
+    const badPrefInvite = await ClientProspectInvitation.create({
+        trainerId: trainer._id,
+        clientName: 'Bad Pref',
+        phone: '15550001996',
+        tokenHash: hashInvitationToken(badPrefRaw),
+        status: CLIENT_PROSPECT_INVITATION_STATUS.PENDING,
+        expiresAt: new Date(Date.now() + 86400000),
+    });
+    createdProspectIds.push(badPrefInvite._id);
+    let badPrefErr = null;
+    try {
+        await clientProspectInvitationService.registerFromProspectInvitation(badPrefRaw, {
+            firstName: 'Bad',
+            lastName: 'Pref',
+            email: email('prospect-badpref'),
+            primaryFitnessGoal: 'general_fitness',
+            packageDuration: '2_weeks',
+        });
+    } catch (err) {
+        badPrefErr = err;
+    }
+    const badPrefInviteAfter = await ClientProspectInvitation.findById(badPrefInvite._id);
+    const badPrefRequest = await ClientRegistrationRequest.findOne({
+        invitationId: badPrefInvite._id,
+    });
+    if (
+        badPrefErr &&
+        badPrefInviteAfter.status === CLIENT_PROSPECT_INVITATION_STATUS.PENDING &&
+        !badPrefRequest
+    ) {
+        pass('26. Invalid packageDuration on prospect registration is rejected without consuming invite');
+    } else {
+        fail(
+            '26. Invalid packageDuration on prospect registration is rejected without consuming invite',
+            `err=${badPrefErr?.message || badPrefErr?.statusCode} invite=${badPrefInviteAfter?.status}`
+        );
+    }
 }
 
 main()
@@ -939,6 +1285,7 @@ main()
     .finally(async () => {
         const clientIds = createdUserIds.filter(Boolean);
         if (clientIds.length) {
+            await ClientSubscription.deleteMany({ clientId: { $in: clientIds } });
             await NutritionProfile.deleteMany({ clientId: { $in: clientIds } });
             await ClientInvitation.deleteMany({ clientId: { $in: clientIds } });
         }

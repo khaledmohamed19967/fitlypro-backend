@@ -865,3 +865,61 @@ export const mapTrainerClientWorkoutAssignment = (assignment, plan = null) => {
             : null,
     };
 };
+
+/**
+ * Allowlisted Workout Plan summary embedded on GET /clients/:id.
+ * Same assignment/plan selection as mapTrainerClientWorkoutAssignmentIfVisible;
+ * excludes progress and nested plan objects.
+ *
+ * @param {import('mongoose').Document|object} assignment
+ * @param {import('mongoose').Document|object} plan — visible (non-draft) plan
+ * @returns {object|null}
+ */
+export const mapClientDetailsWorkoutPlanSummary = (assignment, plan) => {
+    if (!assignment || !plan) {
+        return null;
+    }
+
+    const doc = toPlainObject(assignment);
+    const planDoc = toPlainObject(plan);
+    const planName =
+        typeof planDoc.name === 'string' ? planDoc.name.trim() : '';
+
+    if (!planName) {
+        return null;
+    }
+
+    const duration = planDoc.duration;
+    const totalWeeks =
+        typeof duration === 'number' && Number.isFinite(duration) && duration >= 1
+            ? duration
+            : null;
+
+    const toIso = (value) => {
+        if (value == null || value === '') return null;
+        const date = value instanceof Date ? value : new Date(value);
+        return Number.isNaN(date.getTime()) ? null : date.toISOString();
+    };
+
+    const startDate = toIso(doc.startDate);
+    if (!startDate) {
+        return null;
+    }
+
+    return {
+        assignmentId: toIdString(doc._id ?? doc.id),
+        planId: toIdString(
+            doc.planId && typeof doc.planId === 'object'
+                ? doc.planId._id ?? doc.planId.id
+                : doc.planId
+        ),
+        planName,
+        status: doc.status,
+        startDate,
+        endDate: toIso(doc.endDate),
+        totalWeeks,
+        completedSessions:
+            typeof doc.completedSessions === 'number' ? doc.completedSessions : 0,
+        totalSessions: typeof doc.totalSessions === 'number' ? doc.totalSessions : 0,
+    };
+};

@@ -1,11 +1,13 @@
 import mongoose from 'mongoose';
 import User from '../users/user.model.js';
 import { ApiError } from '../../utils/ApiError.js';
-import { applyCoachingPackageEndDate } from './client.package-dates.js';
 import { resolveSubscriptionNeedsAttention } from './client.subscription-attention.js';
 import { buildClientListScopeQuery } from './client.list-scope.js';
 import { buildClientListSummary } from './client.list-summary.js';
 import workoutPlanService from '../workout-plans/workout-plan.service.js';
+import nutritionPlanAssignmentService from '../nutrition-plan-assignments/nutrition-plan-assignment.service.js';
+import clientSubscriptionService from '../client-subscriptions/client-subscription.service.js';
+import ClientSubscription from '../client-subscriptions/client-subscription.model.js';
 import {
     enrichClientPublicProfileWithInjuryAreas,
     validateHealthOptionIdsForCategory,
@@ -20,6 +22,8 @@ import {
     CLIENT_PLAN_UPDATE_FIELDS,
     pickAllowedUpdateFields,
 } from './client.update-allowlist.js';
+import ClientRegistrationRequest from '../client-registration-requests/client-registration-request.model.js';
+import { CLIENT_REGISTRATION_REQUEST_STATUS } from '../client-registration-requests/client-registration-request.constants.js';
 
 /**
  * Client Service
@@ -52,8 +56,10 @@ const buildClientResponse = async (client, clientId, trainerId) => {
 };
 
 /**
- * Attach nutrition restriction option IDs (canonical store: NutritionProfile).
- * Does not duplicate legacy string lists on the client DTO.
+ * Attach nutrition restriction IDs and display-ready option objects
+ * (canonical store: NutritionProfile). Reuses getNutritionProfile enrichment
+ * (allergyOptions / dietaryRestrictionOptions / unmapped* legacy strings).
+ * Does not create a NutritionProfile. Does not treat foodPreferences as allergies.
  */
 const enrichClientWithNutritionRestrictionIds = async (
     publicProfile,
@@ -76,8 +82,14 @@ const enrichClientWithNutritionRestrictionIds = async (
         return {
             ...publicProfile,
             allergyOptionIds: nutrition.allergyOptionIds ?? [],
+            allergyOptions: nutrition.allergyOptions ?? [],
             dietaryRestrictionOptionIds:
                 nutrition.dietaryRestrictionOptionIds ?? [],
+            dietaryRestrictionOptions:
+                nutrition.dietaryRestrictionOptions ?? [],
+            unmappedAllergies: nutrition.unmappedAllergies ?? [],
+            unmappedDietaryRestrictions:
+                nutrition.unmappedDietaryRestrictions ?? [],
         };
     } catch {
         return publicProfile;
@@ -94,8 +106,23 @@ const enrichClientWithNutritionRestrictionIds = async (
 const applyAllowlistedUserUpdates = (client, patch, allowedKeys) => {
     const userPatch = pickAllowedUpdateFields(patch, allowedKeys);
 
+    /**
+     * Joi empty-phone contract sets `phone` (and country fields) to undefined while
+     * keeping the own keys. pickAllowedUpdateFields skips undefined, so detect clear
+     * from the validated patch itself.
+     */
+    const phoneSubmitted = Object.prototype.hasOwnProperty.call(patch, 'phone');
+    const clearingPhone = phoneSubmitted && (patch.phone === '' || patch.phone == null);
+
     for (const [key, value] of Object.entries(userPatch)) {
-        if (key === 'phone' || key === 'additionalNotes' || key === 'medicalConditions' || key === 'injuries') {
+        if (
+            key === 'phone' ||
+            key === 'phoneCountryIso' ||
+            key === 'phoneCountryCode' ||
+            key === 'additionalNotes' ||
+            key === 'medicalConditions' ||
+            key === 'injuries'
+        ) {
             const normalized = normalizeOptionalStringField(value);
             if (normalized === undefined) {
                 client[key] = undefined;
@@ -107,13 +134,43 @@ const applyAllowlistedUserUpdates = (client, patch, allowedKeys) => {
         client[key] = value;
     }
 
-    if (
-        userPatch.startDate !== undefined ||
-        userPatch.packageDuration !== undefined ||
-        userPatch.endDate !== undefined
-    ) {
-        applyCoachingPackageEndDate(client);
+    // Clearing phone also clears structured country fields (legacy rows had none).
+    // Assigning undefined → Mongoose $unset on save (do not persist null placeholders).
+    if (clearingPhone) {
+        client.phone = undefined;
+        client.phoneCountryIso = undefined;
+        client.phoneCountryCode = undefined;
     }
+
+    /**
+     * Legacy-only phone write: Joi sets phoneCountryIso/Code to undefined, but
+     * pickAllowedUpdateFields skips undefined keys — so stale country metadata
+     * would otherwise remain. Explicitly $unset when phone is updated without
+     * structured country fields in the applied patch.
+     */
+    const legacyPhoneOnlyUpdate =
+        Object.prototype.hasOwnProperty.call(userPatch, 'phone') &&
+        !clearingPhone &&
+        userPatch.phoneCountryIso === undefined &&
+        userPatch.phoneCountryCode === undefined;
+
+    if (legacyPhoneOnlyUpdate) {
+        client.phoneCountryIso = undefined;
+        client.phoneCountryCode = undefined;
+    }
+};
+
+/**
+ * Roll back a client created in this request after a failed post-create step
+ * (nutrition profile or subscription). Never call for pre-existing clients.
+ *
+ * @param {import('mongoose').Types.ObjectId|string} clientId
+ * @param {import('mongoose').Types.ObjectId|string} trainerId
+ */
+const rollbackNewlyCreatedClient = async (clientId, trainerId) => {
+    await ClientSubscription.deleteMany({ clientId, trainerId });
+    await NutritionProfile.deleteMany({ clientId });
+    await User.findByIdAndDelete(clientId);
 };
 
 const applyInjuryUpdates = async (client, { injuryAreaOptionIds, injuryDetails }) => {
@@ -156,7 +213,9 @@ const applyNutritionRestrictionUpdates = async (
 };
 
 /**
- * Create a new client (creates User with role='client' and fitness data)
+ * Create a new client (creates User with role='client' and fitness data).
+ * Optional packageDuration creates a ClientSubscription via Subscription Service
+ * (dates + User snapshot sync). Does not write package fields directly.
  */
 const createClient = async (clientData, trainerId) => {
     const {
@@ -164,6 +223,9 @@ const createClient = async (clientData, trainerId) => {
         dietaryRestrictionOptionIds,
         injuryAreaOptionIds,
         injuryDetails,
+        packageDuration,
+        startDate: _ignoredStartDate,
+        endDate: _ignoredEndDate,
         ...restClientData
     } = clientData;
 
@@ -242,6 +304,8 @@ const createClient = async (clientData, trainerId) => {
         email: restClientData.email,
         password: restClientData.password,
         phone: restClientData.phone,
+        phoneCountryIso: restClientData.phoneCountryIso,
+        phoneCountryCode: restClientData.phoneCountryCode,
         dateOfBirth: restClientData.dateOfBirth,
         gender: restClientData.gender,
         role: 'client',
@@ -255,12 +319,9 @@ const createClient = async (clientData, trainerId) => {
         height: restClientData.height,
         experienceLevel: restClientData.experienceLevel,
 
-        // Program details (optional)
+        // Program details (optional; subscription snapshot owned by ClientSubscription)
         programType: restClientData.programType,
         sessionsPerWeek: restClientData.sessionsPerWeek,
-        startDate: restClientData.startDate,
-        packageDuration: restClientData.packageDuration,
-        endDate: restClientData.endDate,
 
         // Additional information (optional)
         additionalNotes: restClientData.additionalNotes,
@@ -280,8 +341,6 @@ const createClient = async (clientData, trainerId) => {
         delete userData.injuryAreaOptionIds;
     }
 
-    applyCoachingPackageEndDate(userData);
-
     let client;
     try {
         client = await User.create(userData);
@@ -293,11 +352,18 @@ const createClient = async (clientData, trainerId) => {
                 nutritionCreateBody
             );
         }
+
+        if (packageDuration) {
+            await clientSubscriptionService.createSubscription({
+                trainerId: String(trainerId),
+                clientId: client._id.toString(),
+                packageDuration,
+            });
+        }
     } catch (err) {
         if (client?._id) {
             try {
-                await NutritionProfile.deleteMany({ clientId: client._id });
-                await User.findByIdAndDelete(client._id);
+                await rollbackNewlyCreatedClient(client._id, trainerId);
             } catch (rollbackErr) {
                 const original = err?.message || String(err);
                 const rollback = rollbackErr?.message || String(rollbackErr);
@@ -310,10 +376,30 @@ const createClient = async (clientData, trainerId) => {
         throw err;
     }
 
-    // Populate trainer info and return
-    await client.populate('trainer', 'firstName lastName email');
-    const profile = client.getPublicProfile();
+    const refreshed = await User.findById(client._id);
+    await refreshed.populate('trainer', 'firstName lastName email');
+    const profile = refreshed.getPublicProfile();
     return enrichClientPublicProfileWithInjuryAreas(profile);
+};
+
+/**
+ * Trainer-scoped count of registration requests awaiting approval.
+ * Independent of list search / pagination / status filters.
+ *
+ * @param {string|import('mongoose').Types.ObjectId} trainerId
+ * @returns {Promise<number>}
+ */
+const countPendingRegistrationRequests = async (trainerId) => {
+    if (!mongoose.Types.ObjectId.isValid(String(trainerId))) {
+        return 0;
+    }
+
+    const count = await ClientRegistrationRequest.countDocuments({
+        trainerId: new mongoose.Types.ObjectId(String(trainerId)),
+        approvalStatus: CLIENT_REGISTRATION_REQUEST_STATUS.PENDING,
+    });
+
+    return Number.isFinite(count) && count > 0 ? count : 0;
 };
 
 /**
@@ -330,6 +416,8 @@ const listTrainerClients = async (
     });
 
     const summaryPromise = buildClientListSummary(scopeQuery);
+    const pendingRegistrationRequestsPromise =
+        countPendingRegistrationRequests(trainerId);
 
     if (search && String(search).trim()) {
         const clients = await User.find(scopeQuery)
@@ -341,7 +429,10 @@ const listTrainerClients = async (
             clients.map((client) => client.getPublicProfile())
         );
 
-        const summary = await summaryPromise;
+        const [summary, pendingRegistrationRequests] = await Promise.all([
+            summaryPromise,
+            pendingRegistrationRequestsPromise,
+        ]);
 
         return {
             clients: enriched,
@@ -352,19 +443,20 @@ const listTrainerClients = async (
                 pages: enriched.length > 0 ? 1 : 0,
             },
             summary,
+            pendingRegistrationRequests,
         };
     }
 
-    const listResult = await getClientsByTrainer(
-        trainerId,
-        scopeQuery,
-        { page, limit }
-    );
-    const summary = await summaryPromise;
+    const [listResult, summary, pendingRegistrationRequests] = await Promise.all([
+        getClientsByTrainer(trainerId, scopeQuery, { page, limit }),
+        summaryPromise,
+        pendingRegistrationRequestsPromise,
+    ]);
 
     return {
         ...listResult,
         summary,
+        pendingRegistrationRequests,
     };
 };
 
@@ -421,15 +513,38 @@ const getClientById = async (clientId, trainerId = null) => {
 
     const profile = client.getPublicProfile();
     const withInjuries = await enrichClientPublicProfileWithInjuryAreas(profile);
-    return enrichClientWithNutritionRestrictionIds(
+    const enriched = await enrichClientWithNutritionRestrictionIds(
         withInjuries,
         clientId,
         trainerId
     );
+
+    if (!trainerId) {
+        return {
+            ...enriched,
+            workoutPlanSummary: null,
+            nutritionPlanSummary: null,
+        };
+    }
+
+    const [workoutPlanSummary, nutritionPlanSummary] = await Promise.all([
+        workoutPlanService.getClientDetailsWorkoutPlanSummary(clientId, trainerId),
+        nutritionPlanAssignmentService.getClientDetailsNutritionPlanSummary(
+            clientId,
+            trainerId
+        ),
+    ]);
+
+    return {
+        ...enriched,
+        workoutPlanSummary,
+        nutritionPlanSummary,
+    };
 };
 
 /**
- * Update client profile (personal, fitness, health, package, allergies/dietary restrictions).
+ * Update client profile (personal, fitness, health, allergies/dietary restrictions).
+ * Coaching subscription snapshot fields are not writable here.
  */
 const updateClient = async (clientId, updateData, trainerId = null) => {
     const client = await loadClientForCoachMutation(clientId, trainerId);
@@ -448,7 +563,8 @@ const updateClient = async (clientId, updateData, trainerId = null) => {
 };
 
 /**
- * Update coaching package / fitness fields only (BFF PUT /clients/:id/plan).
+ * Update fitness / non-subscription program fields (BFF PUT /clients/:id/plan).
+ * Does not create or mutate ClientSubscription / User package snapshot.
  */
 const updateClientPlan = async (clientId, updateData, trainerId = null) => {
     const client = await loadClientForCoachMutation(clientId, trainerId);

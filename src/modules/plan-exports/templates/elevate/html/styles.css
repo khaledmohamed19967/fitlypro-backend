@@ -1,0 +1,1121 @@
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("fonts/inter-latin.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Inter";
+  font-style: italic;
+  font-weight: 800;
+  font-display: swap;
+  src: url("fonts/inter-italic-800.woff2") format("woff2");
+}
+
+:root {
+  --bg: #0b0d0f;
+  --card: #14171BEB;
+  --line: #2A2E35;
+  --lime: #ccff01;
+  --lime-line: #CCFF0138;
+  --orange: #f59e2e;
+  --orange-line: #c9843a;
+  --text: #ffffff;
+  --muted: #9AA2AC;
+  --silver: #c5cad0;
+  --section-space: 20px;      
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  background: #070809;
+  color: var(--text);
+}
+
+body {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 24px;
+  padding: 24px 0;
+}
+
+.page {
+  position: relative;
+  width: 794px;
+  height: 1123px;
+  overflow: hidden;
+  background: var(--bg);
+  font-family: Inter, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+  flex: none;
+}
+
+.page-workouts {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 32px 30px 24px;
+  gap: 10px;
+  page-break-before: always;
+  break-before: page;
+}
+
+.hero {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 461px;
+  height: 640px;
+  z-index: 1;
+  user-select: none;
+}
+
+.slash {
+  position: absolute;
+  left: 0;
+  bottom: 11px;
+  width: 794px;
+  height: 120px;
+  z-index: 3;
+  user-select: none;
+}
+
+.page-cover::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 16px;
+  z-index: 2;
+  background: linear-gradient(90deg, #b8e317 0%, #a9d50b 48%, #9cc901 100%);
+}
+
+.logo {
+  position: absolute;
+  z-index: 3;
+  left: 32px;
+  top: 34px;
+  display: flex;
+  align-items: flex-end;
+  line-height: 1;
+}
+
+.logo-f {
+  font-style: italic;
+  font-weight: 800;
+  font-size: 27px;
+  letter-spacing: -0.04em;
+  color: var(--lime);
+  line-height: 0.78;
+}
+
+.logo-word {
+  margin-left: 1px;
+  padding-bottom: 1px;
+  font-weight: 700;
+  font-size: 23px;
+  letter-spacing: -0.04em;
+  color: #fff;
+}
+
+.kicker {
+  position: absolute;
+  z-index: 3;
+  left: 32px;
+  top: 104px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #C9CED5;
+}
+
+/* Left column flows: title → dek → overview (no absolute overlap). */
+.left-stack {
+  position: absolute;
+  z-index: 3;
+  left: 30px;
+  top: 134px;
+  width: var(--title-width, 400px);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 24px;
+}
+
+.title-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 18px;
+  width: 100%;
+}
+
+.title {
+  position: static;
+  width: 100%;
+  max-width: 100%;
+  font-size: var(--title-size, 55px);
+  font-weight: 800;
+  /* Slightly above the original 0.9 so multi-line glyphs don't paint into the dek. */
+  line-height: var(--title-line-height, 0.98);
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+  color: #fff;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  hyphens: manual;
+}
+
+.title span {
+  color: var(--lime);
+}
+
+.dek {
+  position: static;
+  max-width: 100%;
+  font-size: 11.5px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #E6E8EA;
+}
+
+.overview {
+  position: static;
+  width: 100%;
+  height: 196px;
+  display: flex;
+  flex-direction: column;
+  padding: 0 14px 2px;
+  background: var(--card);
+  border-color: transparent;
+  box-shadow: 0 0 0 1px var(--lime-line);
+  border-radius: 16px;
+  flex: none;
+}
+
+/*
+ * Why steps look fine but overview does not on mobile:
+ *   .step/.stat → border: opaque --line (#2A2E35)
+ *   .overview   → border: semi-transparent --lime-line (#CCFF0138)
+ * Scaled mobile viewports smash that translucent lime + radius into a
+ * square corner fringe. Opaque dark borders hide the same artifact.
+ *
+ * Mobile-only: keep layout size with a transparent border, draw the lime
+ * ring via box-shadow (follows radius reliably). Desktop/PDF untouched.
+ */
+@media screen and (max-width: 1024px) {
+  .overview {
+    border-color: transparent;
+    box-shadow: 0 0 0 1px var(--lime-line);
+    overflow: hidden;
+    background-clip: padding-box;
+    -webkit-background-clip: padding-box;
+  }
+}
+
+.overview-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 46px;
+  flex: none;
+}
+
+.overview-head svg {
+  width: 16px;
+  height: 16px;
+  color: var(--lime);
+  flex: none;
+}
+
+.overview-head h2 {
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.overview-rows {
+  list-style: none;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.overview-rows li {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  font-size: 12px;
+  letter-spacing: -0.01em;
+}
+
+.overview-rows span {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.overview-rows strong {
+  font-weight: 600;
+  color: #f3f5f4;
+  text-align: right;
+}
+
+.overview-rows .lime {
+  color: var(--lime);
+  font-weight: 700;
+}
+
+.stats,
+.steps {
+  position: absolute;
+  z-index: 3;
+  left: 30px;
+  width: 713px;
+  display: grid;
+  gap: 9px;
+}
+
+.steps {
+  top: 780px;
+  height: 99px;
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.stats {
+  top: 900px;
+  height: 58px;
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.stat,
+.step {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+}
+
+.stat {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  min-width: 0;
+}
+
+.stat svg,
+.step svg {
+  width: 22px;
+  height: 22px;
+  color: var(--lime);
+  flex: none;
+}
+
+.stat strong {
+  display: block;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+
+.stat span {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.stat-hot {
+  border-color: var(--orange-line);
+}
+
+.stat-hot svg {
+  color: var(--orange);
+}
+
+.step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 3px;
+  padding: 10px 12px 12px;
+}
+
+.step svg {
+  width: 22px;
+  height: 22px;
+  margin-bottom: 8px;
+}
+
+.step h2 {
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  margin-bottom: 2px;
+}
+
+.step p {
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--muted);
+}
+
+/* —— Page 02: THE WORKOUTS (vertical flow; decorative corners only absolute) —— */
+.page-workouts .workouts-corner {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  right: 0;
+  pointer-events: none;
+  user-select: none;
+}
+
+.page-workouts .workouts-corner-dark {
+  width: 220px;
+  height: 220px;
+  object-fit: cover;
+  opacity: 0.95;
+}
+
+.page-workouts .workouts-corner-lime {
+  width: 150px;
+  height: 200px;
+  object-fit: cover;
+}
+
+/* Override shared .logo absolute so Page 02 header participates in flex flow. */
+.page-workouts .workouts-logo {
+  position: relative;
+  left: auto;
+  top: auto;
+  z-index: 3;
+  flex: none;
+  margin: 0;
+  margin-bottom: 10px;
+}
+
+.page-workouts .workouts-title {
+  position: relative;
+  z-index: 3;
+  flex: none;
+  margin: 4px 0 0;
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 0.92;
+  letter-spacing: -0.03em;
+  text-transform: uppercase;
+  color: #fff;
+}
+
+.page-workouts .workouts-title span {
+  color: var(--lime);
+}
+
+.page-workouts .workouts-grid {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 16px;
+}
+
+.page-workouts .workouts-dek {
+  position: relative;
+  z-index: 3;
+  flex: none;
+  margin: 0;
+  max-width: 520px;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.45;
+  letter-spacing: 0.01em;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+
+.page-workouts .workouts-list {
+  position: relative;
+  z-index: 3;
+  flex: none;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 4px 16px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+}
+
+.page-workouts .workout-row {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1.1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 6px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.page-workouts .workout-row:first-child {
+  border-top: 0;
+}
+
+.page-workouts .workout-letter {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--lime);
+  color: #0b0d0f;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.page-workouts .workout-copy {
+  min-width: 0;
+}
+
+.page-workouts .workout-copy h2 {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #fff;
+  line-height: 1.2;
+}
+
+.page-workouts .workout-copy p {
+  margin-top: 3px;
+  font-size: 11.5px;
+  color: var(--muted);
+  line-height: 1.2;
+}
+
+.page-workouts .workout-muscles {
+  justify-self: end;
+  text-align: right;
+  font-size: 12px;
+  font-weight: 500;
+  color: #d5dae0;
+  letter-spacing: -0.01em;
+}
+
+.page-workouts .workout-muscles:empty {
+  display: none;
+}
+
+.page-workouts .example-week {
+  position: relative;
+  z-index: 3;
+  flex: none;
+  width: 100%;
+  padding: 12px 14px 14px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+}
+
+.page-workouts .example-week-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.page-workouts .example-week-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.page-workouts .example-week-title svg {
+  width: 18px;
+  height: 18px;
+  color: var(--lime);
+  flex: none;
+}
+
+.page-workouts .example-week-title h2 {
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.page-workouts .example-week-head > p {
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: -0.01em;
+}
+
+.page-workouts .example-week-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+}
+
+.page-workouts .week-day {
+  min-height: 76px;
+  border-radius: 0 0 12px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 2px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 7px 4px;
+  text-align: center;
+}
+
+.page-workouts .week-day.is-active {
+  border-top: 2px solid var(--lime);
+}
+
+.page-workouts .week-day-icon {
+  width: 20px;
+  height: 20px;
+}
+
+.page-workouts .week-day.is-active .week-day-icon {
+  color: var(--lime);
+}
+
+.page-workouts .week-day.is-rest .week-day-icon {
+  color: var(--muted);
+}
+
+.page-workouts .week-day strong {
+  font-size: 12px;
+  font-weight: 650;
+  color: #ffffff;
+  line-height: 1;
+}
+
+.page-workouts .week-day.is-rest strong {
+  color: #c5cad0;
+}
+
+.page-workouts .week-day span {
+  font-size: 10.5px;
+  line-height: 1.2;
+  font-weight: 650;
+  color: #e8eaed;
+}
+
+.page-workouts .week-day.is-rest span {
+  color: var(--muted);
+}
+
+.page-workouts .program-notes {
+  position: relative;
+  z-index: 3;
+  flex: none;
+  width: 100%;
+  padding: 12px 16px 12px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+}
+
+.page-workouts .program-notes-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.page-workouts .program-notes-head svg {
+  width: 18px;
+  height: 18px;
+  color: var(--lime);
+  flex: none;
+}
+
+.page-workouts .program-notes-head h2 {
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.page-workouts .program-notes-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.page-workouts .program-notes-list li {
+  position: relative;
+  padding-left: 14px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: #c9ced5;
+}
+
+.page-workouts .program-notes-list li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.45em;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--lime);
+}
+
+.page-workouts .program-notes-list li.is-coach {
+  color: #c9d0d6;
+}
+
+/* Spare vertical space sits above the banner so short plans still pin photo+footer down. */
+.page-workouts .workouts-photo {
+  position: relative;
+  z-index: 3;
+  display: block;
+  width: 100%;
+  max-width: 718px;
+  height: auto;
+  max-height: 240px;
+  margin: auto auto 0;
+  object-fit: cover;
+  object-position: center;
+  border-radius: 12px;
+  flex: 0 1 auto;
+  min-height: 96px;
+  user-select: none;
+}
+
+.page-workouts .workouts-footer {
+  position: relative;
+  z-index: 3;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.01em;
+}
+
+/* —— Page 03+: WORKOUT PLAN details (flow layout; decorative corners absolute) —— */
+.page-workout-details {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 32px 30px 24px;
+  gap: 10px;
+  page-break-before: always;
+  break-before: page;
+}
+
+.page-workout-details .details-corner {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  right: 0;
+  pointer-events: none;
+  user-select: none;
+}
+
+.page-workout-details .details-corner-dark {
+  width: 220px;
+  height: 220px;
+  object-fit: cover;
+  opacity: 0.95;
+}
+
+.page-workout-details .details-corner-lime {
+  width: 150px;
+  height: 200px;
+  object-fit: cover;
+}
+
+.page-workout-details .details-slash {
+  position: absolute;
+  z-index: 1;
+  right: 0;
+  bottom: 0;
+  width: 210px;
+  height: auto;
+  pointer-events: none;
+  user-select: none;
+}
+
+.page-workout-details .details-logo {
+  position: relative;
+  left: auto;
+  top: auto;
+  z-index: 3;
+  flex: none;
+  margin: 0;
+  margin-bottom: 10px;
+}
+
+.page-workout-details .details-title {
+  position: relative;
+  z-index: 3;
+  flex: none;
+  margin: 4px 0 0;
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 0.92;
+  letter-spacing: -0.03em;
+  text-transform: uppercase;
+  color: #fff;
+}
+
+.page-workout-details .details-title span {
+  color: var(--lime);
+}
+
+.page-workout-details .details-dek {
+  position: relative;
+  z-index: 3;
+  flex: none;
+  margin: 0;
+  max-width: 460px;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.45;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+
+.page-workout-details .details-stack {
+  position: relative;
+  z-index: 3;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+}
+
+.page-workout-details .details-card {
+  position: relative;
+  isolation: isolate;
+  z-index: 0;
+  flex: none;
+  width: 100%;
+  padding: 0 14px 12px;
+  padding-left: 0;
+  background: var(--card);
+  /* Transparent border preserves size; visible ring via box-shadow (same technique as overview). */
+  border: 1px solid transparent;
+  border-radius: 16px;
+  box-shadow: 0 0 0 1px var(--details-outline, var(--lime));
+  overflow: hidden;
+  background-clip: padding-box;
+}
+
+.page-workout-details .details-card-empty {
+  box-shadow: 0 0 0 1px var(--line);
+  padding: 24px 16px;
+}
+
+.page-workout-details .details-empty {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.page-workout-details .details-card-head {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 -14px 14px 0;
+  padding-right: 14px;
+  min-height: 34px;
+  background: transparent;
+}
+
+.page-workout-details .details-pill {
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 78%;
+  min-height: 34px;
+  padding: 7px 18px 7px 10px;
+  /* Square left, rounded right — contained inside this card only. */
+  border-radius: 0 12px 12px 0;
+  background: var(--details-accent, var(--lime));
+  color: var(--details-accent-text, #0b0d0f);
+  font-size: 12.5px;
+  font-weight: 750;
+  letter-spacing: -0.015em;
+  line-height: 1.15;
+}
+
+.page-workout-details .details-card--lime .details-pill {
+background: linear-gradient(90deg, #CCFF01 0%, #B6E600 100%);
+;
+}
+
+.page-workout-details .details-card--orange .details-pill {
+  background: linear-gradient(90deg, #f7a33a 0%, #e8781a 100%);
+}
+
+.page-workout-details .details-card--lime {
+  --details-outline: var(--lime);
+  --details-accent: var(--lime);
+}
+
+.page-workout-details .details-card--orange {
+  --details-outline: #e8781a;
+  --details-accent: #e8781a;
+}
+
+.page-workout-details .details-pill svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+.page-workout-details .details-pill span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.page-workout-details .details-card-meta {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.page-workout-details .details-card-body {
+  position: relative;
+  z-index: 1;
+  padding-left: 16px;
+
+}
+
+.page-workout-details .details-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.page-workout-details .details-table th {
+  padding: 0 6px 8px;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  text-align: left;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.page-workout-details .details-table th:nth-child(1),
+.page-workout-details .details-table td.details-ex {
+  width: 60%;
+}
+
+.page-workout-details .details-table th:nth-child(2),
+.page-workout-details .details-table td.details-sets {
+  width: 8%;
+  text-align: center;
+}
+
+.page-workout-details .details-table th:nth-child(3),
+.page-workout-details .details-table td.details-reps {
+  width: 8%;
+  text-align: center;
+}
+
+.page-workout-details .details-table th:nth-child(4),
+.page-workout-details .details-table td.details-ticks {
+  width: 24%;
+  text-align: left;
+}
+
+.page-workout-details .details-row {
+  /* Rows stay with their JS-packed page; do not force CSS page breaks. */
+}
+
+.page-workout-details .details-row td {
+  padding: 8px 6px;
+  vertical-align: middle;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.page-workout-details .details-row:last-child td {
+  border-bottom: 0;
+}
+
+.page-workout-details td.details-ex {
+  padding-left: 0 !important;
+}
+
+.page-workout-details .details-ex-inner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.page-workout-details .details-thumb,
+.page-workout-details .details-thumb-fallback {
+  width: 50px;
+  height: 50px;
+  border-radius: 10px;
+  flex: none;
+  object-fit: cover;
+  background: #1a1e24;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.page-workout-details .details-thumb-fallback {
+  display: inline-block;
+  background:
+    linear-gradient(135deg, rgba(204, 255, 1, 0.18), transparent 55%),
+    #1a1e24;
+}
+
+.page-workout-details .details-ex-copy {
+  min-width: 0;
+}
+
+.page-workout-details .details-ex-name {
+  font-size: 12.5px;
+  font-weight: 650;
+  color: #fff;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+.page-workout-details .details-ex-note {
+  margin-top: 2px;
+  font-size: 10.5px;
+  line-height: 1.3;
+  color: var(--muted);
+}
+
+.page-workout-details .details-sets,
+.page-workout-details .details-reps {
+  text-align: center;
+  font-size: 13px;
+  font-weight: 650;
+  color: #e8eaed;
+}
+
+.page-workout-details td.details-ticks {
+  vertical-align: middle;
+}
+
+.page-workout-details .details-ticks-row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  width: max-content;
+  max-width: 100%;
+}
+
+.page-workout-details .details-tick {
+  width: 22px;
+  height: 14px;
+  border-radius: 4px;
+  border: 1.6px solid var(--details-accent, var(--lime));
+  background: transparent;
+  flex: 0 0 auto;
+}
+
+.page-workout-details .details-tick-empty {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.page-workout-details .details-footer {
+  position: relative;
+  z-index: 3;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.01em;
+}
+
+@page {
+  size: A4;
+  margin: 0;
+}
+
+@media print {
+  html,
+  body {
+    background: var(--bg);
+    min-height: 0;
+    height: auto;
+  }
+
+  body {
+    display: block;
+    gap: 0;
+    padding: 0;
+  }
+
+  .page {
+    margin: 0;
+    overflow: hidden;
+  }
+
+  .page-workouts,
+  .page-workout-details {
+    page-break-before: always;
+    break-before: page;
+  }
+
+  .page-workout-details:last-of-type {
+    page-break-after: avoid;
+    break-after: avoid;
+  }
+}
+
+* {
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}

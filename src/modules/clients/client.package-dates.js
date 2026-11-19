@@ -1,7 +1,18 @@
 /**
  * Coaching package end date for User.startDate / User.packageDuration / User.endDate.
  * Workout and nutrition PlanAssignment dates are unrelated.
+ *
+ * PACKAGE_DURATION_VALUES is the canonical FitlyFlow package duration key list
+ * (same values as User.packageDuration / ClientSubscription.packageDuration).
  */
+
+export const PACKAGE_DURATION_VALUES = Object.freeze([
+    '1_month',
+    '3_months',
+    '6_months',
+    '12_months',
+    'ongoing',
+]);
 
 export const PACKAGE_DURATION_MONTHS = Object.freeze({
     '1_month': 1,

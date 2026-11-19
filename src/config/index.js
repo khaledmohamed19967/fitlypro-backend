@@ -72,9 +72,13 @@ const config = {
         origin: parseCorsOrigin(process.env.CORS_ORIGIN),
     },
 
-    // Client-facing web app (invitation activation links)
+    // Client-facing web app (invitation / prospect-register links)
+    // Prefer CLIENT_APP_URL (documented); NUXT_CLIENT_APP_URL kept as alias.
     clientApp: {
-        url: normalizeUrl(process.env.CLIENT_APP_URL) || 'http://localhost:3000',
+        url:
+            normalizeUrl(process.env.CLIENT_APP_URL) ||
+            normalizeUrl(process.env.NUXT_CLIENT_APP_URL) ||
+            (env === 'production' ? 'https://fitlyflow.com' : 'http://localhost:3000'),
     },
 
     // Client invitation password-setup tokens

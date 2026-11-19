@@ -1,5 +1,6 @@
 import Joi from 'joi';
 import { healthOptionIdList } from '../health-reference/health-reference.validator.js';
+import { applyPhoneContractToValue } from '../../utils/phone.js';
 
 /**
  * Client Validation Schemas
@@ -40,13 +41,9 @@ export const validateCreateClient = Joi.object({
             'string.email': 'Please provide a valid email address',
         }),
 
-    phone: Joi.string()
-        .pattern(/^[0-9]{10,15}$/)
-        .trim()
-        .optional()
-        .messages({
-            'string.pattern.base': 'Please provide a valid phone number (10-15 digits)',
-        }),
+    phone: Joi.string().trim().optional().allow('', null),
+    phoneCountryIso: Joi.string().trim().uppercase().length(2).optional().allow('', null),
+    phoneCountryCode: Joi.string().trim().optional().allow('', null),
 
     dateOfBirth: Joi.date()
         .max('now')
@@ -137,19 +134,11 @@ export const validateCreateClient = Joi.object({
             'number.max': 'Sessions per week cannot exceed 7',
         }),
 
-    startDate: Joi.date()
-        .optional(),
-
+    // Optional coaching subscription duration — creates ClientSubscription after User create.
+    // startDate/endDate are server-owned by Subscription Service (stripped if sent).
     packageDuration: Joi.string()
         .valid('1_month', '3_months', '6_months', '12_months', 'ongoing')
         .optional(),
-
-    endDate: Joi.date()
-        .greater(Joi.ref('startDate'))
-        .optional()
-        .messages({
-            'date.greater': 'End date must be after start date',
-        }),
 
     // Additional Information
     additionalNotes: Joi.string()
@@ -188,7 +177,9 @@ export const validateCreateClient = Joi.object({
 
     allergyOptionIds: healthOptionIdList,
     dietaryRestrictionOptionIds: healthOptionIdList,
-});
+}).custom((value, helpers) =>
+    applyPhoneContractToValue(value, helpers, { required: false })
+);
 
 const personalFieldsSchema = {
     firstName: Joi.string()
@@ -211,14 +202,9 @@ const personalFieldsSchema = {
             'string.max': 'Last name cannot exceed 50 characters',
         }),
 
-    phone: Joi.string()
-        .pattern(/^[0-9]{10,15}$/)
-        .trim()
-        .allow('', null)
-        .optional()
-        .messages({
-            'string.pattern.base': 'Please provide a valid phone number (10-15 digits)',
-        }),
+    phone: Joi.string().trim().allow('', null).optional(),
+    phoneCountryIso: Joi.string().trim().uppercase().length(2).optional().allow('', null),
+    phoneCountryCode: Joi.string().trim().optional().allow('', null),
 
     dateOfBirth: Joi.date()
         .max('now')
@@ -284,21 +270,18 @@ const programFieldsSchema = {
         .max(7)
         .optional(),
 
-    startDate: Joi.date()
-        .optional(),
-
-    packageDuration: Joi.string()
-        .valid('1_month', '3_months', '6_months', '12_months', 'ongoing')
-        .optional(),
-
-    endDate: Joi.date()
-        .optional(),
-
     additionalNotes: Joi.string()
         .max(1000)
         .trim()
         .allow('', null)
         .optional(),
+};
+
+/** Coaching subscription snapshot — owned by ClientSubscription APIs. */
+const subscriptionSnapshotForbidden = {
+    startDate: Joi.forbidden(),
+    endDate: Joi.forbidden(),
+    packageDuration: Joi.forbidden(),
 };
 
 const healthUserFieldsSchema = {
@@ -340,12 +323,28 @@ export const validateUpdateClient = Joi.object({
     ...programFieldsSchema,
     ...healthUserFieldsSchema,
     ...nutritionRestrictionFieldsSchema,
-}).min(1);
+    ...subscriptionSnapshotForbidden,
+})
+    .min(1)
+    .custom((value, helpers) => {
+        if (
+            value.phone === undefined &&
+            value.phoneCountryIso === undefined &&
+            value.phoneCountryCode === undefined
+        ) {
+            return value;
+        }
+        return applyPhoneContractToValue(value, helpers, { required: false });
+    });
 
-/** Coaching / package subset for PUT /clients/:id/plan (BFF compatibility). */
+/**
+ * Fitness / non-subscription program fields for PUT /clients/:id/plan.
+ * Coaching subscription snapshot fields are forbidden (use Subscription API).
+ */
 export const validateUpdateClientPlan = Joi.object({
     ...fitnessFieldsSchema,
     ...programFieldsSchema,
+    ...subscriptionSnapshotForbidden,
 }).min(1);
 
 // Validation schema for adding progress note

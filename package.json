@@ -21,8 +21,13 @@
     "backfill:joined-coach-at": "node scripts/backfill-joined-coach-at.mjs",
     "test:coach-dashboard": "node scripts/test-coach-dashboard-overview.mjs",
     "test:clients-growth": "node scripts/test-clients-growth.mjs",
+    "test:phone-util": "node scripts/test-phone-util.mjs",
+    "test:phone-phase2": "node scripts/test-phone-phase2.mjs",
+    "test:phone-stale-metadata": "node scripts/test-phone-stale-metadata.mjs",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "test:client-profile-update": "node scripts/test-client-profile-update.mjs"
+    "test:client-profile-update": "node scripts/test-client-profile-update.mjs",
+    "pdf-studio": "node scripts/pdf-studio.mjs",
+    "test:pdf-studio": "node scripts/test-pdf-studio.mjs"
   },
   "keywords": [
     "fitness",
@@ -39,6 +44,7 @@
     "helmet": "^7.2.0",
     "joi": "^17.13.3",
     "jsonwebtoken": "^9.0.3",
+    "libphonenumber-js": "^1.13.16",
     "mongoose": "^9.0.2",
     "morgan": "^1.10.1",
     "multer": "^2.0.2",

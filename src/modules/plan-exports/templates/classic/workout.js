@@ -14,7 +14,10 @@ import {
 import { buildPublicExerciseUrl } from '../../pdf/publicExerciseUrl.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const WORKOUT_STYLES = readFileSync(join(__dirname, 'workout.css'), 'utf8');
+const WORKOUT_CSS_PATH = join(__dirname, 'workout.css');
+
+/** Read CSS on every HTML build (Studio-friendly; no process restart). */
+const loadWorkoutStyles = () => readFileSync(WORKOUT_CSS_PATH, 'utf8');
 
 const summarizeSets = (sets = []) => {
     const working = sets.filter((s) => !s.isWarmup);
@@ -265,7 +268,7 @@ const wrapWorkoutDocument = ({
   <title>${pageTitle}</title>
   <link rel="preconnect" href="https://rsms.me/" />
   <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
-  <style>${WORKOUT_STYLES}</style>
+  <style>${loadWorkoutStyles()}</style>
 </head>
 <body>
   <div class="page-wrap">

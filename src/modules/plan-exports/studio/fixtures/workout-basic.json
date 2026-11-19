@@ -1,0 +1,55 @@
+{
+  "type": "workout",
+  "plan": {
+    "id": "fixture-workout-basic",
+    "name": "Studio Fixture <b>Workout</b>",
+    "description": "Deterministic workout export model with escaped markup & optional notes.",
+    "duration": 8,
+    "daysPerWeek": 3,
+    "goal": "general_fitness",
+    "level": "beginner",
+    "notes": "Keep rest times honest. <script>alert(1)</script>",
+    "status": "active",
+    "isTemplate": false,
+    "totalExercises": 2,
+    "totalDays": 1
+  },
+  "trainer": {
+    "id": "fixture-trainer",
+    "fullName": "Studio Coach",
+    "email": "studio-coach@example.com",
+    "phone": "+1 555 0100"
+  },
+  "content": {
+    "workoutDays": [
+      {
+        "dayNumber": 1,
+        "name": "Full Body A",
+        "description": null,
+        "exercises": [
+          {
+            "name": "Goblet Squat",
+            "order": 1,
+            "restBetweenSets": 90,
+            "notes": null,
+            "tempo": null,
+            "sets": [
+              { "setNumber": 1, "reps": 10, "weight": 20, "weightUnit": "kg", "isWarmup": false, "isDropset": false },
+              { "setNumber": 2, "reps": 10, "weight": 20, "weightUnit": "kg", "isWarmup": false, "isDropset": false }
+            ]
+          },
+          {
+            "name": "Push-Up",
+            "order": 2,
+            "restBetweenSets": 60,
+            "notes": "Chest to floor",
+            "tempo": "3010",
+            "sets": [
+              { "setNumber": 1, "reps": 12, "weight": null, "weightUnit": "kg", "isWarmup": false, "isDropset": false }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
