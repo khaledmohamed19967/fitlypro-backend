@@ -761,6 +761,210 @@ async function runUnitTests() {
         );
     }
 
+    const elevateLinkUrl = buildPublicExerciseUrl({
+        exerciseId: '507f1f77bcf86cd799439011',
+        slug: 'barbell-squat',
+        ownershipType: 'system',
+        status: 'active',
+    });
+    const elevateThumbUrl = 'https://cdn.example.com/exercises/barbell-squat.png';
+    const elevateLinkHtml = buildElevateWorkoutHtml({
+        type: 'workout',
+        plan: {
+            id: 'elevate-links',
+            name: 'Elevate Link Plan',
+            duration: 4,
+            notes: null,
+            totalExercises: 4,
+            totalDays: 1,
+        },
+        trainer: { fullName: 'Coach', email: 'coach@example.com', phone: null },
+        content: {
+            workoutDays: [
+                {
+                    dayNumber: 1,
+                    name: 'Full Body A',
+                    exercises: [
+                        {
+                            exerciseId: '507f1f77bcf86cd799439011',
+                            slug: 'barbell-squat',
+                            ownershipType: 'system',
+                            status: 'active',
+                            name: 'Barbell Squat',
+                            order: 1,
+                            thumbnailUrl: elevateThumbUrl,
+                            notes: 'Keep chest up',
+                            muscles: { primary: 'quadriceps', secondary: [] },
+                            sets: [{ reps: 10 }, { reps: 10 }, { reps: 10 }],
+                        },
+                        {
+                            exerciseId: 'trainer-ex-9',
+                            slug: 'my-custom-press',
+                            ownershipType: 'trainer',
+                            status: 'active',
+                            name: 'Custom Press',
+                            order: 2,
+                            thumbnailUrl: 'https://cdn.example.com/custom.png',
+                            muscles: { primary: 'chest', secondary: [] },
+                            sets: [{ reps: 8 }],
+                        },
+                        {
+                            exerciseId: 'archived-ex-1',
+                            slug: 'old-system-move',
+                            ownershipType: 'system',
+                            status: 'archived',
+                            name: 'Archived Move',
+                            order: 3,
+                            thumbnailUrl: 'https://cdn.example.com/old.png',
+                            muscles: { primary: 'back', secondary: [] },
+                            sets: [{ reps: 8 }],
+                        },
+                        {
+                            exerciseId: null,
+                            slug: null,
+                            ownershipType: null,
+                            status: null,
+                            name: 'Missing Move',
+                            order: 4,
+                            thumbnailUrl: null,
+                            sets: [{ reps: 5 }],
+                        },
+                    ],
+                },
+            ],
+        },
+    });
+
+    const elevateNameLink = `<a class="details-ex-name details-ex-link" href="${escapeHtml(
+        elevateLinkUrl
+    )}">Barbell Squat</a>`;
+    const elevateImageLinkPrefix = `<a class="details-ex-thumb-link details-ex-link" href="${escapeHtml(
+        elevateLinkUrl
+    )}"`;
+
+    if (
+        elevateLinkUrl &&
+        elevateLinkHtml.includes(elevateNameLink) &&
+        elevateLinkHtml.includes(elevateImageLinkPrefix) &&
+        elevateLinkHtml.includes(`src="${escapeHtml(elevateThumbUrl)}"`) &&
+        !elevateLinkHtml.includes(
+            `href="${escapeHtml(elevateLinkUrl)}">Keep chest up`
+        )
+    ) {
+        pass('elevate active system exercise name + image are linked');
+    } else {
+        fail(
+            'elevate active system exercise name + image are linked',
+            elevateLinkHtml.match(/Barbell Squat[\s\S]{0,220}/)?.[0] || 'missing'
+        );
+    }
+
+    const elevateNameHrefCount = (
+        elevateLinkHtml.match(
+            new RegExp(
+                `href="${escapeHtml(elevateLinkUrl).replace(
+                    /[.*+?^${}()|[\]\\]/g,
+                    '\\$&'
+                )}"`,
+                'g'
+            )
+        ) || []
+    ).length;
+    if (elevateNameHrefCount === 2) {
+        pass('elevate name and image use the same public URL');
+    } else {
+        fail(
+            'elevate name and image use the same public URL',
+            `hrefCount=${elevateNameHrefCount}`
+        );
+    }
+
+    if (
+        elevateLinkHtml.includes('<p class="details-ex-name">Custom Press</p>') &&
+        !elevateLinkHtml.includes('my-custom-press') &&
+        !/details-ex-link"[^>]*>Custom Press/.test(elevateLinkHtml)
+    ) {
+        pass('elevate trainer-owned exercise remains unlinked');
+    } else {
+        fail(
+            'elevate trainer-owned exercise remains unlinked',
+            elevateLinkHtml.match(/Custom Press[\s\S]{0,160}/)?.[0] || 'missing'
+        );
+    }
+
+    if (
+        elevateLinkHtml.includes('<p class="details-ex-name">Archived Move</p>') &&
+        !elevateLinkHtml.includes('old-system-move') &&
+        !/details-ex-link"[^>]*>Archived Move/.test(elevateLinkHtml)
+    ) {
+        pass('elevate archived exercise remains unlinked');
+    } else {
+        fail(
+            'elevate archived exercise remains unlinked',
+            elevateLinkHtml.match(/Archived Move[\s\S]{0,160}/)?.[0] || 'missing'
+        );
+    }
+
+    if (
+        elevateLinkHtml.includes('<p class="details-ex-name">Missing Move</p>') &&
+        !/details-ex-link"[^>]*>Missing Move/.test(elevateLinkHtml)
+    ) {
+        pass('elevate missing exercise remains unlinked');
+    } else {
+        fail(
+            'elevate missing exercise remains unlinked',
+            elevateLinkHtml.match(/Missing Move[\s\S]{0,160}/)?.[0] || 'missing'
+        );
+    }
+
+    const elevateLinkPdf = await renderElevateWorkoutPdf({
+        type: 'workout',
+        plan: {
+            id: 'elevate-links-pdf',
+            name: 'Elevate Link Plan',
+            duration: 4,
+            notes: null,
+            totalExercises: 1,
+            totalDays: 1,
+        },
+        trainer: { fullName: 'Coach', email: 'coach@example.com', phone: null },
+        content: {
+            workoutDays: [
+                {
+                    dayNumber: 1,
+                    name: 'Full Body A',
+                    exercises: [
+                        {
+                            exerciseId: '507f1f77bcf86cd799439011',
+                            slug: 'barbell-squat',
+                            ownershipType: 'system',
+                            status: 'active',
+                            name: 'Barbell Squat',
+                            order: 1,
+                            thumbnailUrl: elevateThumbUrl,
+                            muscles: { primary: 'quadriceps', secondary: [] },
+                            sets: [{ reps: 10 }, { reps: 10 }, { reps: 10 }],
+                        },
+                    ],
+                },
+            ],
+        },
+    });
+    const elevateLinkPdfText = elevateLinkPdf?.toString?.('latin1') || '';
+    if (
+        Buffer.isBuffer(elevateLinkPdf) &&
+        elevateLinkPdf.slice(0, 5).toString() === '%PDF-' &&
+        elevateLinkUrl &&
+        elevateLinkPdfText.includes(elevateLinkUrl)
+    ) {
+        pass('elevate PDF embeds clickable public exercise URL');
+    } else {
+        fail(
+            'elevate PDF embeds clickable public exercise URL',
+            elevateLinkUrl || 'missing url'
+        );
+    }
+
     const coverOutDir = join(dirname(fileURLToPath(import.meta.url)), '.preview');
     mkdirSync(coverOutDir, { recursive: true });
     const titleCases = [

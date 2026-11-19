@@ -15,6 +15,7 @@ import { readFileSync, existsSync } from 'fs';
 import { dirname, join, normalize, sep } from 'path';
 import { fileURLToPath } from 'url';
 import { escapeHtml, formatLabel } from '../../pdf/htmlEscape.js';
+import { buildPublicExerciseUrl } from '../../pdf/publicExerciseUrl.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 export const ELEVATE_HTML_DIR = join(__dirname, 'html');
@@ -567,6 +568,7 @@ const buildDetailWorkout = (day, index) => {
             name: String(exercise?.name ?? '').trim() || 'Exercise',
             notes: String(exercise?.notes ?? '').trim() || null,
             imageUrl: sanitizeExerciseImageUrl(exercise?.thumbnailUrl),
+            publicUrl: buildPublicExerciseUrl(exercise),
             setCountLabel: summary.setCountLabel,
             repsLabel: summary.repsLabel,
             checkboxCount: summary.checkboxCount,
@@ -817,12 +819,27 @@ const renderDetailWorkoutCard = (block) => {
                   const note = exercise.notes
                       ? `<p class="details-ex-note">${escapeHtml(exercise.notes)}</p>`
                       : '';
+                  const safeName = escapeHtml(exercise.name);
+                  const safeHref = exercise.publicUrl
+                      ? escapeHtml(exercise.publicUrl)
+                      : null;
+                  const nameHtml = safeHref
+                      ? `<a class="details-ex-name details-ex-link" href="${safeHref}">${safeName}</a>`
+                      : `<p class="details-ex-name">${safeName}</p>`;
+                  const imageTag = `<img class="details-thumb" src="${escapeHtml(
+                      imageSrc
+                  )}" alt="">`;
+                  // Link real catalog thumbnails only — never the SVG fallback silhouette.
+                  const imageHtml =
+                      safeHref && exercise.imageUrl
+                          ? `<a class="details-ex-thumb-link details-ex-link" href="${safeHref}">${imageTag}</a>`
+                          : imageTag;
                   return `<tr class="details-row">
             <td class="details-ex">
               <div class="details-ex-inner">
-                <img class="details-thumb" src="${escapeHtml(imageSrc)}" alt="">
+                ${imageHtml}
                 <div class="details-ex-copy">
-                  <p class="details-ex-name">${escapeHtml(exercise.name)}</p>
+                  ${nameHtml}
                   ${note}
                 </div>
               </div>

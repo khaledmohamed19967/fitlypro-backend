@@ -1013,11 +1013,25 @@ background: linear-gradient(90deg, #CCFF01 0%, #B6E600 100%);
 }
 
 .page-workout-details .details-ex-name {
+  display: block;
   font-size: 12.5px;
   font-weight: 650;
   color: #fff;
   line-height: 1.25;
   letter-spacing: -0.01em;
+}
+
+.page-workout-details a.details-ex-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.page-workout-details a.details-ex-thumb-link {
+  display: block;
+  flex: none;
+  line-height: 0;
+  color: inherit;
+  text-decoration: none;
 }
 
 .page-workout-details .details-ex-note {
