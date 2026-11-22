@@ -160,18 +160,76 @@ export const normalizeNutritionPer100g = (nutrition = {}) => {
     return normalized;
 };
 
+const normalizeSnapshotServings = (servings = []) =>
+    (Array.isArray(servings) ? servings : [])
+        .filter((entry) => entry?.id && entry?.label && Number(entry.gramWeight) > 0)
+        .map((entry) => ({
+            id: String(entry.id),
+            label: String(entry.label),
+            quantity: entry.quantity,
+            unit: entry.unit,
+            gramWeight: entry.gramWeight,
+        }));
+
 /**
- * Build food snapshot for future NutritionPlan PlanFoodItem embedding.
+ * Build an immutable food snapshot for a plan food item.
+ * When `selectedServingId` matches a catalog (or previous-snapshot) serving,
+ * snapshot.defaultServing uses that serving's quantity/unit/gramWeight.
  *
  * @param {import('mongoose').Document|object} food
+ * @param {{
+ *   selectedServingId?: string|null,
+ *   previousSnapshot?: object|null,
+ * }} [options]
  * @returns {object|null}
  */
-export const buildFoodSnapshot = (food) => {
+export const buildFoodSnapshot = (food, options = {}) => {
     if (!food) {
         return null;
     }
 
     const doc = toPlainObject(food);
+    const previousSnapshot = options.previousSnapshot
+        ? toPlainObject(options.previousSnapshot)
+        : null;
+    const catalogServings = normalizeSnapshotServings(doc.servings);
+    const previousServings = normalizeSnapshotServings(previousSnapshot?.servings);
+    // Prefer live catalog servings; fall back to frozen snapshot servings on update
+    // when the Food document has not been backfilled yet.
+    const servings = catalogServings.length ? catalogServings : previousServings;
+
+    let defaultServing = {
+        quantity: doc.defaultServing?.quantity,
+        unit: doc.defaultServing?.unit,
+        gramWeight: doc.defaultServing?.gramWeight,
+    };
+
+    const selectedServingId =
+        options.selectedServingId != null && String(options.selectedServingId).trim()
+            ? String(options.selectedServingId).trim()
+            : null;
+
+    if (selectedServingId && servings.length) {
+        const match = servings.find((entry) => entry.id === selectedServingId);
+        if (match) {
+            defaultServing = {
+                quantity: match.quantity,
+                unit: match.unit,
+                gramWeight: match.gramWeight,
+            };
+        } else if (
+            previousSnapshot?.defaultServing?.gramWeight != null &&
+            previousSnapshot.defaultServing.gramWeight > 0
+        ) {
+            // selectedServingId present but unmatched in available servings lists —
+            // keep the previously frozen gramWeight rather than resetting to catalog default.
+            defaultServing = {
+                quantity: previousSnapshot.defaultServing.quantity,
+                unit: previousSnapshot.defaultServing.unit,
+                gramWeight: previousSnapshot.defaultServing.gramWeight,
+            };
+        }
+    }
 
     return {
         name: doc.name,
@@ -192,11 +250,8 @@ export const buildFoodSnapshot = (food) => {
                 ? { sodium: doc.nutritionPer100g.sodium }
                 : {}),
         },
-        defaultServing: {
-            quantity: doc.defaultServing?.quantity,
-            unit: doc.defaultServing?.unit,
-            gramWeight: doc.defaultServing?.gramWeight,
-        },
+        defaultServing,
+        ...(servings.length ? { servings } : {}),
         ...(doc.image?.url || doc.image?.thumbnailUrl
             ? {
                   image: {
@@ -243,6 +298,39 @@ export const toPublicFood = (food) => {
             unit: doc.defaultServing?.unit,
             gramWeight: doc.defaultServing?.gramWeight,
         },
+        ...(doc.defaultServingId
+            ? { defaultServingId: String(doc.defaultServingId) }
+            : {}),
+        ...(Array.isArray(doc.servings) && doc.servings.length
+            ? {
+                  servings: doc.servings
+                      .filter((entry) => entry?.id && entry?.label && entry?.gramWeight > 0)
+                      .map((entry) => {
+                          const id = String(entry.id);
+                          const isFitlyDefault =
+                              doc.defaultServingId != null &&
+                              String(doc.defaultServingId) === id;
+                          return {
+                              id,
+                              label: String(entry.label),
+                              quantity: entry.quantity,
+                              unit: entry.unit,
+                              gramWeight: entry.gramWeight,
+                              ...(isFitlyDefault ? { isDefault: true } : {}),
+                              ...(entry.nutrition
+                                  ? {
+                                        nutrition: {
+                                            calories: entry.nutrition.calories ?? 0,
+                                            protein: entry.nutrition.protein ?? 0,
+                                            carbs: entry.nutrition.carbs ?? 0,
+                                            fat: entry.nutrition.fat ?? 0,
+                                        },
+                                    }
+                                  : {}),
+                          };
+                      }),
+              }
+            : {}),
         ...(doc.image?.url || doc.image?.thumbnailUrl
             ? {
                   image: {

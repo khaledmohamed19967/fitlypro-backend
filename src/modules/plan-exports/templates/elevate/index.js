@@ -1,8 +1,9 @@
 /**
- * Elevate workout cover renderer (template id: `elevate`).
+ * Elevate plan PDF renderers (template id: `elevate`).
  *
- * Active design source: templates/elevate/html/ via page.js
- * Registered in templates/index.js under RENDERERS.elevate.workout.
+ * Workout: templates/elevate/html/ via page.js
+ * Nutrition Pages 01–03: templates/elevate/html/nutrition.html via nutrition.js
+ * Registered in templates/index.js under RENDERERS.elevate.*
  */
 
 import { renderHtmlToPdf } from '../../pdf/htmlPdfRenderer.js';
@@ -10,6 +11,7 @@ import {
     buildElevateWorkoutHtml,
     buildHighlightedTitleHtml,
 } from './page.js';
+import { buildElevateNutritionHtml } from './nutrition.js';
 
 /** Cover page owns its own @page margins (0). Matches html/styles.css @page A4. */
 export const ELEVATE_PDF_OPTIONS = Object.freeze({
@@ -28,4 +30,19 @@ export const renderElevateWorkoutPdf = async (exportModel) => {
     return renderHtmlToPdf(html, ELEVATE_PDF_OPTIONS);
 };
 
-export { buildElevateWorkoutHtml, buildHighlightedTitleHtml };
+/**
+ * Elevate Nutrition — Pages 01–03 (Cover, Daily Meal Plan, Supplements & Notes).
+ *
+ * @param {object} exportModel
+ * @returns {Promise<Buffer>}
+ */
+export const renderElevateNutritionPdf = async (exportModel) => {
+    const html = buildElevateNutritionHtml(exportModel);
+    return renderHtmlToPdf(html, ELEVATE_PDF_OPTIONS);
+};
+
+export {
+    buildElevateWorkoutHtml,
+    buildElevateNutritionHtml,
+    buildHighlightedTitleHtml,
+};

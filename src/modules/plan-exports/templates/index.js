@@ -11,11 +11,15 @@ import {
     renderClassicNutritionPdf,
     renderClassicWorkoutPdf,
 } from './classic/index.js';
-import { renderElevateWorkoutPdf } from './elevate/index.js';
+import {
+    renderElevateNutritionPdf,
+    renderElevateWorkoutPdf,
+} from './elevate/index.js';
 
 /**
- * Elevate workout cover — HTML source lives under templates/elevate/html/
- * and is rendered by page.js (same Playwright pipeline as Classic).
+ * Elevate — HTML source lives under templates/elevate/html/
+ * Workout: page.js · Nutrition Page 01: nutrition.js
+ * Same Playwright pipeline as Classic.
  */
 const RENDERERS = Object.freeze({
     classic: Object.freeze({
@@ -24,6 +28,7 @@ const RENDERERS = Object.freeze({
     }),
     elevate: Object.freeze({
         workout: renderElevateWorkoutPdf,
+        nutrition: renderElevateNutritionPdf,
     }),
 });
 const cloneAssets = (assets) => {

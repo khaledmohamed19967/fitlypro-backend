@@ -84,10 +84,23 @@ const exportPlanPdf = async (input, trainerId) => {
     try {
         buffer = await renderer(exportModel);
     } catch (error) {
+        // Keep client response generic; retain diagnostics for server logs only.
+        console.error('[plan-export] PDF generation failed', {
+            planType,
+            planId,
+            templateId,
+            message: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : undefined,
+        });
         throw new ApiError(500, 'PDF generation failed');
     }
 
     if (!Buffer.isBuffer(buffer) || buffer.length === 0) {
+        console.error('[plan-export] PDF generation returned empty buffer', {
+            planType,
+            planId,
+            templateId,
+        });
         throw new ApiError(500, 'PDF generation failed');
     }
 

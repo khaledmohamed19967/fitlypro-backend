@@ -121,7 +121,7 @@ const servingNutrition = (serving = {}) => ({
     ...(toFiniteNumber(serving.sodium) != null ? { sodium: toFiniteNumber(serving.sodium) } : {}),
 });
 
-const metricGrams = (serving = {}) => {
+export const metricGrams = (serving = {}) => {
     const amount = toFiniteNumber(serving.metric_serving_amount);
     const unit = String(serving.metric_serving_unit || '').toLowerCase();
     if (amount == null || amount <= 0) {
@@ -137,10 +137,102 @@ const metricGrams = (serving = {}) => {
 };
 
 /**
- * Map FatSecret servings into Fitly nutritionPer100g + defaultServing.
+ * Map one FatSecret serving into a Fitly alternate-serving option.
+ * Skips entries without a reliable metric gram/ml weight (never invents).
+ *
+ * Label stays the source description (e.g. "1 large") — not remapped to a unit name.
+ *
+ * @param {object} serving
+ * @returns {{
+ *   id: string,
+ *   label: string,
+ *   quantity: number,
+ *   unit: 'g'|'ml'|'serving',
+ *   gramWeight: number,
+ *   nutrition?: { calories: number, protein: number, carbs: number, fat: number },
+ * }|null}
+ * (`isDefault` is stamped later by mapServings for the Fitly-chosen default.)
+ */
+export const mapAlternateServing = (serving = {}) => {
+    const grams = metricGrams(serving);
+    if (grams == null || grams <= 0) {
+        return null;
+    }
+
+    const id = String(serving.serving_id || '').trim();
+    const label = String(serving.serving_description || '').trim();
+    if (!id || !label) {
+        return null;
+    }
+
+    const metricUnit =
+        String(serving.metric_serving_unit || 'g').toLowerCase() === 'ml' ? 'ml' : 'g';
+    const isPureMetricLabel = /^\d+(\.\d+)?\s*(g|ml)$/i.test(label);
+    const isPieceLike = /piece|slice|large|medium|small|whole|egg/i.test(label);
+    const unitsCount = toFiniteNumber(serving.number_of_units);
+    const discreteQty =
+        unitsCount != null && unitsCount > 0 && Math.abs(unitsCount - grams) > 0.5
+            ? unitsCount
+            : 1;
+
+    let quantity;
+    let unit;
+    if (isPureMetricLabel) {
+        quantity = grams;
+        unit = metricUnit;
+    } else if (metricUnit === 'ml' && !isPieceLike) {
+        quantity = grams;
+        unit = 'ml';
+    } else if (isPieceLike) {
+        quantity = discreteQty;
+        unit = 'piece';
+    } else {
+        quantity = discreteQty;
+        unit = 'serving';
+    }
+
+    const nutrition = servingNutrition(serving);
+
+    return {
+        id,
+        label: label.slice(0, 120),
+        quantity,
+        unit,
+        gramWeight: Math.round(grams * 1000) / 1000,
+        nutrition: {
+            calories: nutrition.calories,
+            protein: nutrition.protein,
+            carbs: nutrition.carbs,
+            fat: nutrition.fat,
+        },
+    };
+};
+
+/**
+ * True when FatSecret marks this serving as the suggested default (`is_default` = 1).
+ * Accepts numeric 1 or string "1". Serving must already be metric-valid (caller filters).
+ *
+ * @param {object} serving
+ * @returns {boolean}
+ */
+export const isFatSecretDefaultServing = (serving = {}) => {
+    const id = String(serving.serving_id || '').trim();
+    if (!id) return false;
+    return Number(serving.is_default) === 1;
+};
+
+/**
+ * Map FatSecret servings into Fitly nutritionPer100g + defaultServing + servings[].
+ *
+ * Hybrid default selection (Option C):
+ * 1. FatSecret explicit default (`is_default === 1`) with valid id + metric grams
+ * 2. Else approximately 100g serving
+ * 3. Else first serving with reliable metric grams
+ *
+ * `defaultServingId` / optional `servings[].isDefault` always reflect the Fitly-chosen default.
  *
  * @param {object[]} servings
- * @returns {{ nutritionPer100g: object, defaultServing: object }|null}
+ * @returns {{ nutritionPer100g: object, defaultServing: object, defaultServingId: string|null, servings: object[] }|null}
  */
 export const mapServings = (servings = []) => {
     const list = toArray(servings).filter(Boolean);
@@ -152,40 +244,95 @@ export const mapServings = (servings = []) => {
         .map((serving) => ({ serving, grams: metricGrams(serving) }))
         .filter((entry) => entry.grams != null && entry.grams > 0);
 
+    const defaultFlagged = withGrams.find((entry) => isFatSecretDefaultServing(entry.serving));
     const hundredGram = withGrams.find((entry) => Math.abs(entry.grams - 100) < 0.5);
-    const defaultFlagged = withGrams.find((entry) => Number(entry.serving.is_default) === 1);
-    const chosen = hundredGram || defaultFlagged || withGrams[0];
+    const chosen = defaultFlagged || hundredGram || withGrams[0];
 
-    if (chosen) {
-        const nutritionPer100g = scaleNutritionTo100g(servingNutrition(chosen.serving), chosen.grams);
-        if (!nutritionPer100g) {
-            return null;
-        }
-
-        const unit = String(chosen.serving.metric_serving_unit || 'g').toLowerCase() === 'ml' ? 'ml' : 'g';
-        const isPieceLike = /piece|slice|large|medium|small|whole|egg/i.test(
-            String(chosen.serving.serving_description || '')
-        );
-
-        const defaultServing = hundredGram
-            ? { ...DEFAULT_SERVING }
-            : isPieceLike
-              ? {
-                    quantity: toFiniteNumber(chosen.serving.number_of_units) || 1,
-                    unit: 'piece',
-                    gramWeight: chosen.grams,
-                }
-              : {
-                    quantity: chosen.grams,
-                    unit,
-                    gramWeight: chosen.grams,
-                };
-
-        return { nutritionPer100g, defaultServing };
+    if (!chosen) {
+        return null;
     }
 
-    return null;
+    const nutritionPer100g = scaleNutritionTo100g(
+        servingNutrition(chosen.serving),
+        chosen.grams
+    );
+    if (!nutritionPer100g) {
+        return null;
+    }
+
+    const unit =
+        String(chosen.serving.metric_serving_unit || 'g').toLowerCase() === 'ml'
+            ? 'ml'
+            : 'g';
+    const isPieceLike = /piece|slice|large|medium|small|whole|egg/i.test(
+        String(chosen.serving.serving_description || '')
+    );
+    const chosenIsHundredGram = Math.abs(chosen.grams - 100) < 0.5;
+
+    // Shape defaultServing from the *chosen* serving (not from whether 100g exists in the list).
+    const defaultServing = chosenIsHundredGram
+        ? { ...DEFAULT_SERVING }
+        : isPieceLike
+          ? {
+                quantity: toFiniteNumber(chosen.serving.number_of_units) || 1,
+                unit: 'piece',
+                gramWeight: chosen.grams,
+            }
+          : {
+                quantity: chosen.grams,
+                unit,
+                gramWeight: chosen.grams,
+            };
+
+    const alternateServings = [];
+    const seenIds = new Set();
+    for (const entry of withGrams) {
+        const mapped = mapAlternateServing(entry.serving);
+        if (!mapped || seenIds.has(mapped.id)) continue;
+        seenIds.add(mapped.id);
+        alternateServings.push(mapped);
+    }
+
+    const defaultServingId = String(chosen.serving.serving_id || '').trim() || null;
+
+    // Stamp Fitly-selected default only (may equal FatSecret is_default, or a fallback).
+    for (const option of alternateServings) {
+        if (defaultServingId && option.id === defaultServingId) {
+            option.isDefault = true;
+        } else {
+            delete option.isDefault;
+        }
+    }
+
+    return {
+        nutritionPer100g,
+        defaultServing,
+        defaultServingId,
+        servings: alternateServings,
+    };
 };
+
+/** Persistable serving options (drops source-only isDefault; keeps nutrition when present). */
+const toPersistableServings = (servings = []) =>
+    toArray(servings)
+        .filter(Boolean)
+        .map((serving) => ({
+            id: String(serving.id),
+            label: String(serving.label),
+            quantity: serving.quantity,
+            unit: serving.unit,
+            gramWeight: serving.gramWeight,
+            ...(serving.nutrition
+                ? {
+                      nutrition: {
+                          calories: serving.nutrition.calories,
+                          protein: serving.nutrition.protein,
+                          carbs: serving.nutrition.carbs,
+                          fat: serving.nutrition.fat,
+                      },
+                  }
+                : {}),
+        }));
 
 const nutritionFromDescription = (description) => {
     const parsed = parseFoodDescription(description);
@@ -253,6 +400,12 @@ export const mapSearchFoodToFitlyFood = (food = {}) => {
         status: 'active',
         nutritionPer100g: mappedNutrition.nutritionPer100g,
         defaultServing: mappedNutrition.defaultServing,
+        ...(mappedNutrition.defaultServingId
+            ? { defaultServingId: mappedNutrition.defaultServingId }
+            : {}),
+        ...(Array.isArray(mappedNutrition.servings) && mappedNutrition.servings.length
+            ? { servings: mappedNutrition.servings }
+            : {}),
         image,
         ownership: { type: 'system', trainerId: null },
         type: foodType.toLowerCase() === 'brand' ? 'brand' : 'generic',
@@ -295,6 +448,10 @@ export const mapFatSecretFoodToFitlyFood = (food = {}) => {
         status: 'active',
         nutritionPer100g: mapped.nutritionPer100g,
         defaultServing: mapped.defaultServing,
+        ...(mapped.defaultServingId ? { defaultServingId: mapped.defaultServingId } : {}),
+        ...(mapped.servings?.length
+            ? { servings: toPersistableServings(mapped.servings) }
+            : {}),
         source: {
             type: 'import',
             externalProvider: FATSECRET_PROVIDER,
@@ -334,6 +491,9 @@ export default {
     mapFitlyCategory,
     mapProductImage,
     parseFoodDescription,
+    metricGrams,
+    mapAlternateServing,
+    isFatSecretDefaultServing,
     mapServings,
     mapSearchFoodToFitlyFood,
     mapFatSecretFoodToFitlyFood,

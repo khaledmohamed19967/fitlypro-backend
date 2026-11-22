@@ -10,7 +10,13 @@ import mongoose from 'mongoose';
 import User from '../src/modules/users/user.model.js';
 import Food from '../src/modules/foods/food.model.js';
 import NutritionPlan from '../src/modules/nutrition-plans/nutrition-plan.model.js';
+import NutritionPlanAssignment from '../src/modules/nutrition-plan-assignments/nutrition-plan-assignment.model.js';
 import { loadVisibleFoodsByIds } from '../src/modules/nutrition-plans/nutrition-plan.helpers.js';
+import {
+    MAX_SUPPLEMENTS,
+    MAX_VITAMINS,
+    MAX_INSTRUCTION_LENGTH,
+} from '../src/modules/nutrition-plans/nutrition-plan.constants.js';
 
 const BASE = process.env.API_URL || 'http://localhost:8000';
 const API = `${BASE}/api/v1`;
@@ -264,9 +270,11 @@ async function main() {
     }
 
     // 10. Full nutritionDays replacement
+    // Multi-day templates require weekly schedule mode (daily allows at most one day).
     const replaceDays = await request('PATCH', `/nutrition-plans/${planId}`, {
         token: tokenA,
         body: {
+            scheduleMode: 'weekly',
             nutritionDays: [
                 {
                     dayNumber: 1,
@@ -617,10 +625,650 @@ async function main() {
         fail('Response format', JSON.stringify(data));
     }
 
+    // -------------------------------------------------------------------------
+    // Supplements & Vitamins (Option B)
+    // -------------------------------------------------------------------------
+
+    const instructionEntries = (texts) =>
+        texts.map((instruction, index) => ({
+            instruction,
+            order: index + 1,
+        }));
+
+    // SV1. Create with supplements and vitamins
+    const svCreate = await request('POST', '/nutrition-plans', {
+        token: tokenA,
+        body: basePlanPayload(foodId, {
+            name: `SV Plan ${suffix}`,
+            supplements: instructionEntries([
+                'Whey protein - 30g - After workout',
+                'Creatine - 5g - Daily',
+            ]),
+            vitamins: instructionEntries(['Omega 3 - 2 caps - with a meal']),
+        }),
+    });
+    const svPlan = svCreate.json?.data?.nutritionPlan;
+    const svPlanId = svPlan?.id;
+    if (
+        svCreate.status === 201 &&
+        svPlan?.supplements?.length === 2 &&
+        svPlan?.vitamins?.length === 1 &&
+        svPlan.supplements[0].instruction.includes('Whey') &&
+        svPlan.supplements[0].order === 1 &&
+        svPlan.supplements[0].id &&
+        svPlan.vitamins[0].instruction.includes('Omega')
+    ) {
+        pass('SV1 Create with supplements and vitamins');
+    } else {
+        fail('SV1 Create with supplements and vitamins', JSON.stringify(svCreate.json));
+    }
+
+    // SV2. Create without either field
+    const svNoFields = await request('POST', '/nutrition-plans', {
+        token: tokenA,
+        body: basePlanPayload(foodId, { name: `SV No Fields ${suffix}` }),
+    });
+    const svNoPlan = svNoFields.json?.data?.nutritionPlan;
+    if (
+        svNoFields.status === 201 &&
+        Array.isArray(svNoPlan?.supplements) &&
+        svNoPlan.supplements.length === 0 &&
+        Array.isArray(svNoPlan?.vitamins) &&
+        svNoPlan.vitamins.length === 0
+    ) {
+        pass('SV2 Create without either field');
+    } else {
+        fail('SV2 Create without either field', JSON.stringify(svNoFields.json));
+    }
+
+    // SV3. Create with empty arrays
+    const svEmpty = await request('POST', '/nutrition-plans', {
+        token: tokenA,
+        body: basePlanPayload(foodId, {
+            name: `SV Empty ${suffix}`,
+            supplements: [],
+            vitamins: [],
+        }),
+    });
+    if (
+        svEmpty.status === 201 &&
+        (svEmpty.json?.data?.nutritionPlan?.supplements ?? null)?.length === 0 &&
+        (svEmpty.json?.data?.nutritionPlan?.vitamins ?? null)?.length === 0
+    ) {
+        pass('SV3 Create with empty arrays');
+    } else {
+        fail('SV3 Create with empty arrays', JSON.stringify(svEmpty.json));
+    }
+
+    // SV4. Create with blank and whitespace-only instructions
+    const svBlank = await request('POST', '/nutrition-plans', {
+        token: tokenA,
+        body: basePlanPayload(foodId, {
+            name: `SV Blank ${suffix}`,
+            supplements: [
+                { instruction: '', order: 1 },
+                { instruction: '   ', order: 2 },
+                { instruction: 'Keep me', order: 3 },
+            ],
+            vitamins: [
+                { instruction: '', order: 1 },
+                { instruction: '\t', order: 2 },
+            ],
+        }),
+    });
+    const svBlankPlan = svBlank.json?.data?.nutritionPlan;
+    if (
+        svBlank.status === 201 &&
+        svBlankPlan?.supplements?.length === 1 &&
+        svBlankPlan.supplements[0].instruction === 'Keep me' &&
+        svBlankPlan.supplements[0].order === 1 &&
+        svBlankPlan?.vitamins?.length === 0
+    ) {
+        pass('SV4 Create with blank and whitespace-only instructions');
+    } else {
+        fail(
+            'SV4 Create with blank and whitespace-only instructions',
+            JSON.stringify(svBlank.json)
+        );
+    }
+
+    // SV5. Maximum 20 entries accepted
+    const maxSupp = instructionEntries(
+        Array.from({ length: MAX_SUPPLEMENTS }, (_, i) => `Supp ${i + 1}`)
+    );
+    const maxVit = instructionEntries(
+        Array.from({ length: MAX_VITAMINS }, (_, i) => `Vit ${i + 1}`)
+    );
+    const svMax = await request('POST', '/nutrition-plans', {
+        token: tokenA,
+        body: basePlanPayload(foodId, {
+            name: `SV Max ${suffix}`,
+            supplements: maxSupp,
+            vitamins: maxVit,
+        }),
+    });
+    if (
+        svMax.status === 201 &&
+        svMax.json?.data?.nutritionPlan?.supplements?.length === MAX_SUPPLEMENTS &&
+        svMax.json?.data?.nutritionPlan?.vitamins?.length === MAX_VITAMINS
+    ) {
+        pass('SV5 Maximum 20 entries accepted');
+    } else {
+        fail('SV5 Maximum 20 entries accepted', JSON.stringify(svMax.json));
+    }
+
+    // SV6. More than 20 entries rejected
+    const tooMany = instructionEntries(
+        Array.from({ length: MAX_SUPPLEMENTS + 1 }, (_, i) => `Too many ${i + 1}`)
+    );
+    const svTooMany = await request('POST', '/nutrition-plans', {
+        token: tokenA,
+        body: basePlanPayload(foodId, {
+            name: `SV Too Many ${suffix}`,
+            supplements: tooMany,
+        }),
+    });
+    if (svTooMany.status === 400) pass('SV6 More than 20 entries rejected');
+    else fail('SV6 More than 20 entries rejected', JSON.stringify(svTooMany.json));
+
+    // SV7. Instruction length over 500 rejected
+    const svTooLong = await request('POST', '/nutrition-plans', {
+        token: tokenA,
+        body: basePlanPayload(foodId, {
+            name: `SV Too Long ${suffix}`,
+            vitamins: [
+                {
+                    instruction: 'x'.repeat(MAX_INSTRUCTION_LENGTH + 1),
+                    order: 1,
+                },
+            ],
+        }),
+    });
+    if (svTooLong.status === 400) pass('SV7 Instruction length over 500 rejected');
+    else fail('SV7 Instruction length over 500 rejected', JSON.stringify(svTooLong.json));
+
+    // SV8. Duplicate instructions allowed
+    const svDup = await request('POST', '/nutrition-plans', {
+        token: tokenA,
+        body: basePlanPayload(foodId, {
+            name: `SV Dup ${suffix}`,
+            supplements: instructionEntries(['Same text', 'Same text']),
+        }),
+    });
+    if (
+        svDup.status === 201 &&
+        svDup.json?.data?.nutritionPlan?.supplements?.length === 2 &&
+        svDup.json.data.nutritionPlan.supplements[0].instruction ===
+            svDup.json.data.nutritionPlan.supplements[1].instruction
+    ) {
+        pass('SV8 Duplicate instructions allowed');
+    } else {
+        fail('SV8 Duplicate instructions allowed', JSON.stringify(svDup.json));
+    }
+
+    // Seed SV plan content for update tests
+    const seedSv = await request('PATCH', `/nutrition-plans/${svPlanId}`, {
+        token: tokenA,
+        body: {
+            supplements: instructionEntries(['Supp A', 'Supp B']),
+            vitamins: instructionEntries(['Vit A', 'Vit B']),
+        },
+    });
+    const seeded = seedSv.json?.data?.nutritionPlan;
+    const suppAId = seeded?.supplements?.[0]?.id;
+    const suppBId = seeded?.supplements?.[1]?.id;
+    const vitAId = seeded?.vitamins?.[0]?.id;
+    const vitBId = seeded?.vitamins?.[1]?.id;
+
+    // SV9. Omitted supplements preserve existing data
+    const svOmitSupp = await request('PATCH', `/nutrition-plans/${svPlanId}`, {
+        token: tokenA,
+        body: { notes: 'preserve supplements' },
+    });
+    const afterOmitSupp = svOmitSupp.json?.data?.nutritionPlan;
+    if (
+        svOmitSupp.status === 200 &&
+        afterOmitSupp?.supplements?.length === 2 &&
+        afterOmitSupp.supplements[0].id === suppAId &&
+        afterOmitSupp.supplements[1].id === suppBId
+    ) {
+        pass('SV9 Omitted supplements preserve existing data');
+    } else {
+        fail('SV9 Omitted supplements preserve existing data', JSON.stringify(svOmitSupp.json));
+    }
+
+    // SV10. Omitted vitamins preserve existing data
+    const svOmitVit = await request('PATCH', `/nutrition-plans/${svPlanId}`, {
+        token: tokenA,
+        body: { description: 'preserve vitamins' },
+    });
+    const afterOmitVit = svOmitVit.json?.data?.nutritionPlan;
+    if (
+        svOmitVit.status === 200 &&
+        afterOmitVit?.vitamins?.length === 2 &&
+        afterOmitVit.vitamins[0].id === vitAId &&
+        afterOmitVit.vitamins[1].id === vitBId
+    ) {
+        pass('SV10 Omitted vitamins preserve existing data');
+    } else {
+        fail('SV10 Omitted vitamins preserve existing data', JSON.stringify(svOmitVit.json));
+    }
+
+    // SV11. Empty supplements array clears only supplements
+    const svClearSupp = await request('PATCH', `/nutrition-plans/${svPlanId}`, {
+        token: tokenA,
+        body: { supplements: [] },
+    });
+    const afterClearSupp = svClearSupp.json?.data?.nutritionPlan;
+    if (
+        svClearSupp.status === 200 &&
+        afterClearSupp?.supplements?.length === 0 &&
+        afterClearSupp?.vitamins?.length === 2 &&
+        afterClearSupp.vitamins[0].id === vitAId
+    ) {
+        pass('SV11 Empty supplements array clears only supplements');
+    } else {
+        fail(
+            'SV11 Empty supplements array clears only supplements',
+            JSON.stringify(svClearSupp.json)
+        );
+    }
+
+    // Re-seed supplements (new IDs); keep existing vitamin IDs
+    const restoredSupp = await request('PATCH', `/nutrition-plans/${svPlanId}`, {
+        token: tokenA,
+        body: {
+            supplements: instructionEntries(['Supp A', 'Supp B']),
+            vitamins: [
+                { _id: vitAId, instruction: 'Vit A', order: 1 },
+                { _id: vitBId, instruction: 'Vit B', order: 2 },
+            ],
+        },
+    });
+    const restored = restoredSupp.json?.data?.nutritionPlan;
+    const rSuppAId = restored?.supplements?.[0]?.id;
+    const rSuppBId = restored?.supplements?.[1]?.id;
+
+    // SV12. Empty vitamins array clears only vitamins
+    const svClearVit = await request('PATCH', `/nutrition-plans/${svPlanId}`, {
+        token: tokenA,
+        body: { vitamins: [] },
+    });
+    const afterClearVit = svClearVit.json?.data?.nutritionPlan;
+    if (
+        svClearVit.status === 200 &&
+        afterClearVit?.vitamins?.length === 0 &&
+        afterClearVit?.supplements?.length === 2 &&
+        afterClearVit.supplements[0].id === rSuppAId
+    ) {
+        pass('SV12 Empty vitamins array clears only vitamins');
+    } else {
+        fail('SV12 Empty vitamins array clears only vitamins', JSON.stringify(svClearVit.json));
+    }
+
+    // Restore vitamins (new IDs)
+    const restored2 = (
+        await request('PATCH', `/nutrition-plans/${svPlanId}`, {
+            token: tokenA,
+            body: {
+                vitamins: instructionEntries(['Vit A', 'Vit B']),
+            },
+        })
+    ).json?.data?.nutritionPlan;
+    const r2VitAId = restored2?.vitamins?.[0]?.id;
+    const r2VitBId = restored2?.vitamins?.[1]?.id;
+    const r2SuppAId = restored2?.supplements?.[0]?.id;
+    const r2SuppBId = restored2?.supplements?.[1]?.id;
+
+    // SV13. Updating supplements preserves vitamins
+    const svUpdSupp = await request('PATCH', `/nutrition-plans/${svPlanId}`, {
+        token: tokenA,
+        body: {
+            supplements: [
+                { _id: r2SuppAId, instruction: 'Supp A updated', order: 1 },
+                { instruction: 'Supp C new', order: 2 },
+            ],
+        },
+    });
+    const afterUpdSupp = svUpdSupp.json?.data?.nutritionPlan;
+    if (
+        svUpdSupp.status === 200 &&
+        afterUpdSupp?.supplements?.length === 2 &&
+        afterUpdSupp.supplements[0].instruction === 'Supp A updated' &&
+        afterUpdSupp.vitamins?.length === 2 &&
+        afterUpdSupp.vitamins[0].id === r2VitAId &&
+        afterUpdSupp.vitamins[1].id === r2VitBId
+    ) {
+        pass('SV13 Updating supplements preserves vitamins');
+    } else {
+        fail('SV13 Updating supplements preserves vitamins', JSON.stringify(svUpdSupp.json));
+    }
+
+    // SV14. Updating vitamins preserves supplements
+    const keepSuppIds = afterUpdSupp.supplements.map((s) => s.id);
+    const svUpdVit = await request('PATCH', `/nutrition-plans/${svPlanId}`, {
+        token: tokenA,
+        body: {
+            vitamins: [{ _id: r2VitAId, instruction: 'Vit A updated', order: 1 }],
+        },
+    });
+    const afterUpdVit = svUpdVit.json?.data?.nutritionPlan;
+    if (
+        svUpdVit.status === 200 &&
+        afterUpdVit?.vitamins?.length === 1 &&
+        afterUpdVit.vitamins[0].instruction === 'Vit A updated' &&
+        afterUpdVit.supplements?.length === 2 &&
+        afterUpdVit.supplements[0].id === keepSuppIds[0] &&
+        afterUpdVit.supplements[1].id === keepSuppIds[1]
+    ) {
+        pass('SV14 Updating vitamins preserves supplements');
+    } else {
+        fail('SV14 Updating vitamins preserves supplements', JSON.stringify(svUpdVit.json));
+    }
+
+    // SV15. Valid existing IDs are preserved
+    if (afterUpdVit?.vitamins?.[0]?.id === r2VitAId) {
+        pass('SV15 Valid existing IDs are preserved');
+    } else {
+        fail(
+            'SV15 Valid existing IDs are preserved',
+            JSON.stringify({ expected: r2VitAId, got: afterUpdVit?.vitamins?.[0]?.id })
+        );
+    }
+
+    // SV16. New entries receive new IDs
+    const newSuppId = afterUpdSupp?.supplements?.[1]?.id;
+    if (newSuppId && newSuppId !== r2SuppAId && newSuppId !== r2SuppBId) {
+        pass('SV16 New entries receive new IDs');
+    } else {
+        fail('SV16 New entries receive new IDs', JSON.stringify(afterUpdSupp?.supplements));
+    }
+
+    // SV17. Foreign IDs are rejected
+    const foreignOid = new mongoose.Types.ObjectId().toString();
+    const svForeign = await request('PATCH', `/nutrition-plans/${svPlanId}`, {
+        token: tokenA,
+        body: {
+            supplements: [{ _id: foreignOid, instruction: 'Foreign', order: 1 }],
+        },
+    });
+    if (svForeign.status === 400) pass('SV17 Foreign IDs are rejected');
+    else fail('SV17 Foreign IDs are rejected', JSON.stringify(svForeign.json));
+
+    // SV18. Malformed IDs are rejected
+    const svBadId = await request('PATCH', `/nutrition-plans/${svPlanId}`, {
+        token: tokenA,
+        body: {
+            vitamins: [{ _id: 'not-a-valid-objectid', instruction: 'Bad', order: 1 }],
+        },
+    });
+    if (svBadId.status === 400) pass('SV18 Malformed IDs are rejected');
+    else fail('SV18 Malformed IDs are rejected', JSON.stringify(svBadId.json));
+
+    // SV19. IDs cannot be moved between supplements and vitamins
+    const currentSuppId = afterUpdVit?.supplements?.[0]?.id;
+    const svCross = await request('PATCH', `/nutrition-plans/${svPlanId}`, {
+        token: tokenA,
+        body: {
+            vitamins: [{ _id: currentSuppId, instruction: 'Cross move', order: 1 }],
+        },
+    });
+    if (svCross.status === 400) pass('SV19 IDs cannot be moved between supplements and vitamins');
+    else {
+        fail(
+            'SV19 IDs cannot be moved between supplements and vitamins',
+            JSON.stringify(svCross.json)
+        );
+    }
+
+    // SV20. Submitted order is normalized sequentially
+    const svOrder = await request('PATCH', `/nutrition-plans/${svPlanId}`, {
+        token: tokenA,
+        body: {
+            supplements: [
+                { instruction: 'First in array', order: 99 },
+                { instruction: '', order: 100 },
+                { instruction: 'Second kept', order: 50 },
+            ],
+        },
+    });
+    const ordered = svOrder.json?.data?.nutritionPlan?.supplements;
+    if (
+        svOrder.status === 200 &&
+        ordered?.length === 2 &&
+        ordered[0].instruction === 'First in array' &&
+        ordered[0].order === 1 &&
+        ordered[1].instruction === 'Second kept' &&
+        ordered[1].order === 2
+    ) {
+        pass('SV20 Submitted order is normalized sequentially');
+    } else {
+        fail('SV20 Submitted order is normalized sequentially', JSON.stringify(svOrder.json));
+    }
+
+    // SV21/22. Trainer detail / public response includes both collections
+    const svGet = await request('GET', `/nutrition-plans/${svPlanId}`, { token: tokenA });
+    const detailPlan = svGet.json?.data?.nutritionPlan;
+    if (
+        svGet.status === 200 &&
+        Array.isArray(detailPlan?.supplements) &&
+        Array.isArray(detailPlan?.vitamins) &&
+        detailPlan.supplements.every(
+            (e) => e.id && typeof e.instruction === 'string' && typeof e.order === 'number'
+        )
+    ) {
+        pass('SV21 Trainer detail response includes both collections');
+        pass('SV22 Public response includes both collections');
+    } else {
+        fail(
+            'SV21 Trainer detail response includes both collections',
+            JSON.stringify(svGet.json)
+        );
+        fail('SV22 Public response includes both collections', JSON.stringify(svGet.json));
+    }
+
+    // SV23. Legacy documents return empty arrays
+    const legacyDoc = await NutritionPlan.create({
+        trainerId: trainerA._id,
+        ownership: { type: 'trainer', trainerId: trainerA._id },
+        name: `Legacy SV ${suffix}`,
+        goal: 'maintenance',
+        duration: 4,
+        daysCount: 7,
+        macroTargets: { calories: 2000, protein: 150, carbs: 200, fat: 65 },
+        nutritionDays: [],
+        status: 'active',
+        isTemplate: false,
+    });
+    // Ensure fields absent as stored (older shape) — unset if mongoose applied defaults
+    await NutritionPlan.collection.updateOne(
+        { _id: legacyDoc._id },
+        { $unset: { supplements: '', vitamins: '' } }
+    );
+    const legacyGet = await request('GET', `/nutrition-plans/${legacyDoc._id}`, {
+        token: tokenA,
+    });
+    const legacyPlan = legacyGet.json?.data?.nutritionPlan;
+    if (
+        legacyGet.status === 200 &&
+        Array.isArray(legacyPlan?.supplements) &&
+        legacyPlan.supplements.length === 0 &&
+        Array.isArray(legacyPlan?.vitamins) &&
+        legacyPlan.vitamins.length === 0
+    ) {
+        pass('SV23 Legacy documents return empty arrays');
+    } else {
+        fail('SV23 Legacy documents return empty arrays', JSON.stringify(legacyGet.json));
+    }
+
+    // SV24. Raw internal Mongoose fields are not exposed
+    const rawKeys = ['_id', '__v', '$__', '$isNew', '_doc'];
+    const hasRaw = (obj, path = '') => {
+        if (obj == null || typeof obj !== 'object') return null;
+        for (const key of Object.keys(obj)) {
+            const next = path ? `${path}.${key}` : key;
+            if (rawKeys.includes(key)) return next;
+            if (typeof obj[key] === 'object') {
+                const hit = hasRaw(obj[key], next);
+                if (hit) return hit;
+            }
+        }
+        return null;
+    };
+    const rawHit = hasRaw({
+        supplements: detailPlan?.supplements,
+        vitamins: detailPlan?.vitamins,
+    });
+    if (!rawHit) pass('SV24 Raw internal Mongoose fields are not exposed');
+    else fail('SV24 Raw internal Mongoose fields are not exposed', rawHit);
+
+    // SV25/26. Clone preserves content/order with fresh IDs
+    await request('PATCH', `/nutrition-plans/${svPlanId}`, {
+        token: tokenA,
+        body: {
+            supplements: instructionEntries(['Clone Supp 1', 'Clone Supp 2']),
+            vitamins: instructionEntries(['Clone Vit 1']),
+        },
+    });
+    const beforeClone = (
+        await request('GET', `/nutrition-plans/${svPlanId}`, { token: tokenA })
+    ).json?.data?.nutritionPlan;
+    const cloneRes = await request('POST', `/nutrition-plans/${svPlanId}/clone`, {
+        token: tokenA,
+        body: { name: `SV Clone ${suffix}` },
+    });
+    const cloned = cloneRes.json?.data?.nutritionPlan;
+    const sourceSuppIds = (beforeClone?.supplements ?? []).map((e) => e.id);
+    const clonedSuppIds = (cloned?.supplements ?? []).map((e) => e.id);
+    if (
+        cloneRes.status === 201 &&
+        cloned?.supplements?.length === 2 &&
+        cloned.supplements[0].instruction === 'Clone Supp 1' &&
+        cloned.supplements[0].order === 1 &&
+        cloned.supplements[1].instruction === 'Clone Supp 2' &&
+        cloned.supplements[1].order === 2 &&
+        cloned?.vitamins?.length === 1 &&
+        cloned.vitamins[0].instruction === 'Clone Vit 1' &&
+        clonedSuppIds.every((id) => !sourceSuppIds.includes(id)) &&
+        cloned.vitamins[0].id !== beforeClone?.vitamins?.[0]?.id
+    ) {
+        pass('SV25 Clone preserves supplement/vitamin content and order');
+        pass('SV26 Clone generates new IDs');
+    } else {
+        fail(
+            'SV25 Clone preserves supplement/vitamin content and order',
+            JSON.stringify(cloneRes.json)
+        );
+        fail('SV26 Clone generates new IDs', JSON.stringify(cloneRes.json));
+    }
+
+    // SV27/28/29. Client-facing player API
+    const clientUser = await User.create({
+        firstName: 'SV',
+        lastName: 'Client',
+        email: `sv-client-${suffix}@test.com`,
+        password,
+        role: 'client',
+        trainer: trainerA._id,
+    });
+    const legacyClient = await User.create({
+        firstName: 'SV',
+        lastName: 'LegacyClient',
+        email: `sv-legacy-client-${suffix}@test.com`,
+        password,
+        role: 'client',
+        trainer: trainerA._id,
+    });
+    const clientLogin = await request('POST', '/auth/login', {
+        body: { email: clientUser.email, password },
+    });
+    const legacyClientLogin = await request('POST', '/auth/login', {
+        body: { email: legacyClient.email, password },
+    });
+    const clientToken = clientLogin.json?.data?.token;
+    const legacyClientToken = legacyClientLogin.json?.data?.token;
+
+    const assignSv = await request('POST', `/nutrition-plans/${svPlanId}/assignments`, {
+        token: tokenA,
+        body: {
+            clientIds: [clientUser._id.toString()],
+            startDate: new Date().toISOString(),
+        },
+    });
+
+    const playerMe = await request('GET', '/me/nutrition-plan', { token: clientToken });
+    const playerPlan = playerMe.json?.data?.plan;
+    if (
+        assignSv.status === 201 &&
+        playerMe.status === 200 &&
+        Array.isArray(playerPlan?.supplements) &&
+        playerPlan.supplements.length === 2 &&
+        playerPlan.supplements[0].instruction === 'Clone Supp 1' &&
+        playerPlan.supplements[0].order === 1 &&
+        playerPlan.supplements[0].id &&
+        Array.isArray(playerPlan?.vitamins) &&
+        playerPlan.vitamins.length === 1
+    ) {
+        pass('SV27 Player nutrition response includes both collections');
+    } else {
+        fail(
+            'SV27 Player nutrition response includes both collections',
+            JSON.stringify({ assign: assignSv.json, player: playerMe.json })
+        );
+    }
+
+    await NutritionPlanAssignment.create({
+        planId: legacyDoc._id,
+        clientId: legacyClient._id,
+        trainerId: trainerA._id,
+        status: 'active',
+        startDate: new Date(),
+    });
+
+    const playerLegacy = await request('GET', '/me/nutrition-plan', {
+        token: legacyClientToken,
+    });
+    const legacyPlayerPlan = playerLegacy.json?.data?.plan;
+    if (
+        playerLegacy.status === 200 &&
+        Array.isArray(legacyPlayerPlan?.supplements) &&
+        legacyPlayerPlan.supplements.length === 0 &&
+        Array.isArray(legacyPlayerPlan?.vitamins) &&
+        legacyPlayerPlan.vitamins.length === 0
+    ) {
+        pass('SV28 Legacy assigned plans return empty arrays');
+    } else {
+        fail(
+            'SV28 Legacy assigned plans return empty arrays',
+            JSON.stringify(playerLegacy.json)
+        );
+    }
+
+    // SV29. Authorization boundaries remain unchanged
+    const playerAsTrainer = await request('GET', '/me/nutrition-plan', { token: tokenA });
+    const foreignClientPatch = await request('PATCH', `/nutrition-plans/${svPlanId}`, {
+        token: tokenB,
+        body: { supplements: instructionEntries(['Hijack']) },
+    });
+    if (playerAsTrainer.status === 403 && foreignClientPatch.status === 404) {
+        pass('SV29 Authorization boundaries remain unchanged');
+    } else {
+        fail(
+            'SV29 Authorization boundaries remain unchanged',
+            JSON.stringify({
+                playerAsTrainer: playerAsTrainer.status,
+                foreignClientPatch: foreignClientPatch.status,
+            })
+        );
+    }
+
     const failed = results.filter((r) => !r.ok);
     console.log('\n---');
     console.log(`Total: ${results.length}, Passed: ${results.length - failed.length}, Failed: ${failed.length}`);
 
+    await NutritionPlanAssignment.deleteMany({
+        trainerId: { $in: [trainerA._id, trainerB._id] },
+    });
     await NutritionPlan.deleteMany({
         trainerId: { $in: [trainerA._id, trainerB._id] },
     });
@@ -631,7 +1279,9 @@ async function main() {
     if (systemFood.name?.startsWith('System Food')) {
         await Food.deleteOne({ _id: systemFood._id });
     }
-    await User.deleteMany({ _id: { $in: [trainerA._id, trainerB._id] } });
+    await User.deleteMany({
+        _id: { $in: [trainerA._id, trainerB._id, clientUser._id, legacyClient._id] },
+    });
     await mongoose.disconnect();
 
     process.exit(failed.length ? 1 : 0);

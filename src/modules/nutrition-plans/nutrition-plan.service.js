@@ -6,6 +6,8 @@ import { DEFAULT_NUTRITION_PLAN_ICON } from './nutrition-plan.constants.js';
 import {
     normalizeNutritionPlanInput,
     processNutritionDaysFoodItems,
+    processPlanInstructionEntries,
+    collectInstructionEntryIds,
     applyPlanDenormalizedCounters,
     buildNutritionPlanListFilter,
     buildNutritionPlanSummaryFilters,
@@ -15,6 +17,7 @@ import {
     canCloneNutritionPlan,
     generateCloneName,
     deepCloneNutritionDays,
+    deepClonePlanInstructionEntries,
     isSystemNutritionPlan,
     mapNutritionPlanToDetail,
     mapNutritionPlanListItem,
@@ -127,13 +130,46 @@ const loadModifiablePlan = async (planId, trainerId) => {
 /**
  * @param {object[]} nutritionDays
  * @param {string} trainerId
+ * @param {{ previousPlan?: object|null }} [options]
  */
-const processNutritionDays = async (nutritionDays, trainerId) => {
+const processNutritionDays = async (nutritionDays, trainerId, options = {}) => {
     try {
-        return await processNutritionDaysFoodItems(nutritionDays, trainerId);
+        return await processNutritionDaysFoodItems(nutritionDays, trainerId, options);
     } catch (err) {
         if (err.errors) {
             throw new ApiError(400, err.message || 'Food item validation failed', err.errors);
+        }
+        throw err;
+    }
+};
+
+/**
+ * Process supplements or vitamins for create/update.
+ * When `plan` is null (create), any client-provided entry IDs are rejected.
+ *
+ * @param {object[]} entries
+ * @param {'supplements'|'vitamins'} fieldName
+ * @param {import('mongoose').Document|object|null} plan
+ */
+const processInstructionField = (entries, fieldName, plan = null) => {
+    const sameCollection =
+        fieldName === 'supplements' ? plan?.supplements : plan?.vitamins;
+    const otherCollection =
+        fieldName === 'supplements' ? plan?.vitamins : plan?.supplements;
+
+    try {
+        return processPlanInstructionEntries(entries ?? [], {
+            fieldName,
+            allowedIds: collectInstructionEntryIds(sameCollection),
+            forbiddenIds: collectInstructionEntryIds(otherCollection),
+        });
+    } catch (err) {
+        if (err.errors) {
+            throw new ApiError(
+                400,
+                err.message || `${fieldName} validation failed`,
+                err.errors
+            );
         }
         throw err;
     }
@@ -202,6 +238,12 @@ const createNutritionPlan = async (body, trainerId) => {
         scheduleMode,
         macroTargets: normalized.macroTargets,
         nutritionDays,
+        supplements: processInstructionField(
+            normalized.supplements ?? [],
+            'supplements',
+            null
+        ),
+        vitamins: processInstructionField(normalized.vitamins ?? [], 'vitamins', null),
         isTemplate: normalized.isTemplate ?? false,
         status: normalized.status ?? 'active',
         notes: emptyToNull(normalized.notes),
@@ -238,8 +280,24 @@ const updateNutritionPlan = async (planId, body, trainerId) => {
     if (normalized.status !== undefined) plan.status = normalized.status;
     if (normalized.notes !== undefined) plan.notes = emptyToNull(normalized.notes);
 
+    if (normalized.supplements !== undefined) {
+        plan.supplements = processInstructionField(
+            normalized.supplements,
+            'supplements',
+            plan
+        );
+        plan.markModified('supplements');
+    }
+
+    if (normalized.vitamins !== undefined) {
+        plan.vitamins = processInstructionField(normalized.vitamins, 'vitamins', plan);
+        plan.markModified('vitamins');
+    }
+
     if (normalized.nutritionDays !== undefined) {
-        plan.nutritionDays = await processNutritionDays(normalized.nutritionDays, trainerId);
+        plan.nutritionDays = await processNutritionDays(normalized.nutritionDays, trainerId, {
+            previousPlan: plan,
+        });
         plan.markModified('nutritionDays');
     }
 
@@ -327,6 +385,8 @@ const cloneNutritionPlan = async (sourcePlanId, trainerId, payload = {}) => {
         scheduleMode: resolveScheduleMode(source),
         macroTargets: source.macroTargets,
         nutritionDays: deepCloneNutritionDays(source.nutritionDays ?? []),
+        supplements: deepClonePlanInstructionEntries(source.supplements ?? []),
+        vitamins: deepClonePlanInstructionEntries(source.vitamins ?? []),
         isTemplate: false,
         status: 'active',
         notes: source.notes ?? null,

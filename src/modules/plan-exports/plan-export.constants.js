@@ -41,13 +41,18 @@ export const PLAN_EXPORT_TEMPLATES = Object.freeze([
         id: 'elevate',
         name: 'Elevate',
         description:
-            'A modern, bold workout plan template with a premium athletic design.',
-        supportedPlanTypes: Object.freeze(['workout']),
+            'A modern, bold plan template with a premium athletic design.',
+        supportedPlanTypes: Object.freeze(['workout', 'nutrition']),
         assets: Object.freeze({
             workout: Object.freeze({
                 // Modal thumbnail only — not rendered into the PDF.
                 previewImageUrl:
                     'https://ik.imagekit.io/6nagrfhcm/template-cover.png',
+            }),
+            nutrition: Object.freeze({
+                // Modal thumbnail only — not rendered into the PDF.
+                previewImageUrl:
+                    'https://ik.imagekit.io/6nagrfhcm/fitly-nutrition-plan-p1%202.png',
             }),
         }),
     },

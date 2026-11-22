@@ -94,6 +94,8 @@ export const mapPlayerNutritionPlan = (plan) => {
         icon: full.icon,
         status: full.status,
         notes: full.notes ?? null,
+        supplements: Array.isArray(full.supplements) ? full.supplements : [],
+        vitamins: Array.isArray(full.vitamins) ? full.vitamins : [],
         macroTargets: full.macroTargets
             ? {
                   calories: full.macroTargets.calories,

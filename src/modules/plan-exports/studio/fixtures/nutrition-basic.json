@@ -2,20 +2,33 @@
   "type": "nutrition",
   "plan": {
     "id": "fixture-nutrition-basic",
-    "name": "Studio Fixture <i>Nutrition</i>",
+    "name": "Lean Cut",
     "description": "Deterministic nutrition export model for Studio previews.",
-    "duration": 4,
+    "duration": 8,
     "daysCount": 1,
-    "goal": "fat_loss",
+    "goal": "weight_loss",
     "scheduleMode": "daily",
     "notes": "Hydrate. Ignore <b>raw HTML</b>.",
     "status": "active",
     "isTemplate": false,
-    "totalMeals": 1,
-    "totalFoodItems": 1,
-    "avgDailyCalories": 420,
-    "macroTargets": { "calories": 2000, "protein": 150, "carbs": 180, "fat": 60 },
-    "computedMacros": { "calories": 420, "protein": 32, "carbs": 28, "fat": 18 }
+    "totalMeals": 4,
+    "totalFoodItems": 12,
+    "avgDailyCalories": 1470,
+    "macroTargets": { "calories": 1470, "protein": 128, "carbs": 150, "fat": 38 },
+    "computedMacros": {
+      "avgDailyCalories": 1470,
+      "avgDailyProtein": 128,
+      "avgDailyCarbs": 150,
+      "avgDailyFat": 38
+    },
+    "supplements": [
+      { "id": "s1", "instruction": "Whey protein - 30g - After workout - Mix with 300 ml water", "order": 1 },
+      { "id": "s2", "instruction": "Creatine monohydrate - 5g - Morning - Every day, incl. rest days", "order": 2 }
+    ],
+    "vitamins": [
+      { "id": "v1", "instruction": "Vitamin D3 - 2,000 IU - With a meal - Take with breakfast", "order": 1 },
+      { "id": "v2", "instruction": "Omega 3 - 2 caps - With a meal", "order": 2 }
+    ]
   },
   "trainer": {
     "id": "fixture-trainer",
@@ -27,9 +40,9 @@
     "nutritionDays": [
       {
         "dayNumber": 1,
-        "name": null,
+        "name": "Training Day",
         "notes": null,
-        "dailyTotals": { "calories": 420, "protein": 32, "carbs": 28, "fat": 18 },
+        "dailyTotals": { "calories": 1470, "protein": 128, "carbs": 150, "fat": 38 },
         "meals": [
           {
             "order": 1,
@@ -37,15 +50,133 @@
             "mealType": "breakfast",
             "suggestedTime": "08:00",
             "notes": null,
-            "mealTotals": { "calories": 420, "protein": 32, "carbs": 28, "fat": 18 },
+            "mealTotals": { "calories": 357, "protein": 24, "carbs": 57, "fat": 4 },
             "foodItems": [
               {
-                "name": "Greek Yogurt",
-                "brand": "Fixture Farms",
-                "quantity": 200,
+                "name": "Oats",
+                "brand": null,
+                "quantity": 50,
                 "unit": "g",
                 "notes": null,
-                "itemMacros": { "calories": 420, "protein": 32, "carbs": 28, "fat": 18 }
+                "itemMacros": { "calories": 190, "protein": 7, "carbs": 32, "fat": 4 }
+              },
+              {
+                "name": "Egg whites",
+                "brand": null,
+                "quantity": 120,
+                "unit": "g",
+                "notes": null,
+                "itemMacros": { "calories": 65, "protein": 14, "carbs": 1, "fat": 0 }
+              },
+              {
+                "name": "Banana",
+                "brand": null,
+                "quantity": 80,
+                "unit": "g",
+                "notes": null,
+                "itemMacros": { "calories": 72, "protein": 1, "carbs": 18, "fat": 0 }
+              }
+            ]
+          },
+          {
+            "order": 2,
+            "name": "Lunch",
+            "mealType": "lunch",
+            "suggestedTime": "13:00",
+            "notes": null,
+            "mealTotals": { "calories": 506, "protein": 48, "carbs": 48, "fat": 12 },
+            "foodItems": [
+              {
+                "name": "Chicken breast, grilled",
+                "brand": null,
+                "quantity": 150,
+                "unit": "g",
+                "notes": null,
+                "itemMacros": { "calories": 248, "protein": 46, "carbs": 0, "fat": 5 }
+              },
+              {
+                "name": "White rice, cooked",
+                "brand": null,
+                "quantity": 150,
+                "unit": "g",
+                "notes": null,
+                "itemMacros": { "calories": 195, "protein": 4, "carbs": 42, "fat": 0 }
+              },
+              {
+                "name": "Mixed salad",
+                "brand": null,
+                "quantity": 80,
+                "unit": "g",
+                "notes": null,
+                "itemMacros": { "calories": 18, "protein": 1, "carbs": 3, "fat": 0 }
+              },
+              {
+                "name": "Olive oil",
+                "brand": null,
+                "quantity": 5,
+                "unit": "g",
+                "notes": null,
+                "itemMacros": { "calories": 45, "protein": 0, "carbs": 0, "fat": 5 }
+              }
+            ]
+          },
+          {
+            "order": 3,
+            "name": "Snack",
+            "mealType": "snack",
+            "suggestedTime": "16:00",
+            "notes": null,
+            "mealTotals": { "calories": 187, "protein": 17, "carbs": 10, "fat": 9 },
+            "foodItems": [
+              {
+                "name": "Greek yogurt, 0% fat",
+                "brand": null,
+                "quantity": 150,
+                "unit": "g",
+                "notes": null,
+                "itemMacros": { "calories": 89, "protein": 15, "carbs": 6, "fat": 0 }
+              },
+              {
+                "name": "Almonds",
+                "brand": null,
+                "quantity": 15,
+                "unit": "g",
+                "notes": null,
+                "itemMacros": { "calories": 90, "protein": 3, "carbs": 3, "fat": 8 }
+              }
+            ]
+          },
+          {
+            "order": 4,
+            "name": "Dinner",
+            "mealType": "dinner",
+            "suggestedTime": "19:30",
+            "notes": null,
+            "mealTotals": { "calories": 420, "protein": 39, "carbs": 35, "fat": 13 },
+            "foodItems": [
+              {
+                "name": "Salmon, baked",
+                "brand": null,
+                "quantity": 140,
+                "unit": "g",
+                "notes": null,
+                "itemMacros": { "calories": 280, "protein": 34, "carbs": 0, "fat": 16 }
+              },
+              {
+                "name": "Sweet potato, baked",
+                "brand": null,
+                "quantity": 150,
+                "unit": "g",
+                "notes": null,
+                "itemMacros": { "calories": 120, "protein": 2, "carbs": 28, "fat": 0 }
+              },
+              {
+                "name": "Broccoli, steamed",
+                "brand": null,
+                "quantity": 100,
+                "unit": "g",
+                "notes": null,
+                "itemMacros": { "calories": 35, "protein": 3, "carbs": 7, "fat": 0 }
               }
             ]
           }

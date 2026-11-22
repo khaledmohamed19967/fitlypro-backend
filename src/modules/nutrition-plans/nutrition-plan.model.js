@@ -10,6 +10,9 @@ import {
     MAX_WEEKLY_NUTRITION_DAYS,
     MAX_MEALS_PER_DAY,
     MAX_FOOD_ITEMS_PER_MEAL,
+    MAX_SUPPLEMENTS,
+    MAX_VITAMINS,
+    MAX_INSTRUCTION_LENGTH,
     SCHEDULE_MODES,
     DEFAULT_SCHEDULE_MODE,
 } from './nutrition-plan.constants.js';
@@ -85,6 +88,31 @@ const defaultServingSnapshotSchema = new mongoose.Schema(
     { _id: false }
 );
 
+const servingOptionSnapshotSchema = new mongoose.Schema(
+    {
+        id: {
+            type: String,
+            required: true,
+            trim: true,
+            maxlength: [64, 'Serving option id cannot exceed 64 characters'],
+        },
+        label: {
+            type: String,
+            required: true,
+            trim: true,
+            maxlength: [120, 'Serving option label cannot exceed 120 characters'],
+        },
+        quantity: { type: Number, required: true, min: [0, 'Quantity must be positive'] },
+        unit: {
+            type: String,
+            required: true,
+            enum: { values: SERVING_UNITS, message: 'Invalid serving unit' },
+        },
+        gramWeight: { type: Number, required: true, min: [0, 'Gram weight must be positive'] },
+    },
+    { _id: false }
+);
+
 export const foodSnapshotSchema = new mongoose.Schema(
     {
         name: {
@@ -111,6 +139,10 @@ export const foodSnapshotSchema = new mongoose.Schema(
         defaultServing: {
             type: defaultServingSnapshotSchema,
             required: [true, 'Food snapshot default serving is required'],
+        },
+        servings: {
+            type: [servingOptionSnapshotSchema],
+            default: undefined,
         },
     },
     { _id: false }
@@ -140,6 +172,13 @@ export const planFoodItemSchema = new mongoose.Schema(
                 values: SERVING_UNITS,
                 message: 'Unit must be g, kg, ml, l, piece, or serving',
             },
+        },
+        /** FatSecret (or catalog) serving option id chosen in the wizard. */
+        selectedServingId: {
+            type: String,
+            trim: true,
+            maxlength: [64, 'Selected serving id cannot exceed 64 characters'],
+            default: null,
         },
         notes: {
             type: String,
@@ -237,6 +276,30 @@ export const nutritionDaySchema = new mongoose.Schema(
     { _id: true }
 );
 
+/**
+ * Trainer-defined free-form supplement/vitamin instruction on a nutrition plan.
+ * Embedded only — not a separate collection or product catalog.
+ */
+export const planInstructionEntrySchema = new mongoose.Schema(
+    {
+        instruction: {
+            type: String,
+            required: [true, 'Instruction is required'],
+            trim: true,
+            maxlength: [
+                MAX_INSTRUCTION_LENGTH,
+                `Instruction cannot exceed ${MAX_INSTRUCTION_LENGTH} characters`,
+            ],
+        },
+        order: {
+            type: Number,
+            required: [true, 'Instruction order is required'],
+            min: [1, 'Instruction order must be at least 1'],
+        },
+    },
+    { _id: true }
+);
+
 const nutritionPlanSchema = new mongoose.Schema(
     {
         trainerId: {
@@ -313,6 +376,26 @@ const nutritionPlanSchema = new mongoose.Schema(
                     return !value || value.length <= MAX_NUTRITION_DAYS;
                 },
                 message: `Nutrition days cannot exceed ${MAX_NUTRITION_DAYS} items`,
+            },
+        },
+        supplements: {
+            type: [planInstructionEntrySchema],
+            default: [],
+            validate: {
+                validator(value) {
+                    return !value || value.length <= MAX_SUPPLEMENTS;
+                },
+                message: `Supplements cannot exceed ${MAX_SUPPLEMENTS} items`,
+            },
+        },
+        vitamins: {
+            type: [planInstructionEntrySchema],
+            default: [],
+            validate: {
+                validator(value) {
+                    return !value || value.length <= MAX_VITAMINS;
+                },
+                message: `Vitamins cannot exceed ${MAX_VITAMINS} items`,
             },
         },
         isTemplate: {

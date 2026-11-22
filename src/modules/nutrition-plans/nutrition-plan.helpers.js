@@ -290,12 +290,27 @@ export const deepCloneNutritionDays = (nutritionDays = []) => {
                 order: item.order,
                 quantity: item.quantity,
                 unit: item.unit,
+                selectedServingId: item.selectedServingId ?? null,
                 notes: item.notes ?? null,
                 foodSnapshot: cloneSnapshot(item.foodSnapshot),
             })),
         })),
     }));
 };
+
+/**
+ * Deep-clone supplement/vitamin instruction entries with fresh ObjectIds.
+ * Preserves instruction text and display order.
+ *
+ * @param {object[]} entries
+ * @returns {object[]}
+ */
+export const deepClonePlanInstructionEntries = (entries = []) =>
+    (entries ?? []).map((entry, index) => ({
+        _id: new mongoose.Types.ObjectId(),
+        instruction: entry.instruction,
+        order: entry.order ?? index + 1,
+    }));
 
 /**
  * @param {object[]} foodItems
@@ -430,6 +445,56 @@ export const validateUniqueFoodItemOrders = (foodItems = []) => {
             };
         }
         seen.add(item.order);
+    }
+
+    return { valid: true };
+};
+
+/**
+ * @param {object[]} entries
+ * @returns {{ valid: boolean, message?: string }}
+ */
+export const validateUniqueInstructionOrders = (entries = []) => {
+    if (!Array.isArray(entries)) {
+        return { valid: true };
+    }
+
+    const seen = new Set();
+    for (const entry of entries) {
+        if (entry?.order == null) continue;
+        if (seen.has(entry.order)) {
+            return {
+                valid: false,
+                message: 'Instruction order values must be unique',
+            };
+        }
+        seen.add(entry.order);
+    }
+
+    return { valid: true };
+};
+
+/**
+ * @param {object[]} entries
+ * @returns {{ valid: boolean, message?: string }}
+ */
+export const validateUniqueInstructionIds = (entries = []) => {
+    if (!Array.isArray(entries)) {
+        return { valid: true };
+    }
+
+    const seen = new Set();
+    for (const entry of entries) {
+        const rawId = entry?._id ?? entry?.id;
+        if (rawId == null || rawId === '') continue;
+        const id = String(rawId);
+        if (seen.has(id)) {
+            return {
+                valid: false,
+                message: 'Instruction entry IDs must be unique',
+            };
+        }
+        seen.add(id);
     }
 
     return { valid: true };
@@ -581,6 +646,138 @@ const isValidObjectId = (id) =>
 
 const resolveObjectId = (id) =>
     isValidObjectId(id) ? new mongoose.Types.ObjectId(id) : new mongoose.Types.ObjectId();
+
+/**
+ * Collect string ObjectIds from embedded instruction entries.
+ *
+ * @param {object[]} entries
+ * @returns {Set<string>}
+ */
+export const collectInstructionEntryIds = (entries = []) => {
+    const ids = new Set();
+    for (const entry of entries ?? []) {
+        const id = toIdString(entry?._id ?? entry?.id);
+        if (id) {
+            ids.add(id);
+        }
+    }
+    return ids;
+};
+
+/**
+ * Filter blank UI rows, validate entry IDs against the same plan/collection,
+ * and assign sequential order from submitted array order.
+ *
+ * @param {object[]} entries
+ * @param {{
+ *   fieldName?: 'supplements'|'vitamins'|string,
+ *   allowedIds?: Set<string>,
+ *   forbiddenIds?: Set<string>,
+ * }} [options]
+ * @returns {object[]}
+ */
+export const processPlanInstructionEntries = (entries = [], options = {}) => {
+    const fieldName = options.fieldName ?? 'instructions';
+    const allowedIds = options.allowedIds ?? new Set();
+    const forbiddenIds = options.forbiddenIds ?? new Set();
+    const errors = [];
+    const kept = [];
+
+    const list = Array.isArray(entries) ? entries : [];
+
+    for (let index = 0; index < list.length; index += 1) {
+        const entry = list[index] ?? {};
+        const instruction =
+            typeof entry.instruction === 'string' ? entry.instruction.trim() : '';
+
+        // Blank / whitespace-only UI rows are ignored and never persisted.
+        if (!instruction) {
+            continue;
+        }
+
+        const rawId = entry._id ?? entry.id;
+        let resolvedId;
+
+        if (rawId != null && rawId !== '') {
+            if (!isValidObjectId(rawId)) {
+                errors.push({
+                    field: `${fieldName}[${index}]._id`,
+                    message: 'Must be a valid ObjectId',
+                });
+                continue;
+            }
+
+            const idStr = String(rawId);
+
+            if (forbiddenIds.has(idStr)) {
+                errors.push({
+                    field: `${fieldName}[${index}]._id`,
+                    message: 'Cannot reuse an ID from another collection',
+                });
+                continue;
+            }
+
+            if (!allowedIds.has(idStr)) {
+                errors.push({
+                    field: `${fieldName}[${index}]._id`,
+                    message: 'Entry ID does not belong to this plan',
+                });
+                continue;
+            }
+
+            resolvedId = new mongoose.Types.ObjectId(idStr);
+        } else {
+            resolvedId = new mongoose.Types.ObjectId();
+        }
+
+        kept.push({
+            _id: resolvedId,
+            instruction,
+        });
+    }
+
+    if (errors.length) {
+        const err = new Error(`${fieldName} validation failed`);
+        err.statusCode = 400;
+        err.errors = errors;
+        throw err;
+    }
+
+    // Submitted array order (after blank filtering) is authoritative.
+    return kept.map((entry, index) => ({
+        _id: entry._id,
+        instruction: entry.instruction,
+        order: index + 1,
+    }));
+};
+
+/**
+ * Map a supplement/vitamin entry to the public API shape.
+ *
+ * @param {object} entry
+ * @returns {{ id: string|null, instruction: string, order: number }}
+ */
+export const mapPlanInstructionEntryToPublic = (entry) => ({
+    id: toIdString(entry?._id ?? entry?.id),
+    instruction: entry?.instruction ?? '',
+    order: entry?.order ?? 0,
+});
+
+/**
+ * Normalize instruction arrays for API responses. Missing → [].
+ *
+ * @param {object[]|null|undefined} entries
+ * @returns {Array<{ id: string|null, instruction: string, order: number }>}
+ */
+export const mapPlanInstructionEntriesToPublic = (entries) => {
+    if (!Array.isArray(entries)) {
+        return [];
+    }
+
+    return [...entries]
+        .sort((a, b) => (a?.order ?? 0) - (b?.order ?? 0))
+        .map(mapPlanInstructionEntryToPublic);
+};
 
 export const escapeRegex = (value) =>
     String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -749,14 +946,33 @@ export const validateFoodVisibilityForPlan = async (nutritionDays = [], trainerI
 
 /**
  * Attach server-generated food snapshots and validate units for plan food items.
+ * On update, pass `options.previousPlan` so selected-serving gram weights survive
+ * when the live Food catalog has not yet been backfilled with `servings`.
  *
  * @param {object[]} nutritionDays
  * @param {string|import('mongoose').Types.ObjectId} trainerId
+ * @param {{ previousPlan?: object|null }} [options]
  * @returns {Promise<object[]>}
  */
-export const processNutritionDaysFoodItems = async (nutritionDays = [], trainerId) => {
+export const processNutritionDaysFoodItems = async (
+    nutritionDays = [],
+    trainerId,
+    options = {}
+) => {
     const normalizedDays = normalizeNutritionDays(nutritionDays);
     const foodIds = [];
+    const previousItemsById = new Map();
+
+    for (const day of options.previousPlan?.nutritionDays ?? []) {
+        for (const meal of day.meals ?? []) {
+            for (const item of meal.foodItems ?? []) {
+                const prevId = item?._id ?? item?.id;
+                if (prevId) {
+                    previousItemsById.set(String(prevId), item);
+                }
+            }
+        }
+    }
 
     for (const day of normalizedDays) {
         for (const meal of day.meals ?? []) {
@@ -805,7 +1021,18 @@ export const processNutritionDaysFoodItems = async (nutritionDays = [], trainerI
                     return item;
                 }
 
-                const snapshot = buildFoodSnapshot(food);
+                const selectedServingId =
+                    item.selectedServingId != null && String(item.selectedServingId).trim()
+                        ? String(item.selectedServingId).trim().slice(0, 64)
+                        : null;
+                const previousItem =
+                    item._id || item.id
+                        ? previousItemsById.get(String(item._id ?? item.id))
+                        : null;
+                const snapshot = buildFoodSnapshot(food, {
+                    selectedServingId,
+                    previousSnapshot: previousItem?.foodSnapshot ?? null,
+                });
                 const unitCheck = validatePlanFoodItemUnit(
                     item.quantity,
                     item.unit,
@@ -825,6 +1052,7 @@ export const processNutritionDaysFoodItems = async (nutritionDays = [], trainerI
                     order: item.order,
                     quantity: item.quantity,
                     unit: item.unit,
+                    selectedServingId,
                     notes: item.notes ?? null,
                     foodSnapshot: snapshot,
                 };
@@ -865,6 +1093,7 @@ const mapPlanFoodItemToPublic = (item) => {
         order: item.order,
         quantity: item.quantity,
         unit: item.unit,
+        selectedServingId: item.selectedServingId ?? null,
         notes: item.notes ?? null,
         foodSnapshot: item.foodSnapshot ?? null,
         itemMacros,
@@ -941,6 +1170,8 @@ export const mapNutritionPlanToPublic = (plan) => {
         isTemplate: Boolean(doc.isTemplate),
         status: doc.status,
         notes: doc.notes ?? null,
+        supplements: mapPlanInstructionEntriesToPublic(doc.supplements),
+        vitamins: mapPlanInstructionEntriesToPublic(doc.vitamins),
         totalMeals: doc.totalMeals ?? countTotalMeals(nutritionDays),
         totalFoodItems: doc.totalFoodItems ?? countTotalFoodItems(nutritionDays),
         avgDailyCalories: roundCalories(doc.avgDailyCalories ?? computed.avgDailyCalories),

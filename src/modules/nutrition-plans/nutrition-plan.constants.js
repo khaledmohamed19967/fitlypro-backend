@@ -47,6 +47,15 @@ export const MAX_MEALS_PER_DAY = 12;
 
 export const MAX_FOOD_ITEMS_PER_MEAL = 30;
 
+/** Max trainer-defined supplement instruction entries per nutrition plan. */
+export const MAX_SUPPLEMENTS = 20;
+
+/** Max trainer-defined vitamin instruction entries per nutrition plan. */
+export const MAX_VITAMINS = 20;
+
+/** Max characters for a single supplement/vitamin instruction. */
+export const MAX_INSTRUCTION_LENGTH = 500;
+
 export const NUTRITION_PLAN_SORT_OPTIONS = Object.freeze([
     'name',
     'name-desc',

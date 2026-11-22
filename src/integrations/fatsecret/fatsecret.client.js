@@ -282,7 +282,28 @@ export const searchFoods = async ({
 };
 
 /**
+ * Build food.get params. `flag_default_serving` is Premier Exclusive (same as search.v5).
+ * Basic-scope requests omit the flag so we do not claim unsupported Premier fields.
+ *
+ * @param {string} method
+ * @param {string} foodId
+ * @param {boolean} includeDefaultServingFlag
+ */
+const buildFoodGetParams = (method, foodId, includeDefaultServingFlag) => {
+    const params = {
+        method,
+        food_id: String(foodId),
+    };
+    if (includeDefaultServingFlag) {
+        params.flag_default_serving = 'true';
+    }
+    return params;
+};
+
+/**
  * Fetch full FatSecret food details (servings + nutrition).
+ * Requests `flag_default_serving=true` on Premier detail calls so `is_default`
+ * can be returned (documented on food.get.v4+).
  *
  * @param {string} foodId
  * @returns {Promise<object>}
@@ -293,14 +314,19 @@ export const getFoodById = async (foodId) => {
     let lastError;
 
     for (const method of FOOD_GET_METHODS) {
+        const usePremier = scope !== 'basic';
         try {
-            return await postServerApi({ method, food_id: String(foodId) }, scope === 'basic' ? 'basic' : 'premier');
+            return await postServerApi(
+                buildFoodGetParams(method, foodId, usePremier),
+                usePremier ? 'premier' : 'basic'
+            );
         } catch (error) {
             lastError = error;
             if (error?.fatsecretCode === FATSECRET_ERROR_CODES.MISSING_SCOPE && scope !== 'basic') {
                 resetFatSecretTokenCache();
                 try {
-                    return await postServerApi({ method, food_id: String(foodId) }, 'basic');
+                    // Basic fallback: omit Premier-only flag_default_serving.
+                    return await postServerApi(buildFoodGetParams(method, foodId, false), 'basic');
                 } catch (basicError) {
                     lastError = basicError;
                 }

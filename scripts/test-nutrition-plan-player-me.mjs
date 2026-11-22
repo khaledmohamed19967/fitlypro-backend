@@ -209,6 +209,12 @@ async function main() {
         daysCount: 7,
         scheduleMode: 'weekly',
         notes: 'Eat well',
+        supplements: [
+            { instruction: 'Whey protein - 30g - After workout', order: 1 },
+        ],
+        vitamins: [
+            { instruction: 'Omega 3 - 2 caps - with a meal', order: 1 },
+        ],
         macroTargets: {
             calories: 2800,
             protein: 180,
@@ -333,6 +339,25 @@ async function main() {
         pass('6. Response contains plan metadata');
     } else {
         fail('6. Response contains plan metadata', JSON.stringify(planOut));
+    }
+
+    if (
+        Array.isArray(planOut?.supplements) &&
+        planOut.supplements.length === 1 &&
+        planOut.supplements[0].id &&
+        planOut.supplements[0].instruction.includes('Whey') &&
+        planOut.supplements[0].order === 1 &&
+        Array.isArray(planOut?.vitamins) &&
+        planOut.vitamins.length === 1 &&
+        planOut.vitamins[0].instruction.includes('Omega') &&
+        planOut.vitamins[0].order === 1
+    ) {
+        pass('6b. Response contains supplements and vitamins');
+    } else {
+        fail('6b. Response contains supplements and vitamins', JSON.stringify({
+            supplements: planOut?.supplements,
+            vitamins: planOut?.vitamins,
+        }));
     }
 
     if (

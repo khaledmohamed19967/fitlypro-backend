@@ -34,8 +34,10 @@ const STUDIO_PAGES = Object.freeze({
         nutrition: Object.freeze([FULL_PAGE]),
     }),
     elevate: Object.freeze({
-        // Single cover page: author's html/ design via page.js
+        // Workout: full multi-page document via page.js
         workout: Object.freeze([FULL_PAGE]),
+        // Nutrition: Page 01 cover & overview via nutrition.js
+        nutrition: Object.freeze([FULL_PAGE]),
     }),
 });
 
@@ -77,6 +79,15 @@ export const STUDIO_TEMPLATE_SOURCES = Object.freeze({
                 exportName: 'buildElevateWorkoutHtml',
                 filePath: join(TEMPLATES_ROOT, 'elevate', 'page.js'),
                 href: toModuleHref(join(TEMPLATES_ROOT, 'elevate', 'page.js')),
+            }),
+            Object.freeze({
+                planType: 'nutrition',
+                pageId: 'full',
+                exportName: 'buildElevateNutritionHtml',
+                filePath: join(TEMPLATES_ROOT, 'elevate', 'nutrition.js'),
+                href: toModuleHref(
+                    join(TEMPLATES_ROOT, 'elevate', 'nutrition.js')
+                ),
             }),
         ]),
     }),

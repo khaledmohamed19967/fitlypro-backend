@@ -186,6 +186,31 @@ function mapActivityForExport(activity) {
  * @param {object} plan
  * @param {object} trainer
  */
+/**
+ * Map persisted instruction entries for PDF export (supplements / vitamins).
+ * Blank instructions are excluded — they are UI-only rows, never PDF content.
+ *
+ * @param {object[]|null|undefined} entries
+ * @returns {Array<{ id: string|null, instruction: string, order: number }>}
+ */
+const mapInstructionEntriesForExport = (entries) => {
+    if (!Array.isArray(entries)) return [];
+    return entries
+        .map((entry, index) => {
+            const instruction =
+                typeof entry?.instruction === 'string'
+                    ? entry.instruction.trim()
+                    : '';
+            if (!instruction) return null;
+            return {
+                id: entry?.id ?? entry?._id?.toString?.() ?? null,
+                instruction,
+                order: entry?.order ?? index + 1,
+            };
+        })
+        .filter(Boolean);
+};
+
 export const buildNutritionExportModel = (plan, trainer) => ({
     type: 'nutrition',
     plan: {
@@ -204,6 +229,8 @@ export const buildNutritionExportModel = (plan, trainer) => ({
         avgDailyCalories: plan.avgDailyCalories ?? 0,
         macroTargets: plan.macroTargets ?? null,
         computedMacros: plan.computedMacros ?? null,
+        supplements: mapInstructionEntriesForExport(plan.supplements),
+        vitamins: mapInstructionEntriesForExport(plan.vitamins),
     },
     trainer,
     content: {

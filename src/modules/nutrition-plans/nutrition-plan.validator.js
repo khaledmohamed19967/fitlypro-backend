@@ -10,6 +10,9 @@ import {
     MAX_WEEKLY_NUTRITION_DAYS,
     MAX_MEALS_PER_DAY,
     MAX_FOOD_ITEMS_PER_MEAL,
+    MAX_SUPPLEMENTS,
+    MAX_VITAMINS,
+    MAX_INSTRUCTION_LENGTH,
     SCHEDULE_MODES,
     DEFAULT_SCHEDULE_MODE,
 } from './nutrition-plan.constants.js';
@@ -18,6 +21,8 @@ import {
     validateUniqueMealOrders,
     validateUniqueFoodItemOrders,
     validateScheduleModeConstraints,
+    validateUniqueInstructionOrders,
+    validateUniqueInstructionIds,
 } from './nutrition-plan.helpers.js';
 
 /**
@@ -90,6 +95,7 @@ const planFoodItemSchema = Joi.object({
             'any.required': 'Unit is required',
             'any.only': 'Unit must be g, kg, ml, l, piece, or serving',
         }),
+    selectedServingId: Joi.string().trim().max(64).optional().allow('', null),
     notes: Joi.string().trim().max(200).optional().allow('', null),
     foodSnapshot: Joi.forbidden(),
 });
@@ -183,6 +189,53 @@ const nutritionDaysSchema = Joi.array()
     })
     .default([]);
 
+/**
+ * Supplement/vitamin instruction entry.
+ * Empty/whitespace instructions are allowed at validation time so blank UI rows
+ * can be filtered during processing; they are never persisted.
+ */
+const planInstructionEntrySchema = Joi.object({
+    _id: objectIdSchema.optional(),
+    id: objectIdSchema.optional(),
+    instruction: Joi.string()
+        .trim()
+        .max(MAX_INSTRUCTION_LENGTH)
+        .required()
+        .allow('')
+        .messages({
+            'any.required': 'Instruction is required',
+            'string.max': `Instruction cannot exceed ${MAX_INSTRUCTION_LENGTH} characters`,
+        }),
+    order: Joi.number().integer().min(1).required().messages({
+        'any.required': 'Instruction order is required',
+        'number.min': 'Instruction order must be at least 1',
+    }),
+});
+
+const buildInstructionArraySchema = (maxItems, fieldLabel) =>
+    Joi.array()
+        .items(planInstructionEntrySchema)
+        .max(maxItems)
+        .custom((entries, helpers) => {
+            const orderResult = validateUniqueInstructionOrders(entries);
+            if (!orderResult.valid) {
+                return helpers.error('instructions.uniqueOrders');
+            }
+            const idResult = validateUniqueInstructionIds(entries);
+            if (!idResult.valid) {
+                return helpers.error('instructions.uniqueIds');
+            }
+            return entries;
+        })
+        .messages({
+            'array.max': `${fieldLabel} cannot exceed ${maxItems} items`,
+            'instructions.uniqueOrders': `${fieldLabel} order values must be unique`,
+            'instructions.uniqueIds': `${fieldLabel} entry IDs must be unique`,
+        });
+
+const supplementsSchema = buildInstructionArraySchema(MAX_SUPPLEMENTS, 'Supplements');
+const vitaminsSchema = buildInstructionArraySchema(MAX_VITAMINS, 'Vitamins');
+
 const nutritionPlanContentFields = {
     name: Joi.string().trim().min(2).max(120).messages({
         'string.min': 'Name must be at least 2 characters',
@@ -213,6 +266,8 @@ const nutritionPlanContentFields = {
         }),
     macroTargets: macroTargetsSchema,
     nutritionDays: nutritionDaysSchema,
+    supplements: supplementsSchema,
+    vitamins: vitaminsSchema,
     isTemplate: Joi.boolean(),
     status: Joi.string()
         .valid('draft', 'active')
@@ -245,6 +300,8 @@ export const validateCreateNutritionPlan = Joi.object({
         'any.required': 'Macro targets are required',
     }),
     nutritionDays: nutritionPlanContentFields.nutritionDays,
+    supplements: nutritionPlanContentFields.supplements.default([]),
+    vitamins: nutritionPlanContentFields.vitamins.default([]),
     isTemplate: nutritionPlanContentFields.isTemplate.default(false),
     status: nutritionPlanContentFields.status.optional(),
     notes: nutritionPlanContentFields.notes,
@@ -273,6 +330,8 @@ export const validateUpdateNutritionPlan = Joi.object({
     scheduleMode: nutritionPlanContentFields.scheduleMode.optional(),
     macroTargets: macroTargetsSchema.optional(),
     nutritionDays: nutritionDaysSchema.optional(),
+    supplements: supplementsSchema.optional(),
+    vitamins: vitaminsSchema.optional(),
     isTemplate: nutritionPlanContentFields.isTemplate.optional(),
     status: nutritionPlanContentFields.status.optional(),
     notes: nutritionPlanContentFields.notes,

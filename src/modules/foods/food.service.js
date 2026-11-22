@@ -328,6 +328,26 @@ const materializeExternalFoods = async (externalIds = [], trainerId) => {
             if (!canReadFood(existing, trainerId)) {
                 throw new ApiError(404, 'Food not found');
             }
+
+            // Backfill alternate servings only — never overwrite nutrition, defaultServing,
+            // or defaultServingId (existing foods keep their originally materialized default).
+            const needsServings =
+                !Array.isArray(existing.servings) || existing.servings.length === 0;
+            if (needsServings) {
+                try {
+                    const detailJson = await getFatSecretFoodById(externalId);
+                    const payload = mapFatSecretFoodToFitlyFood(
+                        extractFoodGetPayload(detailJson)
+                    );
+                    if (payload?.servings?.length) {
+                        existing.servings = payload.servings;
+                        await existing.save();
+                    }
+                } catch {
+                    // Keep the existing food if detail enrichment fails.
+                }
+            }
+
             foods.push(toPublicFood(existing));
             continue;
         }

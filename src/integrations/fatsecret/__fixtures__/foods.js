@@ -91,6 +91,218 @@ export const DETAIL_EGG_PIECE = {
     },
 };
 
+/**
+ * Representative multi-serving Egg detail (metric grams on every option).
+ * FatSecret marks "1 large" as is_default; 100g is also present.
+ * Not a verified live capture — constructed to match documented response shape.
+ */
+export const DETAIL_EGG_MULTI = {
+    food: {
+        food_id: '33691',
+        food_name: 'Egg',
+        food_type: 'Generic',
+        servings: {
+            serving: [
+                {
+                    serving_id: '1',
+                    serving_description: '1 small',
+                    metric_serving_amount: '38.000',
+                    metric_serving_unit: 'g',
+                    number_of_units: '1.000',
+                    measurement_description: 'small',
+                    calories: '54',
+                    carbohydrate: '0.34',
+                    protein: '4.79',
+                    fat: '3.6',
+                },
+                {
+                    serving_id: '2',
+                    serving_description: '1 medium',
+                    metric_serving_amount: '44.000',
+                    metric_serving_unit: 'g',
+                    number_of_units: '1.000',
+                    measurement_description: 'medium',
+                    calories: '63',
+                    carbohydrate: '0.39',
+                    protein: '5.54',
+                    fat: '4.18',
+                },
+                {
+                    serving_id: '3',
+                    serving_description: '1 large',
+                    metric_serving_amount: '50.000',
+                    metric_serving_unit: 'g',
+                    number_of_units: '1.000',
+                    measurement_description: 'large',
+                    calories: '72',
+                    carbohydrate: '0.45',
+                    protein: '6.3',
+                    fat: '4.75',
+                    is_default: '1',
+                },
+                {
+                    serving_id: '4',
+                    serving_description: '1 extra large',
+                    metric_serving_amount: '56.000',
+                    metric_serving_unit: 'g',
+                    number_of_units: '1.000',
+                    measurement_description: 'extra large',
+                    calories: '80',
+                    carbohydrate: '0.5',
+                    protein: '7.05',
+                    fat: '5.32',
+                },
+                {
+                    serving_id: '5',
+                    serving_description: '100 g',
+                    metric_serving_amount: '100.000',
+                    metric_serving_unit: 'g',
+                    number_of_units: '100.000',
+                    measurement_description: 'g',
+                    calories: '143',
+                    carbohydrate: '0.9',
+                    protein: '12.6',
+                    fat: '9.5',
+                },
+            ],
+        },
+    },
+};
+
+/** No is_default; includes ~100g — Fitly should select 100g (priority 2). */
+export const DETAIL_NO_DEFAULT_WITH_100G = {
+    food: {
+        food_id: '90001',
+        food_name: 'Oats',
+        food_type: 'Generic',
+        servings: {
+            serving: [
+                {
+                    serving_id: '10',
+                    serving_description: '1 cup',
+                    metric_serving_amount: '80.000',
+                    metric_serving_unit: 'g',
+                    number_of_units: '1.000',
+                    measurement_description: 'cup',
+                    calories: '300',
+                    carbohydrate: '54',
+                    protein: '10',
+                    fat: '6',
+                },
+                {
+                    serving_id: '11',
+                    serving_description: '100 g',
+                    metric_serving_amount: '100.000',
+                    metric_serving_unit: 'g',
+                    number_of_units: '100.000',
+                    measurement_description: 'g',
+                    calories: '375',
+                    carbohydrate: '67.5',
+                    protein: '12.5',
+                    fat: '7.5',
+                },
+            ],
+        },
+    },
+};
+
+/** No is_default and no ~100g — Fitly should select first valid metric serving. */
+export const DETAIL_NO_DEFAULT_NO_100G = {
+    food: {
+        food_id: '90002',
+        food_name: 'Almonds',
+        food_type: 'Generic',
+        servings: {
+            serving: [
+                {
+                    serving_id: '20',
+                    serving_description: '1 oz',
+                    metric_serving_amount: '28.000',
+                    metric_serving_unit: 'g',
+                    number_of_units: '1.000',
+                    measurement_description: 'oz',
+                    calories: '160',
+                    carbohydrate: '6',
+                    protein: '6',
+                    fat: '14',
+                },
+                {
+                    serving_id: '21',
+                    serving_description: '10 almonds',
+                    metric_serving_amount: '12.000',
+                    metric_serving_unit: 'g',
+                    number_of_units: '10.000',
+                    measurement_description: 'almonds',
+                    calories: '70',
+                    carbohydrate: '2.5',
+                    protein: '2.5',
+                    fat: '6',
+                },
+            ],
+        },
+    },
+};
+
+/**
+ * Explicit default has no usable metric weight — must be ignored; fall back to 100g.
+ * Representative fixture (not a live capture).
+ */
+export const DETAIL_INVALID_DEFAULT_FALLBACK_100G = {
+    food: {
+        food_id: '90003',
+        food_name: 'Mystery Food',
+        food_type: 'Generic',
+        servings: {
+            serving: [
+                {
+                    serving_id: '30',
+                    serving_description: '1 serving',
+                    // Missing metric amount — invalid for Fitly selection.
+                    number_of_units: '1.000',
+                    measurement_description: 'serving',
+                    calories: '200',
+                    carbohydrate: '20',
+                    protein: '10',
+                    fat: '8',
+                    is_default: 1,
+                },
+                {
+                    serving_id: '31',
+                    serving_description: '100 g',
+                    metric_serving_amount: '100.000',
+                    metric_serving_unit: 'g',
+                    number_of_units: '100.000',
+                    measurement_description: 'g',
+                    calories: '200',
+                    carbohydrate: '20',
+                    protein: '10',
+                    fat: '8',
+                },
+            ],
+        },
+    },
+};
+
+/** Same as egg multi but is_default is numeric 1 (docs type) instead of string "1". */
+export const DETAIL_EGG_MULTI_NUMERIC_DEFAULT = {
+    food: {
+        food_id: '33691',
+        food_name: 'Egg',
+        food_type: 'Generic',
+        servings: {
+            serving: DETAIL_EGG_MULTI.food.servings.serving.map((entry) =>
+                entry.serving_id === '3'
+                    ? { ...entry, is_default: 1 }
+                    : (() => {
+                          const next = { ...entry };
+                          delete next.is_default;
+                          return next;
+                      })()
+            ),
+        },
+    },
+};
+
 export const TOKEN_RESPONSE = {
     access_token: 'test-token',
     token_type: 'Bearer',

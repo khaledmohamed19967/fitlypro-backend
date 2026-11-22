@@ -95,6 +95,55 @@ const defaultServingSchema = new mongoose.Schema(
     { _id: false }
 );
 
+/** Alternate FatSecret (or other source) serving options with reliable metric weights. */
+const foodServingOptionSchema = new mongoose.Schema(
+    {
+        id: {
+            type: String,
+            required: [true, 'Serving option id is required'],
+            trim: true,
+            maxlength: [64, 'Serving option id cannot exceed 64 characters'],
+        },
+        label: {
+            type: String,
+            required: [true, 'Serving option label is required'],
+            trim: true,
+            maxlength: [120, 'Serving option label cannot exceed 120 characters'],
+        },
+        quantity: {
+            type: Number,
+            required: [true, 'Serving option quantity is required'],
+            min: [0, 'Serving option quantity must be greater than 0'],
+        },
+        unit: {
+            type: String,
+            required: [true, 'Serving option unit is required'],
+            enum: {
+                values: SERVING_UNITS,
+                message: 'Invalid serving option unit',
+            },
+        },
+        gramWeight: {
+            type: Number,
+            required: [true, 'Serving option gram weight is required'],
+            min: [0, 'Serving option gram weight must be greater than 0'],
+        },
+        nutrition: {
+            type: new mongoose.Schema(
+                {
+                    calories: { type: Number, min: 0, default: null },
+                    protein: { type: Number, min: 0, default: null },
+                    carbs: { type: Number, min: 0, default: null },
+                    fat: { type: Number, min: 0, default: null },
+                },
+                { _id: false }
+            ),
+            default: undefined,
+        },
+    },
+    { _id: false }
+);
+
 const sourceSchema = new mongoose.Schema(
     {
         type: {
@@ -212,6 +261,18 @@ const foodSchema = new mongoose.Schema(
         defaultServing: {
             type: defaultServingSchema,
             required: [true, 'Default serving is required'],
+        },
+        /** Source serving id that produced defaultServing (when available). */
+        defaultServingId: {
+            type: String,
+            trim: true,
+            maxlength: [64, 'Default serving id cannot exceed 64 characters'],
+            default: null,
+        },
+        /** Alternate serving options; omitted/empty for legacy foods. */
+        servings: {
+            type: [foodServingOptionSchema],
+            default: undefined,
         },
         image: {
             type: imageSchema,

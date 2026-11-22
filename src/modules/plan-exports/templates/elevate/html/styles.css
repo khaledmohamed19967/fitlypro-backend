@@ -25,7 +25,10 @@
   --text: #ffffff;
   --muted: #9AA2AC;
   --silver: #c5cad0;
-  --section-space: 20px;      
+  --section-space: 20px;
+  --macro-protein: #b69cff;
+  --macro-carbs: #7fd69a;
+  --macro-fat: #7fa9dc;
 }
 
 * {
@@ -92,7 +95,8 @@ body {
   user-select: none;
 }
 
-.page-cover::after {
+.page-cover::after,
+.page-nutrition-cover::after {
   content: "";
   position: absolute;
   left: 0;
@@ -528,7 +532,12 @@ body {
   display: none;
 }
 
-.page-workouts .example-week {
+/*
+ * Shared Example Week / Day-at-a-Glance card chrome.
+ * Used by Workout Page 02 (.page-workouts) and Nutrition Page 01 cover.
+ * Default grid cols = 7 (week); Nutrition sets --example-week-cols.
+ */
+.example-week {
   position: relative;
   z-index: 3;
   flex: none;
@@ -539,7 +548,7 @@ body {
   border-radius: 16px;
 }
 
-.page-workouts .example-week-head {
+.example-week-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -547,39 +556,40 @@ body {
   margin-bottom: 12px;
 }
 
-.page-workouts .example-week-title {
+.example-week-title {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.page-workouts .example-week-title svg {
+.example-week-title svg {
   width: 18px;
   height: 18px;
   color: var(--lime);
   flex: none;
 }
 
-.page-workouts .example-week-title h2 {
+.example-week-title h2 {
   font-size: 14px;
   font-weight: 650;
   letter-spacing: -0.02em;
 }
 
-.page-workouts .example-week-head > p {
+.example-week-head > p,
+.example-week-empty {
   font-size: 11px;
   color: var(--muted);
   letter-spacing: -0.01em;
 }
 
-.page-workouts .example-week-grid {
+.example-week-grid {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(var(--example-week-cols, 7), 1fr);
   gap: 8px;
 }
 
-.page-workouts .week-day {
-  min-height: 76px;
+.week-day {
+  min-height: 78px;
   border-radius: 0 0 12px 12px;
   background: rgba(255, 255, 255, 0.03);
   border: 2px solid rgba(255, 255, 255, 0.06);
@@ -590,45 +600,57 @@ body {
   gap: 4px;
   padding: 7px 4px;
   text-align: center;
+  min-width: 0;
 }
 
-.page-workouts .week-day.is-active {
+.week-day.is-active {
   border-top: 2px solid var(--lime);
 }
 
-.page-workouts .week-day-icon {
+.week-day-icon {
   width: 20px;
   height: 20px;
 }
 
-.page-workouts .week-day.is-active .week-day-icon {
+.week-day.is-active .week-day-icon {
   color: var(--lime);
 }
 
-.page-workouts .week-day.is-rest .week-day-icon {
+.week-day.is-rest .week-day-icon {
   color: var(--muted);
 }
 
-.page-workouts .week-day strong {
+.week-day strong {
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 700;
   color: #ffffff;
   line-height: 1;
+  overflow-wrap: anywhere;
+  margin-bottom: 1px;
 }
 
-.page-workouts .week-day.is-rest strong {
+.week-day.is-rest strong {
   color: #c5cad0;
 }
 
-.page-workouts .week-day span {
-  font-size: 10.5px;
+.week-day span {
+  font-size: 11px;
   line-height: 1.2;
-  font-weight: 650;
-  color: #e8eaed;
+  font-weight: 400;
+  color: #9AA2AC;
 }
 
-.page-workouts .week-day.is-rest span {
+.week-day.is-rest span {
   color: var(--muted);
+}
+
+/* Nutrition cover: Example Week lives in .nutrition-cover-flow (static). */
+.page-nutrition-cover .example-week {
+  position: static;
+  left: auto;
+  top: auto;
+  width: 100%;
+  flex: none;
 }
 
 .page-workouts .program-notes {
@@ -724,7 +746,9 @@ body {
 }
 
 /* —— Page 03+: WORKOUT PLAN details (flow layout; decorative corners absolute) —— */
-.page-workout-details {
+.page-workout-details,
+.page-nutrition-meals,
+.page-nutrition-notes {
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -734,7 +758,9 @@ body {
   break-before: page;
 }
 
-.page-workout-details .details-corner {
+.page-workout-details .details-corner,
+.page-nutrition-meals .details-corner,
+.page-nutrition-notes .details-corner {
   position: absolute;
   z-index: 1;
   top: 0;
@@ -743,20 +769,26 @@ body {
   user-select: none;
 }
 
-.page-workout-details .details-corner-dark {
+.page-workout-details .details-corner-dark,
+.page-nutrition-meals .details-corner-dark,
+.page-nutrition-notes .details-corner-dark {
   width: 220px;
   height: 220px;
   object-fit: cover;
   opacity: 0.95;
 }
 
-.page-workout-details .details-corner-lime {
+.page-workout-details .details-corner-lime,
+.page-nutrition-meals .details-corner-lime,
+.page-nutrition-notes .details-corner-lime {
   width: 150px;
   height: 200px;
   object-fit: cover;
 }
 
-.page-workout-details .details-slash {
+.page-workout-details .details-slash,
+.page-nutrition-meals .details-slash,
+.page-nutrition-notes .details-slash {
   position: absolute;
   z-index: 1;
   right: 0;
@@ -767,7 +799,9 @@ body {
   user-select: none;
 }
 
-.page-workout-details .details-logo {
+.page-workout-details .details-logo,
+.page-nutrition-meals .details-logo,
+.page-nutrition-notes .details-logo {
   position: relative;
   left: auto;
   top: auto;
@@ -777,7 +811,9 @@ body {
   margin-bottom: 10px;
 }
 
-.page-workout-details .details-title {
+.page-workout-details .details-title,
+.page-nutrition-meals .details-title,
+.page-nutrition-notes .details-title {
   position: relative;
   z-index: 3;
   flex: none;
@@ -790,11 +826,15 @@ body {
   color: #fff;
 }
 
-.page-workout-details .details-title span {
+.page-workout-details .details-title span,
+.page-nutrition-meals .details-title span,
+.page-nutrition-notes .details-title span {
   color: var(--lime);
 }
 
-.page-workout-details .details-dek {
+.page-workout-details .details-dek,
+.page-nutrition-meals .details-dek,
+.page-nutrition-notes .details-dek {
   position: relative;
   z-index: 3;
   flex: none;
@@ -807,17 +847,21 @@ body {
   margin-bottom: 10px;
 }
 
-.page-workout-details .details-stack {
+.page-workout-details .details-stack,
+.page-nutrition-meals .details-stack,
+.page-nutrition-notes .details-stack {
   position: relative;
   z-index: 3;
   flex: 1 1 auto;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 18px;
   min-height: 0;
 }
 
-.page-workout-details .details-card {
+.page-workout-details .details-card,
+.page-nutrition-meals .details-card,
+.page-nutrition-notes .details-card {
   position: relative;
   isolation: isolate;
   z-index: 0;
@@ -834,17 +878,23 @@ body {
   background-clip: padding-box;
 }
 
-.page-workout-details .details-card-empty {
+.page-workout-details .details-card-empty,
+.page-nutrition-meals .details-card-empty,
+.page-nutrition-notes .details-card-empty {
   box-shadow: 0 0 0 1px var(--line);
   padding: 24px 16px;
 }
 
-.page-workout-details .details-empty {
+.page-workout-details .details-empty,
+.page-nutrition-meals .details-empty,
+.page-nutrition-notes .details-empty {
   font-size: 13px;
   color: var(--muted);
 }
 
-.page-workout-details .details-card-head {
+.page-workout-details .details-card-head,
+.page-nutrition-meals .details-card-head,
+.page-nutrition-notes .details-card-head {
   position: relative;
   z-index: 1;
   display: flex;
@@ -857,7 +907,9 @@ body {
   background: transparent;
 }
 
-.page-workout-details .details-pill {
+.page-workout-details .details-pill,
+.page-nutrition-meals .details-pill,
+.page-nutrition-notes .details-pill {
   position: relative;
   z-index: 2;
   display: inline-flex;
@@ -876,39 +928,53 @@ body {
   line-height: 1.15;
 }
 
-.page-workout-details .details-card--lime .details-pill {
+.page-workout-details .details-card--lime .details-pill,
+.page-nutrition-meals .details-card--lime .details-pill,
+.page-nutrition-notes .details-card--lime .details-pill {
 background: linear-gradient(90deg, #CCFF01 0%, #B6E600 100%);
 ;
 }
 
-.page-workout-details .details-card--orange .details-pill {
+.page-workout-details .details-card--orange .details-pill,
+.page-nutrition-meals .details-card--orange .details-pill,
+.page-nutrition-notes .details-card--orange .details-pill {
   background: linear-gradient(90deg, #f7a33a 0%, #e8781a 100%);
 }
 
-.page-workout-details .details-card--lime {
+.page-workout-details .details-card--lime,
+.page-nutrition-meals .details-card--lime,
+.page-nutrition-notes .details-card--lime {
   --details-outline: var(--lime);
   --details-accent: var(--lime);
 }
 
-.page-workout-details .details-card--orange {
+.page-workout-details .details-card--orange,
+.page-nutrition-meals .details-card--orange,
+.page-nutrition-notes .details-card--orange {
   --details-outline: #e8781a;
   --details-accent: #e8781a;
 }
 
-.page-workout-details .details-pill svg {
+.page-workout-details .details-pill svg,
+.page-nutrition-meals .details-pill svg,
+.page-nutrition-notes .details-pill svg {
   width: 16px;
   height: 16px;
   flex: none;
 }
 
-.page-workout-details .details-pill span {
+.page-workout-details .details-pill span,
+.page-nutrition-meals .details-pill span,
+.page-nutrition-notes .details-pill span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.page-workout-details .details-card-meta {
+.page-workout-details .details-card-meta,
+.page-nutrition-meals .details-card-meta,
+.page-nutrition-notes .details-card-meta {
   position: relative;
   z-index: 1;
   flex: none;
@@ -918,20 +984,26 @@ background: linear-gradient(90deg, #CCFF01 0%, #B6E600 100%);
   white-space: nowrap;
 }
 
-.page-workout-details .details-card-body {
+.page-workout-details .details-card-body,
+.page-nutrition-meals .details-card-body,
+.page-nutrition-notes .details-card-body {
   position: relative;
   z-index: 1;
   padding-left: 16px;
 
 }
 
-.page-workout-details .details-table {
+.page-workout-details .details-table,
+.page-nutrition-meals .details-table,
+.page-nutrition-notes .details-table {
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
 }
 
-.page-workout-details .details-table th {
+.page-workout-details .details-table th,
+.page-nutrition-meals .details-table th,
+.page-nutrition-notes .details-table th {
   padding: 0 6px 8px;
   font-size: 10px;
   font-weight: 650;
@@ -965,17 +1037,23 @@ background: linear-gradient(90deg, #CCFF01 0%, #B6E600 100%);
   text-align: left;
 }
 
-.page-workout-details .details-row {
+.page-workout-details .details-row,
+.page-nutrition-meals .details-row,
+.page-nutrition-notes .details-row {
   /* Rows stay with their JS-packed page; do not force CSS page breaks. */
 }
 
-.page-workout-details .details-row td {
+.page-workout-details .details-row td,
+.page-nutrition-meals .details-row td,
+.page-nutrition-notes .details-row td {
   padding: 8px 6px;
   vertical-align: middle;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.page-workout-details .details-row:last-child td {
+.page-workout-details .details-row:last-child td,
+.page-nutrition-meals .details-row:last-child td,
+.page-nutrition-notes .details-row:last-child td {
   border-bottom: 0;
 }
 
@@ -1078,7 +1156,9 @@ background: linear-gradient(90deg, #CCFF01 0%, #B6E600 100%);
   color: var(--muted);
 }
 
-.page-workout-details .details-footer {
+.page-workout-details .details-footer,
+.page-nutrition-meals .details-footer,
+.page-nutrition-notes .details-footer {
   position: relative;
   z-index: 3;
   flex: none;
@@ -1091,6 +1171,502 @@ background: linear-gradient(90deg, #CCFF01 0%, #B6E600 100%);
   font-size: 11px;
   color: var(--muted);
   letter-spacing: 0.01em;
+}
+
+@page {
+  size: A4;
+  margin: 0;
+}
+
+
+
+/* —— Nutrition Page 03: Supplements & Notes —— */
+.page-nutrition-notes .details-stack {
+  /* Shared details-stack is flex:1; keep Page 03 stack content-sized so macros sit directly under the card. */
+  flex: none;
+  gap: 16px;
+}
+
+/* Reuse Workout .stats/.stat chrome in flow layout (cover .stats stays absolute). */
+.page-nutrition-notes .stats {
+  position: relative;
+  left: auto;
+  top: auto;
+  z-index: 3;
+  flex: none;
+  width: 100%;
+  height: 58px;
+  margin: 0;
+}
+
+.page-nutrition-notes .details-card-meta {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.page-nutrition-notes .notes-lede {
+  margin: 0 0 12px;
+  padding-left: 16px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.page-nutrition-notes .notes-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-left: 16px;
+}
+
+.page-nutrition-notes .notes-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+}
+
+.page-nutrition-notes .notes-num {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--orange);
+  color: #0b0d0f;
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1;
+}
+
+.page-nutrition-notes .notes-item p {
+  min-width: 0;
+  flex: 1 1 auto;
+  font-size: 12.5px;
+  font-weight: 550;
+  line-height: 1.35;
+  color: #e8eaed;
+  overflow-wrap: anywhere;
+}
+
+.page-nutrition-notes .notes-bottom {
+  position: relative;
+  z-index: 3;
+  /* Fill remaining page space so the portrait can render at natural ratio; footer stays pinned. */
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 14px;
+  align-items: stretch;
+}
+
+.page-nutrition-notes .notes-bottom > * {
+  min-width: 0;
+  min-height: 0;
+}
+
+.page-nutrition-notes .notes-photo {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: 100%;
+  justify-self: start;
+  /* Full asset visible; height follows the row, width follows intrinsic ratio. */
+  object-fit: contain;
+  object-position: left top;
+  border-radius: 16px;
+  user-select: none;
+}
+
+.page-nutrition-notes .notes-howto {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 14px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.page-nutrition-notes .notes-howto-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.page-nutrition-notes .notes-howto-head svg {
+  width: 18px;
+  height: 18px;
+  color: var(--lime);
+  flex: none;
+}
+
+.page-nutrition-notes .notes-howto-head h2 {
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.page-nutrition-notes .notes-howto-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.page-nutrition-notes .notes-howto-list li {
+  position: relative;
+  padding-left: 14px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #c9ced5;
+}
+
+.page-nutrition-notes .notes-howto-list li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.45em;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--lime);
+}
+
+/* —— Nutrition Page 02: Daily Meal Plan (reuses Workout details chrome) —— */
+.page-nutrition-meals .details-card-meta {
+  color: var(--lime);
+  font-weight: 650;
+  font-size: 12px;
+}
+
+.page-nutrition-meals .meal-table th:nth-child(1),
+.page-nutrition-meals .meal-table td.meal-food {
+  width: 42%;
+  text-align: left;
+}
+
+.page-nutrition-meals .meal-table th:nth-child(2),
+.page-nutrition-meals .meal-table td.meal-qty,
+.page-nutrition-meals .meal-table th:nth-child(3),
+.page-nutrition-meals .meal-table td.meal-kcal,
+.page-nutrition-meals .meal-table th:nth-child(4),
+.page-nutrition-meals .meal-table td.meal-p,
+.page-nutrition-meals .meal-table th:nth-child(5),
+.page-nutrition-meals .meal-table td.meal-c,
+.page-nutrition-meals .meal-table th:nth-child(6),
+.page-nutrition-meals .meal-table td.meal-f {
+  text-align: right;
+}
+
+.page-nutrition-meals .meal-table th:nth-child(2),
+.page-nutrition-meals .meal-table td.meal-qty {
+  width: 14%;
+}
+
+.page-nutrition-meals .meal-table th:nth-child(3),
+.page-nutrition-meals .meal-table td.meal-kcal {
+  width: 12%;
+}
+
+.page-nutrition-meals .meal-table th:nth-child(4),
+.page-nutrition-meals .meal-table td.meal-p,
+.page-nutrition-meals .meal-table th:nth-child(5),
+.page-nutrition-meals .meal-table td.meal-c,
+.page-nutrition-meals .meal-table th:nth-child(6),
+.page-nutrition-meals .meal-table td.meal-f {
+  width: 10.5%;
+}
+
+.page-nutrition-meals .meal-table .details-row td {
+  padding: 7px 6px;
+  font-size: 12px;
+  font-weight: 550;
+  color: #e8eaed;
+}
+
+.page-nutrition-meals .meal-table td.meal-food {
+  color: #fff;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+/* Long meal titles wrap instead of clipping into the kcal meta. */
+.page-nutrition-meals .details-pill span {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  line-height: 1.2;
+}
+
+.page-nutrition-meals .meal-table tr.meal-total-row td {
+  border-bottom: 0;
+  padding-top: 10px;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--muted);
+}
+
+.page-nutrition-meals .meal-table tr.meal-total-row td.meal-kcal,
+.page-nutrition-meals .meal-table tr.meal-total-row td.meal-p,
+.page-nutrition-meals .meal-table tr.meal-total-row td.meal-c,
+.page-nutrition-meals .meal-table tr.meal-total-row td.meal-f {
+  color: var(--lime);
+}
+
+.page-nutrition-meals .meal-table tr.meal-empty-row td {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+/* —— Nutrition Page 01: Cover & Overview (Elevate tokens; Workout is visual baseline) —— */
+.page-nutrition-cover {
+  position: relative;
+}
+
+.page-nutrition-cover .nutrition-hero {
+  /* Same hero box as Workout; asset already carries the diagonal crop. */
+  object-fit: cover;
+  object-position: center top;
+}
+
+/*
+ * Cover body column — title/overview grow naturally; Daily Target + Glance
+ * follow so long plan names cannot overlap fixed absolute tops.
+ * min-height on the upper stack preserves the design gap for short titles
+ * (2-line @ 55px → overview bottom ~494, daily ~522).
+ */
+.page-nutrition-cover .nutrition-cover-flow {
+  position: absolute;
+  z-index: 3;
+  left: 30px;
+  top: 134px;
+  width: 713px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 20px;
+}
+
+.page-nutrition-cover .nutrition-left-stack {
+  position: static;
+  left: auto;
+  top: auto;
+  width: var(--title-width, 400px);
+  max-width: 400px;
+  /* 360 = design 2-line title stack; +8 with flow gap 20 → 28px to daily. */
+  min-height: 360px;
+  margin-bottom: 8px;
+}
+
+.page-nutrition-cover .nutrition-overview {
+  /* Same card chrome as Workout .overview; 5 rows already match height. */
+  height: 196px;
+}
+
+.page-nutrition-cover .status-active {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--lime);
+  font-weight: 700;
+}
+
+.page-nutrition-cover .status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--lime);
+  flex: none;
+}
+
+.page-nutrition-cover .nutrition-daily {
+  position: static;
+  left: auto;
+  top: auto;
+  width: 100%;
+  flex: none;
+}
+
+.nutrition-daily {
+  position: absolute;
+  z-index: 3;
+  left: 30px;
+  top: 522px;
+  width: 713px;
+}
+
+.daily-target-card {
+  display: grid;
+  grid-template-columns: 210px 1fr;
+  gap: 18px;
+  align-items: center;
+  min-height: 210px;
+  padding: 18px 22px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+}
+
+.daily-target-chart {
+  position: relative;
+  width: 168px;
+  height: 168px;
+  margin: 0 auto;
+}
+
+.daily-target-chart .macro-ring {
+  display: block;
+  width: 168px;
+  height: 168px;
+}
+
+.daily-target-kcal {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  pointer-events: none;
+}
+
+.daily-target-kcal strong {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: #fff;
+}
+
+.daily-target-kcal span {
+  margin-top: 6px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.daily-target-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.daily-target-copy header h2 {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.daily-target-copy header p {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: -0.01em;
+}
+
+.macro-rows {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.macro-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 55px;
+}
+
+.macro-row + .macro-row {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.macro-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.macro-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  background: #1a1e24;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+.macro-icon svg {
+  width: 19px;
+  height: 19px;
+  display: block;
+}
+
+.macro-icon--protein {
+  color: var(--macro-protein);
+}
+
+.macro-icon--carbs {
+  color: var(--macro-carbs);
+}
+
+.macro-icon--fat {
+  color: var(--macro-fat);
+}
+
+.macro-name {
+  color: #9aa2ac;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.macro-values {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 16px;
+  flex: none;
+}
+
+.macro-values strong {
+  font-size: 18px;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  min-width: 48px;
+  text-align: right;
+}
+
+.macro-values em {
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 400;
+  color: #7b8490;
+  min-width: 36px;
+  text-align: right;
+  line-height: 1;
 }
 
 @page {
