@@ -263,7 +263,7 @@
       <span>PLAN</span>
     </h1>
     <p class="details-dek">
-      Sets and reps for each workout. Tick a box for every set you finish.
+      Warm-up, main exercises, and cardio. Tick a box for every set you finish.
     </p>
 
     <div class="details-stack" data-elevate="workout-details-stack">
@@ -275,41 +275,111 @@
             </svg>
             <span>Workout A — Legs · Chest · Back</span>
           </div>
-          <p class="details-card-meta">5 exercises · 15 sets</p>
+          <p class="details-card-meta">8 exercises</p>
         </header>
-        <div class="details-card-body">
-          <table class="details-table">
-            <thead>
-              <tr>
-                <th scope="col">Exercise</th>
-                <th scope="col">Sets</th>
-                <th scope="col">Reps</th>
-                <th scope="col">Tick each set</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr class="details-row">
-                <td class="details-ex">
-                  <div class="details-ex-inner">
-                    <span class="details-thumb details-thumb-fallback" aria-hidden="true"></span>
-                    <div class="details-ex-copy">
-                      <p class="details-ex-name">Barbell Squat</p>
-                      <p class="details-ex-note">Keep your chest up. Stop 2 reps before failure.</p>
+        <div class="details-card-body details-card-body--sections">
+          <section class="details-section details-section--warmup">
+            <header class="details-section-head details-section-head--warmup">
+              <div class="details-section-head-inner details-section-head-inner--activity">
+                <span class="details-section-label">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12.2 2.4c.2 2.8-1.5 4.1-1.4 6.6 0 1.3.7 2.2 1.4 2.7.6-.6 1.5-1.6 1.5-3.1 0-1.1-.3-2-.3-2 .9 1.2 2.4 2.7 2.4 5.4 0 3.4-2.6 5.8-5.8 5.8S4.2 15.4 4.2 12c.7-1.8 2.4-2.8 2.4-5 .7 1.2 1.8 1.8 1.8 1.8.1-2.4 1.7-4.1 3.8-6.4z" fill="currentColor"/></svg>
+                  <span>Warm-up</span>
+                </span>
+                <span class="details-section-col-label details-section-col-duration">Duration</span>
+                <span class="details-section-col-label details-section-col-done">Done</span>
+              </div>
+            </header>
+            <table class="details-table details-table--activity">
+              <tbody>
+                <tr class="details-row details-row--warmup">
+                  <td class="details-ex">
+                    <div class="details-ex-inner">
+                      <span class="details-thumb details-thumb-icon details-thumb-icon--warmup" aria-hidden="true">
+                        <svg viewBox="0 0 24 24"><path d="M12.2 2.4c.2 2.8-1.5 4.1-1.4 6.6 0 1.3.7 2.2 1.4 2.7.6-.6 1.5-1.6 1.5-3.1 0-1.1-.3-2-.3-2 .9 1.2 2.4 2.7 2.4 5.4 0 3.4-2.6 5.8-5.8 5.8S4.2 15.4 4.2 12c.7-1.8 2.4-2.8 2.4-5 .7 1.2 1.8 1.8 1.8 1.8.1-2.4 1.7-4.1 3.8-6.4z" fill="currentColor"/></svg>
+                      </span>
+                      <div class="details-ex-copy">
+                        <p class="details-ex-name">Arm Circles</p>
+                      </div>
                     </div>
-                  </div>
-                </td>
-                <td class="details-sets">3</td>
-                <td class="details-reps">10</td>
-                <td class="details-ticks">
-                  <div class="details-ticks-row">
-                    <span class="details-tick"></span>
-                    <span class="details-tick"></span>
-                    <span class="details-tick"></span>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+                  </td>
+                  <td class="details-duration">2 min</td>
+                  <td class="details-ticks details-done">
+                    <div class="details-ticks-row"><span class="details-tick"></span></div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </section>
+          <section class="details-section details-section--main">
+            <header class="details-section-head details-section-head--main">
+              <div class="details-section-head-inner details-section-head-inner--strength">
+                <span class="details-section-label">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.2 8.2v7.6M17.8 8.2v7.6M3.6 10v4M20.4 10v4M6.2 12h11.6M8.4 9.3v5.4M15.6 9.3v5.4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
+                  <span>Main</span>
+                </span>
+                <span class="details-section-col-label details-section-col-sets">Sets</span>
+                <span class="details-section-col-label details-section-col-reps">Reps</span>
+                <span class="details-section-col-label details-section-col-ticks">Tick each set</span>
+              </div>
+            </header>
+            <table class="details-table details-table--strength">
+              <tbody>
+                <tr class="details-row details-row--main">
+                  <td class="details-ex">
+                    <div class="details-ex-inner">
+                      <span class="details-thumb details-thumb-fallback" aria-hidden="true"></span>
+                      <div class="details-ex-copy">
+                        <p class="details-ex-name">Barbell Squat</p>
+                        <p class="details-ex-note">Keep your chest up. Stop 2 reps before failure.</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td class="details-sets">3</td>
+                  <td class="details-reps">10</td>
+                  <td class="details-ticks">
+                    <div class="details-ticks-row">
+                      <span class="details-tick"></span>
+                      <span class="details-tick"></span>
+                      <span class="details-tick"></span>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </section>
+          <section class="details-section details-section--cardio">
+            <header class="details-section-head details-section-head--cardio">
+              <div class="details-section-head-inner details-section-head-inner--activity">
+                <span class="details-section-label">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-6.4-3.8-8.6-7.2C1.6 10.2 2.4 6.8 5.2 5.6c1.8-.8 3.8-.2 4.9 1.3C11.2 5.4 13.2 4.8 15 5.6c2.8 1.2 3.6 4.6 1.8 7.2C18.4 16.2 12 20 12 20z" fill="currentColor"/></svg>
+                  <span>Cardio</span>
+                </span>
+                <span class="details-section-col-label details-section-col-duration">Duration</span>
+                <span class="details-section-col-label details-section-col-done">Done</span>
+              </div>
+            </header>
+            <table class="details-table details-table--activity">
+              <tbody>
+                <tr class="details-row details-row--cardio">
+                  <td class="details-ex">
+                    <div class="details-ex-inner">
+                      <span class="details-thumb details-thumb-icon details-thumb-icon--cardio" aria-hidden="true">
+                        <svg viewBox="0 0 24 24"><path d="M12 20s-6.4-3.8-8.6-7.2C1.6 10.2 2.4 6.8 5.2 5.6c1.8-.8 3.8-.2 4.9 1.3C11.2 5.4 13.2 4.8 15 5.6c2.8 1.2 3.6 4.6 1.8 7.2C18.4 16.2 12 20 12 20z" fill="currentColor"/></svg>
+                      </span>
+                      <div class="details-ex-copy">
+                        <p class="details-ex-name">Treadmill, brisk walk</p>
+                        <p class="details-ex-note">Moderate pace</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td class="details-duration">15 min</td>
+                  <td class="details-ticks details-done">
+                    <div class="details-ticks-row"><span class="details-tick"></span></div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </section>
         </div>
       </article>
     </div>

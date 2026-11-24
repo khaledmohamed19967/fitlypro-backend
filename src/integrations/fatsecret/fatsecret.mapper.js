@@ -49,16 +49,51 @@ export const mapFitlyCategory = (name = '', foodType = 'Generic') => {
     return 'other';
 };
 
+/**
+ * Pick the best FatSecret food image from a v5/v6 `food_images` payload.
+ * v6 may return multiple sizes (e.g. 1024 / 400 / 72) and image_type as
+ * Standard (0) or Isolated (1). Prefer Isolated when present; use the
+ * largest URL for `url` and a mid-size (~400) for `thumbnailUrl` when available.
+ *
+ * @param {object} food
+ * @returns {{ url: string, thumbnailUrl: string }|null}
+ */
 export const mapProductImage = (food = {}) => {
-    const images = toArray(food.food_images?.food_image ?? food.food_image);
-    const first = images.find((image) => image?.image_url) || null;
-    if (!first?.image_url) {
+    const images = toArray(food.food_images?.food_image ?? food.food_image).filter(
+        (image) => image?.image_url
+    );
+    if (!images.length) {
         return null;
     }
 
+    const isIsolated = (image) => {
+        const type = image.image_type;
+        return Number(type) === 1 || String(type).toLowerCase() === 'isolated';
+    };
+
+    const isolated = images.filter(isIsolated);
+    const pool = isolated.length ? isolated : images;
+
+    const sizeFromUrl = (url) => {
+        const match = String(url).match(/_(\d+)x(\d+)\./);
+        return match ? Number(match[1]) : 0;
+    };
+
+    const sorted = [...pool].sort(
+        (a, b) => sizeFromUrl(b.image_url) - sizeFromUrl(a.image_url)
+    );
+    const full = sorted[0];
+    const thumb =
+        sorted.find((image) => {
+            const size = sizeFromUrl(image.image_url);
+            return size >= 200 && size <= 512;
+        }) ||
+        sorted[Math.min(1, sorted.length - 1)] ||
+        full;
+
     return {
-        url: first.image_url,
-        thumbnailUrl: first.image_url,
+        url: full.image_url,
+        thumbnailUrl: thumb.image_url,
     };
 };
 

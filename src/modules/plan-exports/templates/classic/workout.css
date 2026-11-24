@@ -377,6 +377,17 @@ a.exercise-link {
   text-decoration: none;
 }
 
+.workout-section-label {
+  font-size: 9.5pt;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--green);
+  background: var(--green-soft);
+  padding-top: 7px !important;
+  padding-bottom: 7px !important;
+}
+
 .exercise-note {
   margin-top: 3pt;
   font-size: 9pt;

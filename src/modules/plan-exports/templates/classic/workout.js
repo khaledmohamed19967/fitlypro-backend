@@ -134,30 +134,107 @@ const buildExerciseCell = (exercise) => {
     return `<td class="cell-food">${buildExerciseNameHtml(exercise)}${note}</td>`;
 };
 
-const buildDayRows = (day) => {
-    const exercises = day.exercises ?? [];
-    const dayLabel = escapeHtml(dayDisplayName(day));
+const formatActivityDuration = (minutes) => {
+    if (minutes == null || minutes === '') return '—';
+    const n = Number(minutes);
+    if (!Number.isFinite(n)) return '—';
+    return `${n} min`;
+};
 
-    if (!exercises.length) {
+const buildActivityDetail = (activity) => {
+    const parts = [];
+    const intensity = formatLabel(activity.intensity);
+    if (intensity) parts.push(intensity);
+    const protocol = formatLabel(activity.protocol);
+    if (protocol) parts.push(protocol);
+    if (activity.distanceKm != null && Number.isFinite(Number(activity.distanceKm))) {
+        parts.push(`${Number(activity.distanceKm)} km`);
+    }
+    const notes = String(activity.notes ?? '').trim();
+    if (notes) parts.push(notes);
+    return parts.length ? parts.join(' · ') : null;
+};
+
+const buildActivityCell = (activity) => {
+    const name = escapeHtml(activity.name || 'Activity');
+    const detail = buildActivityDetail(activity);
+    const note = detail
+        ? `<div class="exercise-note">${escapeHtml(detail)}</div>`
+        : '';
+    return `<td class="cell-food"><span class="food-name">${name}</span>${note}</td>`;
+};
+
+/**
+ * Flatten warm-up → main → cardio for a day. Section labels are real data groups only.
+ * @param {object} day
+ */
+const buildDayRows = (day) => {
+    const dayLabel = escapeHtml(dayDisplayName(day));
+    const warmup = Array.isArray(day.warmupActivities) ? day.warmupActivities : [];
+    const exercises = Array.isArray(day.exercises) ? day.exercises : [];
+    const cardio = Array.isArray(day.cardioActivities) ? day.cardioActivities : [];
+
+    /** @type {{ kind: string, label?: string, item?: object }[]} */
+    const units = [];
+    if (warmup.length) {
+        units.push({ kind: 'section', label: 'Warm-up' });
+        for (const activity of warmup) {
+            units.push({ kind: 'activity', item: activity });
+        }
+    }
+    if (exercises.length) {
+        if (warmup.length || cardio.length) {
+            units.push({ kind: 'section', label: 'Main' });
+        }
+        for (const exercise of exercises) {
+            units.push({ kind: 'exercise', item: exercise });
+        }
+    }
+    if (cardio.length) {
+        units.push({ kind: 'section', label: 'Cardio' });
+        for (const activity of cardio) {
+            units.push({ kind: 'activity', item: activity });
+        }
+    }
+
+    if (!units.length) {
         return `<tr class="meal-start">
       <td class="cell-meal">${dayLabel}</td>
       <td colspan="4" class="empty">No exercises</td>
     </tr>`;
     }
 
-    return exercises
-        .map((exercise, index) => {
-            const summary = summarizeSets(exercise.sets);
-            const rest = formatRest(exercise.restBetweenSets);
+    return units
+        .map((unit, index) => {
             const mealCell =
                 index === 0
-                    ? `<td class="cell-meal" rowspan="${exercises.length}">${dayLabel}</td>`
+                    ? `<td class="cell-meal" rowspan="${units.length}">${dayLabel}</td>`
                     : '';
             const rowClass = index === 0 ? 'meal-start' : '';
 
+            if (unit.kind === 'section') {
+                return `<tr class="${rowClass} workout-section-label-row">
+      ${mealCell}
+      <td colspan="4" class="workout-section-label">${escapeHtml(unit.label)}</td>
+    </tr>`;
+            }
+
+            if (unit.kind === 'activity') {
+                const duration = formatActivityDuration(unit.item.durationMinutes);
+                return `<tr class="${rowClass}">
+      ${mealCell}
+      ${buildActivityCell(unit.item)}
+      <td class="cell-cal"><span class="qty">—</span></td>
+      <td class="cell-macro"><span class="qty">${escapeHtml(duration)}</span></td>
+      <td class="cell-macro"><span class="qty">—</span></td>
+    </tr>`;
+            }
+
+            const summary = summarizeSets(unit.item.sets);
+            const rest = formatRest(unit.item.restBetweenSets);
             return `<tr class="${rowClass}">
       ${mealCell}
-      ${buildExerciseCell(exercise)}
+      ${buildExerciseCell(unit.item)}
       <td class="cell-cal"><span class="qty">${escapeHtml(summary.setCount)}</span></td>
       <td class="cell-macro"><span class="qty">${escapeHtml(summary.reps)}</span></td>
       <td class="cell-macro"><span class="qty">${escapeHtml(rest)}</span></td>

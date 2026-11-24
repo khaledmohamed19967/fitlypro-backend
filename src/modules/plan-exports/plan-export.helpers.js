@@ -160,6 +160,19 @@ function mapActivityForExport(activity) {
     return {
         activityType: activity.activityType,
         protocol: activity.protocol ?? undefined,
+        // Same Exercise Library fields as strength rows (image + public URL).
+        exerciseId:
+            activity.exerciseId != null
+                ? String(activity.exerciseId)
+                : hydrated?.id != null
+                  ? String(hydrated.id)
+                  : null,
+        slug:
+            typeof hydrated?.slug === 'string' && hydrated.slug.trim()
+                ? hydrated.slug.trim()
+                : null,
+        ownershipType: hydrated?.ownershipType ?? null,
+        status: hydrated?.status ?? null,
         name:
             hydrated?.name ||
             activity.activitySnapshot?.name ||

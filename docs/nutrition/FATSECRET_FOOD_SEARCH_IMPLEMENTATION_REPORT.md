@@ -33,7 +33,7 @@ FatSecret is **not** bulk-imported. Search is live. A local Food document is cre
 | Auth | OAuth 2.0 Client Credentials |
 | Token URL | `https://oauth.fatsecret.com/connect/token` |
 | API URL | `https://platform.fatsecret.com/rest/server.api` |
-| Preferred search | `foods.search.v5` (Premier; `food_type`, servings, optional images) |
+| Preferred search | `foods.search.v6` (Premier; `food_type`, servings, optional images) |
 | Fallback search | `foods.search` (v1 Basic; summary `food_description`) |
 | Details | `food.get.v4` then `food.get` |
 | Default region | US |
@@ -41,11 +41,12 @@ FatSecret is **not** bulk-imported. Search is live. A local Food document is cre
 
 **Scope / edition**
 
-- `foods.search.v5` requires OAuth2 **premier**
-- Images (`include_food_images`) require an additional Premier offering
+- `foods.search.v6` requires OAuth2 **premier**
+- Images (`include_food_images=true`) require an additional Premier image offering
+- Default serving marking uses `flag_default_serving=true` (Premier)
 - If Premier is missing (error 14), the backend falls back to Basic `foods.search`
-- `FATSECRET_SCOPE=basic` skips v5
-- `FATSECRET_SCOPE=premier` uses v5 only
+- `FATSECRET_SCOPE=basic` skips v6
+- `FATSECRET_SCOPE=premier` uses v6 only
 
 ---
 

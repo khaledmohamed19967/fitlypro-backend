@@ -20,8 +20,11 @@
   --line: #2A2E35;
   --lime: #ccff01;
   --lime-line: #CCFF0138;
-  --orange: #f59e2e;
+  --orange: #ff9f0a;
   --orange-line: #c9843a;
+  --purple: #b794f6;
+  --purple-line: #8b6fd0;
+  --section-bar: #121214;
   --text: #ffffff;
   --muted: #9AA2AC;
   --silver: #c5cad0;
@@ -901,7 +904,7 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin: 0 -14px 14px 0;
+  margin: 0 -14px 0 0;
   padding-right: 14px;
   min-height: 34px;
   background: transparent;
@@ -1014,27 +1017,65 @@ background: linear-gradient(90deg, #CCFF01 0%, #B6E600 100%);
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.page-workout-details .details-table th:nth-child(1),
-.page-workout-details .details-table td.details-ex {
-  width: 60%;
+/*
+ * Shared section column tracks (header grid + table cells).
+ * Name/exercise takes remaining space; metric cols pack to the right edge.
+ */
+.page-workout-details {
+  --details-col-duration: 5rem;
+  --details-col-done: 3.5rem;
+  --details-col-sets: 3rem;
+  --details-col-reps: 3rem;
+  /* Wide enough for several set ticks + right inset (never flush to border). */
+  --details-col-ticks: 9rem;
+  --details-ticks-pad-right: 14px;
+  --details-tracks-activity: minmax(0, 1fr) var(--details-col-duration)
+    var(--details-col-done);
+  --details-tracks-strength: minmax(0, 1fr) var(--details-col-sets)
+    var(--details-col-reps) var(--details-col-ticks);
 }
 
-.page-workout-details .details-table th:nth-child(2),
-.page-workout-details .details-table td.details-sets {
-  width: 8%;
+.page-workout-details .details-table--strength td.details-ex,
+.page-workout-details .details-table--activity td.details-ex {
+  width: auto;
+}
+
+.page-workout-details .details-table--strength td.details-sets {
+  width: var(--details-col-sets);
   text-align: center;
 }
 
-.page-workout-details .details-table th:nth-child(3),
-.page-workout-details .details-table td.details-reps {
-  width: 8%;
+.page-workout-details .details-table--strength td.details-reps {
+  width: var(--details-col-reps);
   text-align: center;
 }
 
-.page-workout-details .details-table th:nth-child(4),
-.page-workout-details .details-table td.details-ticks {
-  width: 24%;
-  text-align: left;
+.page-workout-details .details-table--strength td.details-ticks {
+  width: var(--details-col-ticks);
+  text-align: right;
+  padding-right: var(--details-ticks-pad-right);
+}
+
+.page-workout-details .details-table--activity td.details-duration {
+  width: var(--details-col-duration);
+  text-align: center;
+  font-size: 13px;
+  font-weight: 650;
+  color: #e8eaed;
+  white-space: nowrap;
+}
+
+.page-workout-details .details-table--activity td.details-done,
+.page-workout-details .details-table--activity td.details-ticks {
+  width: var(--details-col-done);
+  text-align: right;
+  padding-right: var(--details-ticks-pad-right);
+}
+
+.page-workout-details .details-table--activity td.details-done .details-ticks-row,
+.page-workout-details .details-table--strength td.details-ticks .details-ticks-row {
+  margin-left: auto;
+  margin-right: 0;
 }
 
 .page-workout-details .details-row,
@@ -1146,7 +1187,7 @@ background: linear-gradient(90deg, #CCFF01 0%, #B6E600 100%);
   width: 22px;
   height: 14px;
   border-radius: 4px;
-  border: 1.6px solid var(--details-accent, var(--lime));
+  border: 1.6px solid var(--row-accent, var(--details-accent, var(--lime)));
   background: transparent;
   flex: 0 0 auto;
 }
@@ -1154,6 +1195,141 @@ background: linear-gradient(90deg, #CCFF01 0%, #B6E600 100%);
 .page-workout-details .details-tick-empty {
   font-size: 12px;
   color: var(--muted);
+}
+
+/* —— Warm-up / Main / Cardio section bands (full-bleed dark bar) —— */
+.page-workout-details .details-section-head td {
+  padding: 0;
+  border-bottom: 0;
+  vertical-align: middle;
+}
+
+.page-workout-details .details-section-head-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  /* Bleed past body left pad (16px) and card right pad (14px). */
+  margin: 0 -14px 0 -16px;
+  padding: 0 14px 0 16px;
+  min-height: 36px;
+  background: var(--section-bar);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.page-workout-details .details-section-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--section-accent, var(--lime));
+  line-height: 1;
+}
+
+.page-workout-details .details-section-label svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+}
+
+/* Same track list as the section tables (via --details-tracks-*). */
+.page-workout-details .details-section-head-inner--activity {
+  display: grid;
+  grid-template-columns: var(--details-tracks-activity);
+  justify-content: stretch;
+  gap: 0;
+}
+
+.page-workout-details .details-section-head-inner--strength {
+  display: grid;
+  grid-template-columns: var(--details-tracks-strength);
+  justify-content: stretch;
+  gap: 0;
+}
+
+.page-workout-details .details-section-col-label {
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.page-workout-details .details-section-col-duration,
+.page-workout-details .details-section-col-sets,
+.page-workout-details .details-section-col-reps {
+  text-align: center;
+  justify-self: center;
+}
+
+.page-workout-details .details-section-col-done,
+.page-workout-details .details-section-col-ticks {
+  text-align: right;
+  justify-self: end;
+  /* Match ticks/done cell padding so labels stay over the checkbox group. */
+  padding-right: var(--details-ticks-pad-right);
+}
+
+.page-workout-details .details-section-head--warmup,
+.page-workout-details .details-row--warmup {
+  --section-accent: var(--orange);
+  --row-accent: var(--orange);
+}
+
+.page-workout-details .details-section-head--main,
+.page-workout-details .details-row--main {
+  --section-accent: var(--lime);
+  --row-accent: var(--lime);
+}
+
+.page-workout-details .details-section-head--cardio,
+.page-workout-details .details-row--cardio {
+  --section-accent: var(--purple);
+  --row-accent: var(--purple);
+}
+
+.page-workout-details .details-thumb-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 50px;
+  height: 50px;
+  border-radius: 10px;
+  flex: none;
+  background: #1a1e24;
+  border: 1.5px solid var(--row-accent, rgba(255, 255, 255, 0.12));
+  color: var(--row-accent, var(--lime));
+}
+
+.page-workout-details .details-thumb-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.page-workout-details .details-thumb-icon--warmup {
+  --row-accent: var(--orange);
+}
+
+.page-workout-details .details-thumb-icon--main {
+  --row-accent: var(--lime);
+}
+
+.page-workout-details .details-thumb-icon--cardio {
+  --row-accent: var(--purple);
+}
+
+.page-workout-details td.details-metric {
+  text-align: center;
+  font-size: 13px;
+  font-weight: 650;
+  color: #e8eaed;
+  white-space: nowrap;
 }
 
 .page-workout-details .details-footer,

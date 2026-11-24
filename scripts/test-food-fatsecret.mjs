@@ -16,6 +16,8 @@ import {
     getFoodById,
 } from '../src/integrations/fatsecret/fatsecret.client.js';
 import {
+    extractSearchFoods,
+    extractSearchMeta,
     mapFatSecretFoodToFitlyFood,
     mapSearchFoodToFitlyFood,
     mapProductImage,
@@ -36,11 +38,15 @@ import {
     MISSING_SCOPE_ERROR,
     SEARCH_MISSING_NUTRITION,
     SEARCH_RESPONSE_V1,
-    SEARCH_RESPONSE_V5,
+    SEARCH_RESPONSE_V6,
     SEARCH_WITH_IMAGE,
+    SEARCH_WITH_IMAGE_V6,
     TOKEN_RESPONSE,
 } from '../src/integrations/fatsecret/__fixtures__/foods.js';
-import { resolveSearchExpression } from '../src/integrations/fatsecret/fatsecret.constants.js';
+import {
+    resolveSearchExpression,
+    SEARCH_METHOD_PREMIER,
+} from '../src/integrations/fatsecret/fatsecret.constants.js';
 
 const BASE = process.env.API_URL || 'http://localhost:8000';
 const API = `${BASE}/api/v1`;
@@ -124,12 +130,16 @@ async function runMapperTests() {
         fail('nutrition mapping from description', JSON.stringify(parsed));
     }
 
-    const meta = {
-        max_results: '20',
-        total_results: '85',
-        page_number: '2',
+    const v6Page = {
+        foods_search: {
+            max_results: '20',
+            total_results: '85',
+            page_number: '2',
+            results: { food: [GENERIC_CHICKEN_SEARCH] },
+        },
     };
-    if (Number(meta.page_number) === 2 && Number(meta.total_results) === 85) {
+    const meta = extractSearchMeta(v6Page);
+    if (meta.pageNumber === 2 && meta.totalResults === 85 && meta.maxResults === 20) {
         pass('pagination metadata');
     } else {
         fail('pagination metadata', JSON.stringify(meta));
@@ -247,11 +257,45 @@ async function runMapperTests() {
         fail('image present', JSON.stringify(image));
     }
 
+    const v6Image = mapProductImage(SEARCH_WITH_IMAGE_V6);
+    if (
+        v6Image?.url?.includes('isolated-chicken_1024x1024') &&
+        v6Image?.thumbnailUrl?.includes('isolated-chicken_400x400')
+    ) {
+        pass('v6 multi-size image prefers Isolated + mid thumb');
+    } else {
+        fail('v6 multi-size image prefers Isolated + mid thumb', JSON.stringify(v6Image));
+    }
+
     const noImage = mapProductImage(GENERIC_CHICKEN_SEARCH);
     if (noImage == null) {
         pass('image missing');
     } else {
         fail('image missing', JSON.stringify(noImage));
+    }
+
+    const v6Foods = extractSearchFoods(SEARCH_RESPONSE_V6);
+    const v6Meta = extractSearchMeta(SEARCH_RESPONSE_V6);
+    const v6Mapped = mapSearchFoodToFitlyFood(v6Foods[0]);
+    if (
+        v6Foods.length === 2 &&
+        v6Meta.totalResults === 2 &&
+        v6Mapped?.image?.url?.includes('isolated-chicken') &&
+        v6Mapped?.defaultServingId === '1' &&
+        v6Mapped?.nutritionPer100g?.calories === 165
+    ) {
+        pass('v6 response parse + image + default serving');
+    } else {
+        fail(
+            'v6 response parse + image + default serving',
+            JSON.stringify({
+                len: v6Foods.length,
+                meta: v6Meta,
+                image: v6Mapped?.image,
+                defaultServingId: v6Mapped?.defaultServingId,
+                cal: v6Mapped?.nutritionPer100g?.calories,
+            })
+        );
     }
 
     if (!mapSearchFoodToFitlyFood(SEARCH_MISSING_NUTRITION)) {
@@ -269,23 +313,44 @@ async function runClientTests() {
 
     let tokenCalls = 0;
     let searchCalls = 0;
-    const restore = installFetchMock(async (url) => {
+    let lastSearchBody = '';
+    const restore = installFetchMock(async (url, options) => {
         const href = String(url);
         if (href.includes('/connect/token')) {
             tokenCalls += 1;
             return jsonResponse(TOKEN_RESPONSE);
         }
         searchCalls += 1;
-        return jsonResponse(SEARCH_RESPONSE_V5);
+        lastSearchBody = String(options.body || '');
+        return jsonResponse(SEARCH_RESPONSE_V6);
     });
 
     try {
-        await searchFoods({ query: 'chicken', foodType: 'generic' });
+        const first = await searchFoods({ query: 'chicken', foodType: 'generic' });
         await searchFoods({ query: 'chicken', foodType: 'generic' });
         if (tokenCalls === 1 && searchCalls === 2) {
             pass('authentication + token reuse');
         } else {
             fail('authentication + token reuse', `token=${tokenCalls} search=${searchCalls}`);
+        }
+
+        if (SEARCH_METHOD_PREMIER === 'foods.search.v6' && first.method === 'foods.search.v6') {
+            pass('premier search uses foods.search.v6');
+        } else {
+            fail(
+                'premier search uses foods.search.v6',
+                `const=${SEARCH_METHOD_PREMIER} method=${first.method}`
+            );
+        }
+
+        if (
+            lastSearchBody.includes('method=foods.search.v6') &&
+            lastSearchBody.includes('include_food_images=true') &&
+            lastSearchBody.includes('flag_default_serving=true')
+        ) {
+            pass('v6 request includes images + default-serving flags');
+        } else {
+            fail('v6 request includes images + default-serving flags', lastSearchBody);
         }
     } finally {
         restore();
@@ -301,7 +366,7 @@ async function runClientTests() {
             return jsonResponse(TOKEN_RESPONSE);
         }
         const params = String(options.body || '');
-        if (params.includes('foods.search.v5')) {
+        if (params.includes('foods.search.v6')) {
             return jsonResponse(MISSING_SCOPE_ERROR);
         }
         return jsonResponse(SEARCH_RESPONSE_V1);

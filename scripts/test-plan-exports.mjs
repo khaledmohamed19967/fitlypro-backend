@@ -622,7 +622,19 @@ async function runUnitTests() {
                             durationMinutes: 5,
                             intensity: 'low',
                             notes: 'Easy',
-                            activitySnapshot: { name: 'Walking', thumbnailUrl: null },
+                            exerciseId: '507f1f77bcf86cd799439021',
+                            exercise: {
+                                id: '507f1f77bcf86cd799439021',
+                                name: 'Walking',
+                                slug: 'walking',
+                                ownershipType: 'system',
+                                status: 'active',
+                                thumbnailUrl: 'https://cdn.example.com/walking.png',
+                            },
+                            activitySnapshot: {
+                                name: 'Walking',
+                                thumbnailUrl: 'https://cdn.example.com/walking.png',
+                            },
                         },
                     ],
                     exercises: [
@@ -653,7 +665,15 @@ async function runUnitTests() {
     if (
         actDay.warmupActivities?.[0]?.name === 'Walking' &&
         actDay.warmupActivities[0].durationMinutes === 5 &&
+        actDay.warmupActivities[0].exerciseId === '507f1f77bcf86cd799439021' &&
+        actDay.warmupActivities[0].slug === 'walking' &&
+        actDay.warmupActivities[0].ownershipType === 'system' &&
+        actDay.warmupActivities[0].status === 'active' &&
+        actDay.warmupActivities[0].thumbnailUrl ===
+            'https://cdn.example.com/walking.png' &&
         actDay.cardioActivities?.[0]?.name === 'Treadmill' &&
+        actDay.cardioActivities[0].exerciseId == null &&
+        actDay.cardioActivities[0].thumbnailUrl == null &&
         actDay.exercises?.[0]?.name === 'Bench Press' &&
         exportWithActivities.plan.totalExercises === 1
     ) {

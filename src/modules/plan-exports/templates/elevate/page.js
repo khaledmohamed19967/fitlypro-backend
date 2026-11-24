@@ -55,8 +55,42 @@ const DETAIL_LAYOUT = Object.freeze({
     pageBudget: 920,
     pageChrome: 96,
     cardChrome: 78,
+    /** Section title bar + per-section column header row. */
+    sectionHeaderHeight: 60,
     rowHeight: 52,
+    sectionGap: 8,
     cardGap: 14,
+});
+
+/** Section accents for Warm-up / Main / Cardio (day pill theme stays separate). */
+const SECTION_THEMES = Object.freeze({
+    warmup: Object.freeze({
+        id: 'warmup',
+        label: 'Warm-up',
+        accent: '#ff9f0a',
+    }),
+    main: Object.freeze({
+        id: 'main',
+        label: 'Main',
+        accent: '#ccff01',
+    }),
+    cardio: Object.freeze({
+        id: 'cardio',
+        label: 'Cardio',
+        accent: '#b794f6',
+    }),
+});
+
+const ICON_FLAME = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12.2 2.4c.2 2.8-1.5 4.1-1.4 6.6 0 1.3.7 2.2 1.4 2.7.6-.6 1.5-1.6 1.5-3.1 0-1.1-.3-2-.3-2 .9 1.2 2.4 2.7 2.4 5.4 0 3.4-2.6 5.8-5.8 5.8S4.2 15.4 4.2 12c.7-1.8 2.4-2.8 2.4-5 .7 1.2 1.8 1.8 1.8 1.8.1-2.4 1.7-4.1 3.8-6.4z" fill="currentColor"/></svg>`;
+
+const ICON_DUMBBELL = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.2 8.2v7.6M17.8 8.2v7.6M3.6 10v4M20.4 10v4M6.2 12h11.6M8.4 9.3v5.4M15.6 9.3v5.4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>`;
+
+const ICON_HEART = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-6.4-3.8-8.6-7.2C1.6 10.2 2.4 6.8 5.2 5.6c1.8-.8 3.8-.2 4.9 1.3C11.2 5.4 13.2 4.8 15 5.6c2.8 1.2 3.6 4.6 1.8 7.2C18.4 16.2 12 20 12 20z" fill="currentColor"/></svg>`;
+
+const SECTION_ICONS = Object.freeze({
+    warmup: ICON_FLAME,
+    main: ICON_DUMBBELL,
+    cardio: ICON_HEART,
 });
 
 const MIME_BY_EXT = Object.freeze({
@@ -396,13 +430,29 @@ const collectPrimaryMuscles = (day) => {
 };
 
 /**
+ * @param {object} day
+ * @returns {{ warmup: number, main: number, cardio: number, total: number }}
+ */
+const countDayActivities = (day) => {
+    const warmup = Array.isArray(day?.warmupActivities)
+        ? day.warmupActivities.length
+        : 0;
+    const main = Array.isArray(day?.exercises) ? day.exercises.length : 0;
+    const cardio = Array.isArray(day?.cardioActivities)
+        ? day.cardioActivities.length
+        : 0;
+    return { warmup, main, cardio, total: warmup + main + cardio };
+};
+
+/**
  * Page-02 workout summary rows from real workoutDays only.
  * @param {object[]} workoutDays
  */
 const buildWorkoutSummaries = (workoutDays = []) =>
     workoutDays.map((day, index) => {
         const exercises = Array.isArray(day?.exercises) ? day.exercises : [];
-        const exerciseCount = exercises.length;
+        const counts = countDayActivities(day);
+        const exerciseCount = counts.main;
         const setCount = exercises.reduce(
             (sum, exercise) => sum + countExerciseSets(exercise),
             0
@@ -411,12 +461,17 @@ const buildWorkoutSummaries = (workoutDays = []) =>
         const name =
             String(day?.name ?? '').trim() ||
             (day?.dayNumber != null ? `Day ${day.dayNumber}` : `Workout ${letter}`);
+        const activityLabel =
+            counts.total === counts.main
+                ? `${exerciseCount} exercise${exerciseCount === 1 ? '' : 's'}`
+                : `${counts.total} activit${counts.total === 1 ? 'y' : 'ies'}`;
         return {
             letter,
             name,
             exerciseCount,
+            activityCount: counts.total,
             setCount,
-            meta: `${exerciseCount} exercise${exerciseCount === 1 ? '' : 's'} · ${setCount} set${setCount === 1 ? '' : 's'}`,
+            meta: `${activityLabel} · ${setCount} set${setCount === 1 ? '' : 's'}`,
             muscles: collectPrimaryMuscles(day),
         };
     });
@@ -504,6 +559,24 @@ const sanitizeExerciseImageUrl = (url) => {
 };
 
 /**
+ * Resolve a row thumbnail the same way for strength + warm-up/cardio.
+ * Prefers export-flattened `thumbnailUrl`, then nested snapshot/media fields.
+ *
+ * @param {object} item
+ * @returns {string|null}
+ */
+const resolveRowImageUrl = (item) =>
+    sanitizeExerciseImageUrl(
+        item?.thumbnailUrl ||
+            item?.media?.thumbnailUrl ||
+            item?.activitySnapshot?.thumbnailUrl ||
+            item?.exerciseSnapshot?.thumbnailUrl ||
+            item?.exercise?.thumbnailUrl ||
+            item?.exercise?.media?.thumbnailUrl ||
+            null
+    );
+
+/**
  * Summarize prescribed sets/reps from export-model set rows (no fabrication).
  * @param {object[]} sets
  */
@@ -534,6 +607,109 @@ const summarizeExerciseSets = (sets = []) => {
 };
 
 /**
+ * @param {object[]} items
+ */
+const sortByOrder = (items = []) =>
+    [...items].sort((a, b) => {
+        const ao = Number.isFinite(Number(a?.order)) ? Number(a.order) : 0;
+        const bo = Number.isFinite(Number(b?.order)) ? Number(b.order) : 0;
+        return ao - bo;
+    });
+
+/**
+ * @param {unknown} minutes
+ * @returns {string|null}
+ */
+const formatDurationMinutes = (minutes) => {
+    if (minutes == null || minutes === '') return null;
+    const n = Number(minutes);
+    if (!Number.isFinite(n)) return null;
+    return `${n} min`;
+};
+
+/**
+ * Build subtitle from real warm-up / cardio fields only (no fabrication).
+ * @param {object} activity
+ * @returns {string|null}
+ */
+const buildActivitySubtitle = (activity = {}) => {
+    const parts = [];
+    const intensity = formatLabel(activity.intensity);
+    if (intensity) parts.push(intensity);
+    const protocol = formatLabel(activity.protocol);
+    if (protocol) parts.push(protocol);
+    if (activity.distanceKm != null && activity.distanceKm !== '') {
+        const km = Number(activity.distanceKm);
+        if (Number.isFinite(km)) parts.push(`${km} km`);
+    }
+    if (String(activity.protocol || '').toLowerCase() === 'interval') {
+        if (activity.workSeconds != null && Number.isFinite(Number(activity.workSeconds))) {
+            parts.push(`${Number(activity.workSeconds)}s work`);
+        }
+        if (
+            activity.recoverySeconds != null &&
+            Number.isFinite(Number(activity.recoverySeconds))
+        ) {
+            parts.push(`${Number(activity.recoverySeconds)}s recover`);
+        }
+        if (activity.rounds != null && Number.isFinite(Number(activity.rounds))) {
+            parts.push(`${Number(activity.rounds)} rounds`);
+        }
+    }
+    if (activity.targetHeartRate != null && Number.isFinite(Number(activity.targetHeartRate))) {
+        parts.push(`${Number(activity.targetHeartRate)} bpm`);
+    }
+    const notes = String(activity.notes ?? '').trim();
+    if (notes) parts.push(notes);
+    return parts.length ? parts.join(' · ') : null;
+};
+
+/**
+ * Map warm-up / cardio export activity into a detail row (not strength sets/reps).
+ * @param {object} activity
+ * @param {'warmup'|'cardio'} sectionId
+ */
+const mapActivityDetailRow = (activity, sectionId) => {
+    const duration = formatDurationMinutes(activity?.durationMinutes);
+    const subtitle = buildActivitySubtitle(activity);
+    return {
+        kind: 'activity',
+        sectionId,
+        name: String(activity?.name ?? '').trim() || 'Activity',
+        notes: subtitle,
+        imageUrl: resolveRowImageUrl(activity),
+        // Same public Exercise Library URL rules as Main (null when not linkable).
+        publicUrl: buildPublicExerciseUrl(activity),
+        // Activities do not have strength sets/reps — show duration in the metric cell.
+        setCountLabel: '—',
+        repsLabel: duration || '—',
+        metricLabel: duration || null,
+        usesMetricSpan: true,
+        checkboxCount: 1,
+    };
+};
+
+/**
+ * @param {object} exercise
+ */
+const mapStrengthDetailRow = (exercise) => {
+    const summary = summarizeExerciseSets(exercise?.sets);
+    return {
+        kind: 'strength',
+        sectionId: 'main',
+        name: String(exercise?.name ?? '').trim() || 'Exercise',
+        notes: String(exercise?.notes ?? '').trim() || null,
+        imageUrl: resolveRowImageUrl(exercise),
+        publicUrl: buildPublicExerciseUrl(exercise),
+        setCountLabel: summary.setCountLabel,
+        repsLabel: summary.repsLabel,
+        metricLabel: null,
+        usesMetricSpan: false,
+        checkboxCount: summary.checkboxCount,
+    };
+};
+
+/**
  * @param {object} day
  * @param {number} index
  */
@@ -545,50 +721,84 @@ const buildDetailWorkout = (day, index) => {
         String(day?.name ?? '').trim() ||
         (day?.dayNumber != null ? `Day ${day.dayNumber}` : `Workout ${letter}`);
     const muscles = collectPrimaryMuscles(day);
-    const rawExercises = Array.isArray(day?.exercises) ? [...day.exercises] : [];
-    rawExercises.sort((a, b) => {
-        const ao = Number.isFinite(Number(a?.order)) ? Number(a.order) : 0;
-        const bo = Number.isFinite(Number(b?.order)) ? Number(b.order) : 0;
-        return ao - bo;
-    });
 
-    const exercises = rawExercises.map((exercise) => {
-        const summary = summarizeExerciseSets(exercise?.sets);
-        return {
-            name: String(exercise?.name ?? '').trim() || 'Exercise',
-            notes: String(exercise?.notes ?? '').trim() || null,
-            imageUrl: sanitizeExerciseImageUrl(exercise?.thumbnailUrl),
-            publicUrl: buildPublicExerciseUrl(exercise),
-            setCountLabel: summary.setCountLabel,
-            repsLabel: summary.repsLabel,
-            checkboxCount: summary.checkboxCount,
-        };
-    });
+    const warmupRows = sortByOrder(day?.warmupActivities ?? []).map((activity) =>
+        mapActivityDetailRow(activity, 'warmup')
+    );
+    const mainRows = sortByOrder(day?.exercises ?? []).map(mapStrengthDetailRow);
+    const cardioRows = sortByOrder(day?.cardioActivities ?? []).map((activity) =>
+        mapActivityDetailRow(activity, 'cardio')
+    );
 
-    const setCount = exercises.reduce(
-        (sum, exercise) => sum + (exercise.checkboxCount || 0),
+    /** @type {object[]} */
+    const sections = [];
+    if (warmupRows.length) {
+        sections.push({
+            ...SECTION_THEMES.warmup,
+            count: warmupRows.length,
+            countLabel: `${warmupRows.length} exercise${warmupRows.length === 1 ? '' : 's'}`,
+            rows: warmupRows,
+        });
+    }
+    if (mainRows.length) {
+        sections.push({
+            ...SECTION_THEMES.main,
+            count: mainRows.length,
+            countLabel: `${mainRows.length} exercise${mainRows.length === 1 ? '' : 's'}`,
+            rows: mainRows,
+        });
+    }
+    if (cardioRows.length) {
+        sections.push({
+            ...SECTION_THEMES.cardio,
+            count: cardioRows.length,
+            countLabel: `${cardioRows.length} exercise${cardioRows.length === 1 ? '' : 's'}`,
+            rows: cardioRows,
+        });
+    }
+
+    const totalRows = warmupRows.length + mainRows.length + cardioRows.length;
+    const setCount = mainRows.reduce(
+        (sum, row) => sum + (row.checkboxCount || 0),
         0
     );
+    const meta =
+        totalRows === 1
+            ? '1 exercise'
+            : `${totalRows} exercises`;
+
+    // Flat list kept for backwards-compatible packing callers / tests.
+    const exercises = sections.flatMap((section) => section.rows);
 
     return {
         letter,
         name,
         theme,
         muscles,
-        exerciseCount: exercises.length,
+        exerciseCount: mainRows.length,
+        activityCount: totalRows,
         setCount,
-        meta: `${exercises.length} exercise${exercises.length === 1 ? '' : 's'} · ${setCount} set${setCount === 1 ? '' : 's'}`,
+        meta,
+        sections,
         exercises,
     };
 };
 
 /**
- * Pack workout exercise tables onto one or more A4 detail pages.
+ * Pack Warm-up / Main / Cardio sections onto one or more A4 detail pages.
+ * Keeps section headers with at least one row; avoids orphan single trailing rows.
  * @param {ReturnType<typeof buildDetailWorkout>[]} workouts
  */
 const packDetailPages = (workouts = []) => {
-    const { pageBudget, pageChrome, cardChrome, rowHeight, cardGap } =
-        DETAIL_LAYOUT;
+    const {
+        pageBudget,
+        pageChrome,
+        cardChrome,
+        sectionHeaderHeight,
+        rowHeight,
+        sectionGap = 8,
+        cardGap,
+    } = DETAIL_LAYOUT;
 
     /** @type {{ blocks: object[] }[]} */
     const pages = [];
@@ -602,63 +812,117 @@ const packDetailPages = (workouts = []) => {
         used = pageChrome;
     };
 
-    const estimateCard = (rowCount) =>
-        cardChrome + Math.max(rowCount, 1) * rowHeight;
+    const estimateBlock = (sectionSlices) => {
+        if (!sectionSlices.length) {
+            return cardChrome + rowHeight;
+        }
+        return (
+            cardChrome +
+            sectionSlices.reduce(
+                (sum, slice, index) =>
+                    sum +
+                    (index > 0 ? sectionGap : 0) +
+                    sectionHeaderHeight +
+                    Math.max(slice.rows.length, 1) * rowHeight,
+                0
+            )
+        );
+    };
+
+    const pushBlock = (workout, sectionSlices, continued) => {
+        const height = estimateBlock(sectionSlices);
+        const gap = currentBlocks.length ? cardGap : 0;
+        if (currentBlocks.length && used + gap + height > pageBudget) {
+            flush();
+        }
+        const blockGap = currentBlocks.length ? cardGap : 0;
+        currentBlocks.push({
+            workout,
+            sections: sectionSlices,
+            exercises: sectionSlices.flatMap((slice) => slice.rows),
+            continued,
+        });
+        used += blockGap + height;
+    };
 
     for (const workout of workouts) {
-        const exercises = workout.exercises;
-        if (!exercises.length) {
-            const height = estimateCard(1);
-            const gap = currentBlocks.length ? cardGap : 0;
-            if (currentBlocks.length && used + gap + height > pageBudget) {
-                flush();
-            }
-            currentBlocks.push({
-                workout,
-                exercises: [],
-                continued: false,
-            });
-            used += (currentBlocks.length > 1 ? cardGap : 0) + height;
+        const sections = Array.isArray(workout.sections) ? workout.sections : [];
+        if (!sections.length) {
+            pushBlock(workout, [], false);
             continue;
         }
 
-        let offset = 0;
-        let continued = false;
-        while (offset < exercises.length) {
-            const gap = currentBlocks.length ? cardGap : 0;
-            let available = pageBudget - used - gap - cardChrome;
-            let maxRows = Math.floor(available / rowHeight);
+        /** @type {object[]} */
+        let openSlices = [];
+        let openContinued = false;
+        let openUsed = 0;
 
-            if (maxRows < 1) {
-                flush();
-                continued = offset > 0;
-                continue;
-            }
+        const commitOpen = () => {
+            if (!openSlices.length) return;
+            pushBlock(workout, openSlices, openContinued);
+            openSlices = [];
+            openUsed = 0;
+            openContinued = true;
+        };
 
-            const remaining = exercises.length - offset;
-            let take = Math.min(maxRows, remaining);
+        const pageRoom = () => {
+            const gap = currentBlocks.length || openSlices.length ? cardGap : 0;
+            // Room left on the current PDF page after existing blocks + in-progress card chrome.
+            return pageBudget - used - gap - cardChrome - openUsed;
+        };
 
-            // Avoid leaving a single orphan row when the rest can wait for next page.
-            if (remaining > take && remaining - take === 1 && take > 1) {
-                take -= 1;
-            }
+        for (let s = 0; s < sections.length; s += 1) {
+            const section = sections[s];
+            let offset = 0;
 
-            const slice = exercises.slice(offset, offset + take);
-            const height = estimateCard(slice.length);
-            currentBlocks.push({
-                workout,
-                exercises: slice,
-                continued: continued || offset > 0,
-            });
-            used += gap + height;
-            offset += take;
-            continued = true;
+            while (offset < section.rows.length) {
+                let room = pageRoom();
+                const sliceGap = openSlices.length ? sectionGap : 0;
+                const headerCost = sliceGap + sectionHeaderHeight;
+                let maxRows = Math.floor((room - headerCost) / rowHeight);
 
-            if (offset < exercises.length) {
-                flush();
-                continued = true;
+                if (maxRows < 1) {
+                    commitOpen();
+                    flush();
+                    openContinued = true;
+                    room = pageBudget - pageChrome - cardChrome;
+                    maxRows = Math.floor((room - sectionHeaderHeight) / rowHeight);
+                }
+
+                if (maxRows < 1) {
+                    maxRows = 1;
+                }
+
+                const remaining = section.rows.length - offset;
+                let take = Math.min(maxRows, remaining);
+                if (remaining > take && remaining - take === 1 && take > 1) {
+                    take -= 1;
+                }
+
+                const rows = section.rows.slice(offset, offset + take);
+                openSlices.push({
+                    id: section.id,
+                    label: section.label,
+                    accent: section.accent,
+                    countLabel: section.countLabel,
+                    showHeader: true,
+                    rows,
+                });
+                openUsed +=
+                    (openSlices.length > 1 ? sectionGap : 0) +
+                    sectionHeaderHeight +
+                    take * rowHeight;
+                offset += take;
+
+                if (offset < section.rows.length) {
+                    commitOpen();
+                    flush();
+                    openContinued = true;
+                }
             }
         }
+
+        commitOpen();
     }
 
     flush();
@@ -770,9 +1034,7 @@ export const deriveElevateViewModel = (exportModel) => {
     };
 };
 
-const DETAILS_DUMBBELL_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M6.2 8.2v7.6M17.8 8.2v7.6M3.6 10v4M20.4 10v4M6.2 12h11.6M8.4 9.3v5.4M15.6 9.3v5.4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>
-          </svg>`;
+const DETAILS_DUMBBELL_ICON = ICON_DUMBBELL;
 
 /**
  * @param {number} count
@@ -790,59 +1052,167 @@ const renderTickBoxes = (count) => {
 };
 
 /**
- * @param {object} block
+ * @param {object} row
+ * @param {string} sectionId
  * @returns {string}
  */
-const renderDetailWorkoutCard = (block) => {
-    const { workout, exercises, continued } = block;
-    const theme = workout.theme;
-    const muscles =
-        workout.muscles.length > 0 ? ` — ${workout.muscles.join(' · ')}` : '';
-    const title = continued
-        ? `Workout ${workout.letter}${muscles} (continued)`
-        : `Workout ${workout.letter}${muscles}`;
+const renderRowIdentity = (row, sectionId) => {
+    const note = row.notes
+        ? `<p class="details-ex-note">${escapeHtml(row.notes)}</p>`
+        : '';
+    const safeName = escapeHtml(row.name);
+    const safeHref = row.publicUrl ? escapeHtml(row.publicUrl) : null;
+    const nameHtml = safeHref
+        ? `<a class="details-ex-name details-ex-link" href="${safeHref}">${safeName}</a>`
+        : `<p class="details-ex-name">${safeName}</p>`;
 
-    const rows = exercises.length
-        ? exercises
-              .map((exercise) => {
-                  const imageSrc = exercise.imageUrl || EXERCISE_IMAGE_FALLBACK;
-                  const note = exercise.notes
-                      ? `<p class="details-ex-note">${escapeHtml(exercise.notes)}</p>`
-                      : '';
-                  const safeName = escapeHtml(exercise.name);
-                  const safeHref = exercise.publicUrl
-                      ? escapeHtml(exercise.publicUrl)
-                      : null;
-                  const nameHtml = safeHref
-                      ? `<a class="details-ex-name details-ex-link" href="${safeHref}">${safeName}</a>`
-                      : `<p class="details-ex-name">${safeName}</p>`;
-                  const imageTag = `<img class="details-thumb" src="${escapeHtml(
-                      imageSrc
-                  )}" alt="">`;
-                  // Link real catalog thumbnails only — never the SVG fallback silhouette.
-                  const imageHtml =
-                      safeHref && exercise.imageUrl
-                          ? `<a class="details-ex-thumb-link details-ex-link" href="${safeHref}">${imageTag}</a>`
-                          : imageTag;
-                  return `<tr class="details-row">
-            <td class="details-ex">
+    let mediaHtml;
+    if (row.imageUrl) {
+        const imageTag = `<img class="details-thumb" src="${escapeHtml(
+            row.imageUrl
+        )}" alt="">`;
+        mediaHtml =
+            safeHref
+                ? `<a class="details-ex-thumb-link details-ex-link" href="${safeHref}">${imageTag}</a>`
+                : imageTag;
+    } else {
+        const icon = SECTION_ICONS[sectionId] || ICON_DUMBBELL;
+        mediaHtml = `<span class="details-thumb details-thumb-icon details-thumb-icon--${escapeHtml(
+            sectionId
+        )}" aria-hidden="true">${icon}</span>`;
+    }
+
+    return `<td class="details-ex">
               <div class="details-ex-inner">
-                ${imageHtml}
+                ${mediaHtml}
                 <div class="details-ex-copy">
                   ${nameHtml}
                   ${note}
                 </div>
               </div>
-            </td>
-            <td class="details-sets">${escapeHtml(exercise.setCountLabel)}</td>
-            <td class="details-reps">${escapeHtml(exercise.repsLabel)}</td>
-            <td class="details-ticks">${renderTickBoxes(exercise.checkboxCount)}</td>
+            </td>`;
+};
+
+/**
+ * Main Exercises: Exercise | Sets | Reps | Tick each set
+ * @param {object} row
+ * @param {string} sectionId
+ */
+const renderStrengthRow = (row, sectionId) => `<tr class="details-row details-row--${escapeHtml(
+    sectionId
+)}">
+            ${renderRowIdentity(row, sectionId)}
+            <td class="details-sets">${escapeHtml(row.setCountLabel)}</td>
+            <td class="details-reps">${escapeHtml(row.repsLabel)}</td>
+            <td class="details-ticks">${renderTickBoxes(row.checkboxCount)}</td>
           </tr>`;
-              })
+
+/**
+ * Warm-up / Cardio: Activity | Duration | Done
+ * @param {object} row
+ * @param {string} sectionId
+ */
+const renderActivityRow = (row, sectionId) => `<tr class="details-row details-row--${escapeHtml(
+    sectionId
+)}">
+            ${renderRowIdentity(row, sectionId)}
+            <td class="details-duration">${escapeHtml(
+                row.metricLabel || row.repsLabel || '—'
+            )}</td>
+            <td class="details-ticks details-done">${renderTickBoxes(
+                row.checkboxCount
+            )}</td>
+          </tr>`;
+
+/**
+ * One section owns its title bar + column headers + rows (no global thead).
+ * @param {object} sectionSlice
+ * @returns {string}
+ */
+const renderSectionSlice = (sectionSlice) => {
+    const sectionId = sectionSlice.id;
+    const isActivity = sectionId === 'warmup' || sectionId === 'cardio';
+    const icon = SECTION_ICONS[sectionId] || ICON_DUMBBELL;
+
+    const headCols = isActivity
+        ? `<span class="details-section-col-label details-section-col-duration">Duration</span>
+          <span class="details-section-col-label details-section-col-done">Done</span>`
+        : `<span class="details-section-col-label details-section-col-sets">Sets</span>
+          <span class="details-section-col-label details-section-col-reps">Reps</span>
+          <span class="details-section-col-label details-section-col-ticks">Tick each set</span>`;
+
+    const titleLabel = sectionSlice.showHeader
+        ? `<header class="details-section-head details-section-head--${escapeHtml(
+              sectionId
+          )}">
+        <div class="details-section-head-inner details-section-head-inner--${
+            isActivity ? 'activity' : 'strength'
+        }">
+          <span class="details-section-label">
+            ${icon}
+            <span>${escapeHtml(sectionSlice.label)}</span>
+          </span>
+          ${headCols}
+        </div>
+      </header>`
+        : '';
+
+    const rows = sectionSlice.rows.length
+        ? sectionSlice.rows
+              .map((row) =>
+                  isActivity
+                      ? renderActivityRow(row, sectionId)
+                      : renderStrengthRow(row, sectionId)
+              )
               .join('\n')
         : `<tr class="details-row details-row-empty">
-            <td class="details-ex" colspan="4"><p class="details-ex-name">No exercises</p></td>
+            <td class="details-ex" colspan="${
+                isActivity ? 3 : 4
+            }"><p class="details-ex-name">No exercises</p></td>
           </tr>`;
+
+    return `<section class="details-section details-section--${escapeHtml(
+        sectionId
+    )}">
+      ${titleLabel}
+      <table class="details-table details-table--${escapeHtml(
+          isActivity ? 'activity' : 'strength'
+      )}">
+        <tbody>
+          ${rows}
+        </tbody>
+      </table>
+    </section>`;
+};
+
+/**
+ * @param {object} block
+ * @returns {string}
+ */
+const renderDetailWorkoutCard = (block) => {
+    const { workout, continued } = block;
+    const theme = workout.theme;
+    const rawName = String(workout.name || '').trim();
+    const nameIsGeneric =
+        !rawName ||
+        /^day\s*\d+$/i.test(rawName) ||
+        /^workout\s+[a-z0-9]+$/i.test(rawName);
+    const focus = !nameIsGeneric
+        ? rawName
+        : workout.muscles.length > 0
+          ? workout.muscles.join(' · ')
+          : '';
+    const focusPart = focus ? ` — ${focus}` : '';
+    const title = continued
+        ? `Workout ${workout.letter}${focusPart} (continued)`
+        : `Workout ${workout.letter}${focusPart}`;
+
+    const sectionSlices = Array.isArray(block.sections) ? block.sections : [];
+    const sectionsHtml = sectionSlices.length
+        ? sectionSlices.map((slice) => renderSectionSlice(slice)).join('\n')
+        : `<section class="details-section details-section--empty">
+      <p class="details-ex-name">No exercises</p>
+    </section>`;
 
     return `<article class="details-card details-card--${escapeHtml(theme.id)}">
       <header class="details-card-head">
@@ -850,22 +1220,12 @@ const renderDetailWorkoutCard = (block) => {
           ${DETAILS_DUMBBELL_ICON}
           <span>${escapeHtml(title)}</span>
         </div>
-        <p class="details-card-meta">${escapeHtml(workout.meta)}</p>
+        <p class="details-card-meta">${escapeHtml(
+            continued ? `${workout.meta} (continued)` : workout.meta
+        )}</p>
       </header>
-      <div class="details-card-body">
-        <table class="details-table">
-          <thead>
-            <tr>
-              <th scope="col">Exercise</th>
-              <th scope="col">Sets</th>
-              <th scope="col">Reps</th>
-              <th scope="col">Tick each set</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rows}
-          </tbody>
-        </table>
+      <div class="details-card-body details-card-body--sections">
+        ${sectionsHtml}
       </div>
     </article>`;
 };
@@ -884,7 +1244,7 @@ const renderDetailPage = (page, pageNumber, totalPages, isFirstDetailsPage) => {
     </article>`;
 
     const dek = isFirstDetailsPage
-        ? 'Sets and reps for each workout. Tick a box for every set you finish.'
+        ? 'Warm-up, main exercises, and cardio. Tick a box for every set you finish.'
         : 'Continued from previous page.';
 
     return `<section class="page page-workout-details" aria-label="Workout plan details">

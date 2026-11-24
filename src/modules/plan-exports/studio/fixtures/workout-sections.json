@@ -1,0 +1,214 @@
+{
+  "type": "workout",
+  "plan": {
+    "id": "fixture-workout-sections",
+    "name": "Three Section Workout",
+    "description": "Warm-up, main, and cardio export fixture for Elevate PDF redesign.",
+    "duration": 6,
+    "daysPerWeek": 2,
+    "goal": "general_fitness",
+    "level": "intermediate",
+    "notes": "Complete warm-up before main lifts.",
+    "status": "active",
+    "isTemplate": false,
+    "totalExercises": 5,
+    "totalDays": 2
+  },
+  "trainer": {
+    "id": "fixture-trainer",
+    "fullName": "Studio Coach",
+    "email": "studio-coach@example.com",
+    "phone": "+1 555 0100"
+  },
+  "content": {
+    "workoutDays": [
+      {
+        "dayNumber": 1,
+        "name": "Legs · Chest · Back",
+        "description": null,
+        "warmupActivities": [
+          {
+            "activityType": "arm_circles",
+            "name": "Arm Circles",
+            "order": 1,
+            "durationMinutes": 2,
+            "intensity": "low",
+            "notes": null,
+            "exerciseId": null,
+            "slug": null,
+            "ownershipType": null,
+            "status": null,
+            "thumbnailUrl": null
+          },
+          {
+            "activityType": "dynamic_mobility",
+            "name": "Band Pull-Apart",
+            "order": 2,
+            "durationMinutes": 3,
+            "intensity": "low",
+            "notes": "Light band",
+            "exerciseId": "507f1f77bcf86cd799439021",
+            "slug": "band-pull-apart",
+            "ownershipType": "system",
+            "status": "active",
+            "thumbnailUrl": "https://cdn.example.com/exercises/band-pull-apart.png"
+          }
+        ],
+        "exercises": [
+          {
+            "exerciseId": "507f1f77bcf86cd799439011",
+            "slug": "barbell-squat",
+            "ownershipType": "system",
+            "status": "active",
+            "name": "Barbell Squat",
+            "order": 1,
+            "restBetweenSets": 120,
+            "notes": "Keep your chest up. Stop 2 reps before failure.",
+            "tempo": null,
+            "thumbnailUrl": "https://cdn.example.com/exercises/barbell-squat.png",
+            "muscles": { "primary": "quads", "secondary": ["glutes"] },
+            "sets": [
+              { "setNumber": 1, "reps": 10, "weight": 60, "weightUnit": "kg", "isWarmup": false, "isDropset": false },
+              { "setNumber": 2, "reps": 10, "weight": 60, "weightUnit": "kg", "isWarmup": false, "isDropset": false },
+              { "setNumber": 3, "reps": 10, "weight": 60, "weightUnit": "kg", "isWarmup": false, "isDropset": false }
+            ]
+          },
+          {
+            "name": "Push-ups",
+            "order": 2,
+            "restBetweenSets": 60,
+            "notes": null,
+            "tempo": null,
+            "thumbnailUrl": "https://cdn.example.com/exercises/push-ups.png",
+            "muscles": { "primary": "chest", "secondary": [] },
+            "sets": [
+              { "setNumber": 1, "reps": 12, "weight": null, "weightUnit": "kg", "isWarmup": false, "isDropset": false },
+              { "setNumber": 2, "reps": 12, "weight": null, "weightUnit": "kg", "isWarmup": false, "isDropset": false },
+              { "setNumber": 3, "reps": 12, "weight": null, "weightUnit": "kg", "isWarmup": false, "isDropset": false }
+            ]
+          },
+          {
+            "name": "Bent-Over Two-Dumbbell Row",
+            "order": 3,
+            "restBetweenSets": 90,
+            "notes": null,
+            "tempo": null,
+            "thumbnailUrl": null,
+            "muscles": { "primary": "back", "secondary": [] },
+            "sets": [
+              { "setNumber": 1, "reps": 10, "weight": 20, "weightUnit": "kg", "isWarmup": false, "isDropset": false },
+              { "setNumber": 2, "reps": 10, "weight": 20, "weightUnit": "kg", "isWarmup": false, "isDropset": false },
+              { "setNumber": 3, "reps": 10, "weight": 20, "weightUnit": "kg", "isWarmup": false, "isDropset": false },
+              { "setNumber": 4, "reps": 10, "weight": 20, "weightUnit": "kg", "isWarmup": false, "isDropset": false },
+              { "setNumber": 5, "reps": 10, "weight": 20, "weightUnit": "kg", "isWarmup": false, "isDropset": false }
+            ]
+          },
+          {
+            "name": "Glute Bridge",
+            "order": 4,
+            "restBetweenSets": 60,
+            "notes": null,
+            "tempo": null,
+            "muscles": { "primary": "glutes", "secondary": [] },
+            "sets": [
+              { "setNumber": 1, "reps": 12, "weight": null, "weightUnit": "kg", "isWarmup": false, "isDropset": false },
+              { "setNumber": 2, "reps": 12, "weight": null, "weightUnit": "kg", "isWarmup": false, "isDropset": false }
+            ]
+          },
+          {
+            "name": "Plank",
+            "order": 5,
+            "restBetweenSets": 45,
+            "notes": null,
+            "tempo": null,
+            "muscles": { "primary": "core", "secondary": [] },
+            "sets": [
+              { "setNumber": 1, "reps": 30, "weight": null, "weightUnit": "kg", "isWarmup": false, "isDropset": false },
+              { "setNumber": 2, "reps": 30, "weight": null, "weightUnit": "kg", "isWarmup": false, "isDropset": false },
+              { "setNumber": 3, "reps": 30, "weight": null, "weightUnit": "kg", "isWarmup": false, "isDropset": false }
+            ]
+          }
+        ],
+        "cardioActivities": [
+          {
+            "activityType": "treadmill",
+            "protocol": "continuous",
+            "name": "Treadmill, brisk walk",
+            "order": 1,
+            "durationMinutes": 15,
+            "intensity": "moderate",
+            "distanceKm": null,
+            "notes": "Moderate pace",
+            "exerciseId": "507f1f77bcf86cd799439031",
+            "slug": "treadmill-brisk-walk",
+            "ownershipType": "system",
+            "status": "active",
+            "thumbnailUrl": "https://cdn.example.com/exercises/treadmill.png"
+          },
+          {
+            "activityType": "jump_rope",
+            "protocol": "continuous",
+            "name": "Jump Rope",
+            "order": 2,
+            "durationMinutes": 5,
+            "intensity": "high",
+            "distanceKm": null,
+            "notes": null,
+            "exerciseId": null,
+            "thumbnailUrl": null
+          }
+        ]
+      },
+      {
+        "dayNumber": 2,
+        "name": "Upper Focus",
+        "description": null,
+        "warmupActivities": [],
+        "exercises": [
+          {
+            "name": "Dumbbell Bench Press",
+            "order": 1,
+            "restBetweenSets": 90,
+            "notes": "Long note that should wrap without breaking the layout or overlapping tick boxes in the Elevate PDF export.",
+            "tempo": null,
+            "muscles": { "primary": "chest", "secondary": ["triceps"] },
+            "sets": [
+              { "setNumber": 1, "reps": 8, "weight": 22, "weightUnit": "kg", "isWarmup": false, "isDropset": false },
+              { "setNumber": 2, "reps": 8, "weight": 22, "weightUnit": "kg", "isWarmup": false, "isDropset": false },
+              { "setNumber": 3, "reps": 8, "weight": 22, "weightUnit": "kg", "isWarmup": false, "isDropset": false },
+              { "setNumber": 4, "reps": 8, "weight": 22, "weightUnit": "kg", "isWarmup": false, "isDropset": false }
+            ]
+          },
+          {
+            "name": "Lat Pulldown",
+            "order": 2,
+            "restBetweenSets": 75,
+            "notes": null,
+            "tempo": null,
+            "muscles": { "primary": "back", "secondary": [] },
+            "sets": [
+              { "setNumber": 1, "reps": 10, "weight": 40, "weightUnit": "kg", "isWarmup": false, "isDropset": false },
+              { "setNumber": 2, "reps": 10, "weight": 40, "weightUnit": "kg", "isWarmup": false, "isDropset": false },
+              { "setNumber": 3, "reps": 10, "weight": 40, "weightUnit": "kg", "isWarmup": false, "isDropset": false }
+            ]
+          }
+        ],
+        "cardioActivities": [
+          {
+            "activityType": "cycling",
+            "protocol": "interval",
+            "name": "Bike Intervals",
+            "order": 1,
+            "durationMinutes": 12,
+            "intensity": "high",
+            "workSeconds": 40,
+            "recoverySeconds": 20,
+            "rounds": 10,
+            "notes": null,
+            "thumbnailUrl": null
+          }
+        ]
+      }
+    ]
+  }
+}

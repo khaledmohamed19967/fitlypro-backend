@@ -54,8 +54,8 @@ export const resolveSearchExpression = (query, foodType = 'generic') => {
     };
 };
 
-/** foods.search.v5 requires OAuth2 premier scope. */
-export const SEARCH_METHOD_PREMIER = 'foods.search.v5';
+/** foods.search.v6 requires OAuth2 premier scope. */
+export const SEARCH_METHOD_PREMIER = 'foods.search.v6';
 
 /** foods.search (v1) is the Basic-compatible search. */
 export const SEARCH_METHOD_BASIC = 'foods.search';

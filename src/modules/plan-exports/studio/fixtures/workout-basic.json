@@ -26,6 +26,7 @@
         "dayNumber": 1,
         "name": "Full Body A",
         "description": null,
+        "warmupActivities": [],
         "exercises": [
           {
             "name": "Goblet Squat",
@@ -48,7 +49,8 @@
               { "setNumber": 1, "reps": 12, "weight": null, "weightUnit": "kg", "isWarmup": false, "isDropset": false }
             ]
           }
-        ]
+        ],
+        "cardioActivities": []
       }
     ]
   }

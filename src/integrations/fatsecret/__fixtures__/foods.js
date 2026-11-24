@@ -26,6 +26,43 @@ export const SEARCH_WITH_IMAGE = {
     },
 };
 
+/** Official v6-style multi-size food_images (Standard = 0, Isolated = 1). */
+export const SEARCH_WITH_IMAGE_V6 = {
+    food_id: '1641',
+    food_name: 'Chicken Breast',
+    food_type: 'Generic',
+    food_description: 'Per 100g - Calories: 165kcal | Fat: 3.57g | Carbs: 0.00g | Protein: 31.02g',
+    food_images: {
+        food_image: [
+            {
+                image_url:
+                    'https://www.foodimagedb.com/food-images/bc47e77b-3a5c-4a8e-aa6c-786646a8934a_1024x1024.png',
+                image_type: '0',
+            },
+            {
+                image_url:
+                    'https://www.foodimagedb.com/food-images/bc47e77b-3a5c-4a8e-aa6c-786646a8934a_400x400.png',
+                image_type: '0',
+            },
+            {
+                image_url:
+                    'https://www.foodimagedb.com/food-images/bc47e77b-3a5c-4a8e-aa6c-786646a8934a_72x72.png',
+                image_type: '0',
+            },
+            {
+                image_url:
+                    'https://www.foodimagedb.com/food-images/isolated-chicken_1024x1024.png',
+                image_type: '1',
+            },
+            {
+                image_url:
+                    'https://www.foodimagedb.com/food-images/isolated-chicken_400x400.png',
+                image_type: '1',
+            },
+        ],
+    },
+};
+
 export const SEARCH_MISSING_NUTRITION = {
     food_id: '1',
     food_name: 'Unknown Item',
@@ -309,12 +346,51 @@ export const TOKEN_RESPONSE = {
     expires_in: 86400,
 };
 
+/** Legacy v5-shaped search envelope (foods nested directly under foods_search). */
 export const SEARCH_RESPONSE_V5 = {
     foods_search: {
         max_results: '20',
         total_results: '2',
         page_number: '0',
         food: [GENERIC_CHICKEN_SEARCH, BRANDED_SEARCH],
+    },
+};
+
+/**
+ * Official foods.search.v6 JSON shape: foods under foods_search.results.food,
+ * with optional food_images when include_food_images=true.
+ */
+export const SEARCH_RESPONSE_V6 = {
+    foods_search: {
+        max_results: '20',
+        total_results: '2',
+        page_number: '0',
+        results: {
+            food: [
+                {
+                    ...GENERIC_CHICKEN_SEARCH,
+                    servings: {
+                        serving: [
+                            {
+                                serving_id: '1',
+                                serving_description: '100 g',
+                                metric_serving_amount: '100.000',
+                                metric_serving_unit: 'g',
+                                number_of_units: '100.000',
+                                measurement_description: 'g',
+                                is_default: '1',
+                                calories: '165',
+                                carbohydrate: '0.00',
+                                protein: '31.02',
+                                fat: '3.57',
+                            },
+                        ],
+                    },
+                    food_images: SEARCH_WITH_IMAGE_V6.food_images,
+                },
+                BRANDED_SEARCH,
+            ],
+        },
     },
 };
 

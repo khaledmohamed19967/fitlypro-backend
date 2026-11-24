@@ -207,7 +207,7 @@ const resolveSearchScope = () => {
 /**
  * Search FatSecret foods.
  *
- * Prefers foods.search.v5 (Premier, food_type + servings + optional images).
+ * Prefers foods.search.v6 (Premier, food_type + servings + optional images).
  * Falls back to foods.search (Basic) when Premier scope is unavailable.
  *
  * @param {object} options
@@ -282,7 +282,7 @@ export const searchFoods = async ({
 };
 
 /**
- * Build food.get params. `flag_default_serving` is Premier Exclusive (same as search.v5).
+ * Build food.get params. `flag_default_serving` is Premier Exclusive (same as search.v6).
  * Basic-scope requests omit the flag so we do not claim unsupported Premier fields.
  *
  * @param {string} method
