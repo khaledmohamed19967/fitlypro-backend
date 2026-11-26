@@ -28,6 +28,7 @@
     "test:client-profile-update": "node scripts/test-client-profile-update.mjs",
     "pdf-studio": "node scripts/pdf-studio.mjs",
     "test:pdf-studio": "node scripts/test-pdf-studio.mjs",
+    "test:pdf-renderer": "node scripts/test-pdf-renderer-runtime.mjs",
     "test:contact": "node scripts/test-contact.mjs"
   },
   "keywords": [
@@ -38,6 +39,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@sparticuz/chromium": "143.0.4",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
@@ -49,7 +51,8 @@
     "mongoose": "^9.0.2",
     "morgan": "^1.10.1",
     "multer": "^2.0.2",
-    "playwright": "^1.62.1"
+    "playwright": "^1.62.1",
+    "playwright-core": "1.63.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.11"

@@ -1,17 +1,16 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
-  "framework": null,
-  "builds": [
+  "rewrites": [
     {
-      "src": "server.js",
-      "use": "@vercel/node"
+      "source": "/(.*)",
+      "destination": "/server.js"
     }
   ],
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "/server.js"
+  "functions": {
+    "server.js": {
+      "maxDuration": 60,
+      "includeFiles": "src/modules/plan-exports/templates/**"
     }
-  ]
+  }
 }

@@ -89,6 +89,10 @@ const exportPlanPdf = async (input, trainerId) => {
             planType,
             planId,
             templateId,
+            phase:
+                error && typeof error === 'object' && 'pdfPhase' in error
+                    ? error.pdfPhase
+                    : 'unknown',
             message: error instanceof Error ? error.message : String(error),
             stack: error instanceof Error ? error.stack : undefined,
         });

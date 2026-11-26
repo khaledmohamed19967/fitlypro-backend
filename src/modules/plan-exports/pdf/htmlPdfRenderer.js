@@ -1,15 +1,17 @@
 /**
  * Chromium HTML → PDF renderer (Playwright).
  * Reuses a single browser instance; creates an isolated page per render.
+ *
+ * Local: full `playwright` + locally installed Chromium.
+ * Vercel/serverless: `playwright-core` + `@sparticuz/chromium`.
  */
 
-import { chromium } from 'playwright';
 import { ApiError } from '../../../utils/ApiError.js';
 import { EXERCISE_IMAGE_FALLBACK } from './exerciseImageFallback.js';
 
-/** @type {import('playwright').Browser | null} */
+/** @type {import('playwright-core').Browser | null} */
 let sharedBrowser = null;
-/** @type {Promise<import('playwright').Browser> | null} */
+/** @type {Promise<import('playwright-core').Browser> | null} */
 let launching = null;
 
 const DEFAULT_PDF_OPTIONS = Object.freeze({
@@ -37,7 +39,66 @@ const REMOTE_IMAGE_TIMEOUT_MS = 4_000;
 const FONT_READY_TIMEOUT_MS = 2_000;
 
 /**
- * @returns {Promise<import('playwright').Browser>}
+ * Vercel sets `VERCEL=1`. Lambda sets `AWS_LAMBDA_FUNCTION_NAME`.
+ * `PDF_USE_SERVERLESS_CHROMIUM=1` forces the serverless launch path (tests).
+ *
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {boolean}
+ */
+export const isServerlessPdfRuntime = (env = process.env) =>
+    env.VERCEL === '1' ||
+    Boolean(env.AWS_LAMBDA_FUNCTION_NAME) ||
+    env.PDF_USE_SERVERLESS_CHROMIUM === '1';
+
+/**
+ * Resolve which Playwright package + launch options to use.
+ * Does not launch a browser.
+ *
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {Promise<{
+ *   mode: 'serverless' | 'local',
+ *   launchOptions: import('playwright-core').LaunchOptions,
+ * }>}
+ */
+export const resolvePdfBrowserLaunchPlan = async (env = process.env) => {
+    if (isServerlessPdfRuntime(env)) {
+        const serverlessChromium = (await import('@sparticuz/chromium')).default;
+        // PDF export does not need WebGL; reduces extract/work on cold start.
+        serverlessChromium.setGraphicsMode = false;
+
+        return {
+            mode: 'serverless',
+            launchOptions: {
+                args: [...serverlessChromium.args, '--font-render-hinting=medium'],
+                executablePath: await serverlessChromium.executablePath(),
+                headless: true,
+            },
+        };
+    }
+
+    return {
+        mode: 'local',
+        launchOptions: {
+            headless: true,
+            args: ['--font-render-hinting=medium'],
+        },
+    };
+};
+
+/**
+ * @returns {Promise<typeof import('playwright-core').chromium>}
+ */
+const loadPlaywrightChromium = async () => {
+    if (isServerlessPdfRuntime()) {
+        const mod = await import('playwright-core');
+        return mod.chromium;
+    }
+    const mod = await import('playwright');
+    return mod.chromium;
+};
+
+/**
+ * @returns {Promise<import('playwright-core').Browser>}
  */
 const getBrowser = async () => {
     if (sharedBrowser && sharedBrowser.isConnected()) {
@@ -48,12 +109,11 @@ const getBrowser = async () => {
         return launching;
     }
 
-    launching = chromium
-        .launch({
-            headless: true,
-            args: ['--font-render-hinting=medium'],
-        })
-        .then((browser) => {
+    launching = (async () => {
+        try {
+            const chromiumApi = await loadPlaywrightChromium();
+            const plan = await resolvePdfBrowserLaunchPlan();
+            const browser = await chromiumApi.launch(plan.launchOptions);
             sharedBrowser = browser;
             browser.on('disconnected', () => {
                 if (sharedBrowser === browser) {
@@ -61,10 +121,21 @@ const getBrowser = async () => {
                 }
             });
             return browser;
-        })
-        .finally(() => {
-            launching = null;
-        });
+        } catch (error) {
+            const message =
+                error instanceof Error ? error.message : String(error);
+            const launchError = new ApiError(
+                500,
+                message.includes("Executable doesn't exist")
+                    ? 'PDF generation failed: Playwright Chromium binary missing. Ensure "npx playwright install" has been run (local) or the serverless Chromium package is available (Vercel).'
+                    : `PDF generation failed: browser launch error: ${message}`
+            );
+            launchError.pdfPhase = 'browser_launch';
+            throw launchError;
+        }
+    })().finally(() => {
+        launching = null;
+    });
 
     return launching;
 };
@@ -74,7 +145,7 @@ const getBrowser = async () => {
  * Failed / timed-out images swap to the Elevate exercise SVG placeholder.
  * Data-URI and relative images are left untouched.
  *
- * @param {import('playwright').Page} page
+ * @param {import('playwright-core').Page} page
  * @param {{ timeoutMs?: number, fallbackSrc?: string }} [options]
  */
 export const settleRemoteImages = async (page, options = {}) => {
@@ -143,7 +214,7 @@ export const settleRemoteImages = async (page, options = {}) => {
 /**
  * Best-effort font readiness so CDN webfonts can apply without blocking forever.
  *
- * @param {import('playwright').Page} page
+ * @param {import('playwright-core').Page} page
  * @param {number} [timeoutMs]
  */
 const waitForFontsReady = async (page, timeoutMs = FONT_READY_TIMEOUT_MS) => {
@@ -164,7 +235,7 @@ const waitForFontsReady = async (page, timeoutMs = FONT_READY_TIMEOUT_MS) => {
  * Render a full HTML document to a PDF Buffer.
  *
  * @param {string} html
- * @param {import('playwright').Page.pdfOptions} [pdfOptions]
+ * @param {import('playwright-core').Page.pdfOptions} [pdfOptions]
  * @returns {Promise<Buffer>}
  */
 export const renderHtmlToPdf = async (html, pdfOptions = {}) => {
@@ -194,22 +265,31 @@ export const renderHtmlToPdf = async (html, pdfOptions = {}) => {
 
         return Buffer.isBuffer(pdf) ? pdf : Buffer.from(pdf);
     } catch (error) {
-        // Provide a clearer error when Playwright browser binaries are missing
+        if (error instanceof ApiError) {
+            if (!error.pdfPhase) {
+                error.pdfPhase = 'pdf_render';
+            }
+            throw error;
+        }
         if (
             error instanceof Error &&
             error.message.includes("Executable doesn't exist")
         ) {
-            throw new ApiError(
+            const launchError = new ApiError(
                 500,
-                'PDF generation failed: Playwright Chromium binary missing. Ensure "npx playwright install" has been run.'
+                'PDF generation failed: Playwright Chromium binary missing. Ensure "npx playwright install" has been run (local) or the serverless Chromium package is available (Vercel).'
             );
-        }
-        if (error instanceof ApiError) {
-            throw error;
+            launchError.pdfPhase = 'browser_launch';
+            throw launchError;
         }
         const message =
             error instanceof Error ? error.message : 'Unknown PDF renderer error';
-        throw new ApiError(500, `PDF generation failed: ${message}`);
+        const renderError = new ApiError(
+            500,
+            `PDF generation failed: ${message}`
+        );
+        renderError.pdfPhase = 'pdf_render';
+        throw renderError;
     } finally {
         if (page) {
             await page.close().catch(() => {});
@@ -232,4 +312,6 @@ export default {
     renderHtmlToPdf,
     settleRemoteImages,
     closeHtmlPdfBrowser,
+    isServerlessPdfRuntime,
+    resolvePdfBrowserLaunchPlan,
 };

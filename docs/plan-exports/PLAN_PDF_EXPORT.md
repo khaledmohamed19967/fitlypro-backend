@@ -50,6 +50,7 @@ Response: `Content-Type: application/pdf` + `Content-Disposition: attachment; fi
 
 ## Ops notes
 
-- Dependency: `playwright`
-- Install browser once: `npx playwright install chromium`
+- Local: `playwright` + `npx playwright install chromium`
+- Production (Vercel): `playwright-core` + `@sparticuz/chromium` (see `htmlPdfRenderer.js`)
+- Vercel: `server.js` function `maxDuration` 60s; template assets via `includeFiles`
 - Frontend export modal/flow is unchanged
