@@ -25,6 +25,9 @@ export const SUBSCRIPTION_NEEDS_ATTENTION_ACTIONS = Object.freeze({
 export const EXPIRING_SOON_DAYS_MIN = 1;
 export const EXPIRING_SOON_DAYS_MAX = 7;
 
+/** Completed UTC calendar days before today: yesterday through N days ago (inclusive). */
+export const RECENTLY_EXPIRED_WINDOW_DAYS = 7;
+
 export const SUBSCRIPTION_PACKAGE_BUCKETS = Object.freeze({
     EXPIRED: 'expired',
     EXPIRES_TODAY: 'expires_today',
@@ -80,6 +83,23 @@ export const resolveSubscriptionDaysUntilEnd = (
 };
 
 /**
+ * @param {Date|string|number} effectiveEnd
+ * @param {Date} [now]
+ */
+export function isEffectiveEndInRecentlyExpiredWindow(effectiveEnd, now = new Date()) {
+    const endDay = utcCalendarDayMs(effectiveEnd);
+    const todayDay = utcCalendarDayMs(now);
+    if (endDay === null || todayDay === null) {
+        return false;
+    }
+
+    const windowStartDay = todayDay - RECENTLY_EXPIRED_WINDOW_DAYS * DAY_MS;
+    const windowEndDay = todayDay - DAY_MS;
+
+    return endDay >= windowStartDay && endDay <= windowEndDay;
+}
+
+/**
  * @param {object} client
  * @param {Date} [now]
  * @returns {{ bucket: string, daysUntilEnd: number, effectiveEnd: Date } | null}
@@ -125,6 +145,7 @@ export const classifySubscriptionPackage = (client, now = new Date()) => {
  * @param {Date|string|number} [client.startDate]
  * @param {string} [client.packageDuration]
  * @param {Date|string|null} [client.endDate]
+ * @param {boolean} [client.isActive]
  * @param {Date} [now]
  * @returns {{ kind: string, suggestedAction: string } | null}
  */
@@ -164,3 +185,58 @@ export const resolveSubscriptionNeedsAttention = (
 
     return null;
 };
+
+/**
+ * Phase-1 Needs Attention membership — single source of truth for
+ * Dashboard Overview and My Clients `needsAttention=true` filter.
+ *
+ * Includes:
+ * - Expires today (UTC)
+ * - Recently expired (yesterday through 7 UTC calendar days ago)
+ *
+ * Excludes expiring-soon and long-expired (8+ days ago).
+ * Inactive clients never qualify.
+ *
+ * @param {object} client
+ * @param {Date} [now]
+ * @returns {boolean}
+ */
+export function isClientInNeedsAttentionSet(client = {}, now = new Date()) {
+    if (client.isActive === false) {
+        return false;
+    }
+
+    const classified = classifySubscriptionPackage(client, now);
+    if (!classified) {
+        return false;
+    }
+
+    if (classified.bucket === SUBSCRIPTION_PACKAGE_BUCKETS.EXPIRES_TODAY) {
+        return true;
+    }
+
+    if (
+        classified.bucket === SUBSCRIPTION_PACKAGE_BUCKETS.EXPIRED &&
+        isEffectiveEndInRecentlyExpiredWindow(classified.effectiveEnd, now)
+    ) {
+        return true;
+    }
+
+    return false;
+}
+
+/**
+ * Attention record for Overview / filter membership (null when not in set).
+ * Prefer this over `resolveSubscriptionNeedsAttention` when the 7-day expired
+ * window must apply (Overview + list filter).
+ *
+ * @param {object} client
+ * @param {Date} [now]
+ * @returns {{ kind: string, suggestedAction: string } | null}
+ */
+export function resolveNeedsAttentionForClient(client = {}, now = new Date()) {
+    if (!isClientInNeedsAttentionSet(client, now)) {
+        return null;
+    }
+    return resolveSubscriptionNeedsAttention(client, now);
+}

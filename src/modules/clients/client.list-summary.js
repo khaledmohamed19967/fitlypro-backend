@@ -2,34 +2,20 @@ import User from '../users/user.model.js';
 import {
     SUBSCRIPTION_PACKAGE_BUCKETS,
     classifySubscriptionPackage,
+    isClientInNeedsAttentionSet,
+    isEffectiveEndInRecentlyExpiredWindow,
+    RECENTLY_EXPIRED_WINDOW_DAYS,
+    resolveNeedsAttentionForClient,
     resolveSubscriptionDaysUntilEnd,
-    resolveSubscriptionNeedsAttention,
     utcCalendarDayMs,
 } from './client.subscription-attention.js';
 
 export const SUMMARY_PREVIEW_LIMIT = 5;
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-/** Completed UTC calendar days before today: yesterday through 7 days ago (inclusive). */
-export const RECENTLY_EXPIRED_WINDOW_DAYS = 7;
-
-/**
- * @param {Date|string|number} effectiveEnd
- * @param {Date} [now]
- */
-export function isEffectiveEndInRecentlyExpiredWindow(effectiveEnd, now = new Date()) {
-    const endDay = utcCalendarDayMs(effectiveEnd);
-    const todayDay = utcCalendarDayMs(now);
-    if (endDay === null || todayDay === null) {
-        return false;
-    }
-
-    const windowStartDay = todayDay - RECENTLY_EXPIRED_WINDOW_DAYS * DAY_MS;
-    const windowEndDay = todayDay - DAY_MS;
-
-    return endDay >= windowStartDay && endDay <= windowEndDay;
-}
+export {
+    isEffectiveEndInRecentlyExpiredWindow,
+    RECENTLY_EXPIRED_WINDOW_DAYS,
+};
 
 const SUMMARY_CLIENT_SELECT =
     '_id firstName lastName startDate packageDuration endDate';
@@ -127,14 +113,8 @@ export function summarizeClientRoster(roster, now = new Date()) {
                 endDate,
             });
 
-        if (
-            classified.bucket === SUBSCRIPTION_PACKAGE_BUCKETS.EXPIRED ||
-            classified.bucket === SUBSCRIPTION_PACKAGE_BUCKETS.EXPIRES_TODAY
-        ) {
-            const needsAttention = resolveSubscriptionNeedsAttention(
-                packageFields,
-                now
-            );
+        if (isClientInNeedsAttentionSet(packageFields, now)) {
+            const needsAttention = resolveNeedsAttentionForClient(packageFields, now);
             needAttentionEntries.push({
                 id,
                 sortEndMs,
@@ -154,10 +134,7 @@ export function summarizeClientRoster(roster, now = new Date()) {
         }
 
         if (classified.bucket === SUBSCRIPTION_PACKAGE_BUCKETS.EXPIRES_TODAY) {
-            const needsAttention = resolveSubscriptionNeedsAttention(
-                packageFields,
-                now
-            );
+            const needsAttention = resolveNeedsAttentionForClient(packageFields, now);
             expiresTodayEntries.push({
                 id,
                 sortEndMs,

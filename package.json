@@ -27,7 +27,8 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "test:client-profile-update": "node scripts/test-client-profile-update.mjs",
     "pdf-studio": "node scripts/pdf-studio.mjs",
-    "test:pdf-studio": "node scripts/test-pdf-studio.mjs"
+    "test:pdf-studio": "node scripts/test-pdf-studio.mjs",
+    "test:contact": "node scripts/test-contact.mjs"
   },
   "keywords": [
     "fitness",

@@ -252,14 +252,26 @@ export const buildFoodSnapshot = (food, options = {}) => {
         },
         defaultServing,
         ...(servings.length ? { servings } : {}),
-        ...(doc.image?.url || doc.image?.thumbnailUrl
-            ? {
-                  image: {
-                      url: doc.image?.url ?? null,
-                      thumbnailUrl: doc.image?.thumbnailUrl ?? null,
-                  },
-              }
-            : {}),
+        ...(() => {
+            // Prefer live catalog image; fall back to previously frozen snapshot image
+            // when the Food document has not been backfilled yet.
+            const fromFood =
+                doc.image?.url || doc.image?.thumbnailUrl
+                    ? {
+                          url: doc.image?.url ?? null,
+                          thumbnailUrl: doc.image?.thumbnailUrl ?? null,
+                      }
+                    : null;
+            const fromPrevious =
+                previousSnapshot?.image?.url || previousSnapshot?.image?.thumbnailUrl
+                    ? {
+                          url: previousSnapshot.image?.url ?? null,
+                          thumbnailUrl: previousSnapshot.image?.thumbnailUrl ?? null,
+                      }
+                    : null;
+            const image = fromFood || fromPrevious;
+            return image ? { image } : {};
+        })(),
     };
 };
 

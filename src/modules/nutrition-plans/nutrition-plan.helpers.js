@@ -263,12 +263,24 @@ export const generateCloneName = async (sourceName, nameExists) => {
 export const deepCloneNutritionDays = (nutritionDays = []) => {
     const cloneSnapshot = (snapshot) => {
         if (!snapshot) return null;
+        const servings = Array.isArray(snapshot.servings)
+            ? snapshot.servings.map((entry) => ({ ...entry }))
+            : undefined;
+        const image =
+            snapshot.image?.url || snapshot.image?.thumbnailUrl
+                ? {
+                      url: snapshot.image?.url ?? null,
+                      thumbnailUrl: snapshot.image?.thumbnailUrl ?? null,
+                  }
+                : undefined;
         return {
             name: snapshot.name,
             brand: snapshot.brand ?? null,
             category: snapshot.category,
             nutritionPer100g: { ...snapshot.nutritionPer100g },
             defaultServing: { ...snapshot.defaultServing },
+            ...(servings?.length ? { servings } : {}),
+            ...(image ? { image } : {}),
         };
     };
 

@@ -15,6 +15,7 @@ import clientProspectInvitationRoutes from '../modules/client-prospect-invitatio
 import clientRegistrationRequestRoutes from '../modules/client-registration-requests/client-registration-request.routes.js';
 import healthReferenceRoutes from '../modules/health-reference/health-reference.routes.js';
 import coachDashboardRoutes from '../modules/coach-dashboard/coach-dashboard.routes.js';
+import contactRoutes from '../modules/contact/contact.routes.js';
 
 const router = express.Router();
 
@@ -48,6 +49,7 @@ router.use('/me', nutritionPlanPlayerRoutes);
 router.use('/foods', foodRoutes);
 router.use('/nutrition-plans', nutritionPlanRoutes);
 router.use('/plan-exports', planExportRoutes);
+router.use('/contact', contactRoutes);
 
 // Add more module routes here
 

@@ -1,7 +1,14 @@
 import mongoose from 'mongoose';
 import User from '../users/user.model.js';
 import { ApiError } from '../../utils/ApiError.js';
-import { resolveSubscriptionNeedsAttention } from './client.subscription-attention.js';
+import {
+    isClientInNeedsAttentionSet,
+    resolveSubscriptionNeedsAttention,
+} from './client.subscription-attention.js';
+import {
+    filterClientsBySubscriptionExpiry,
+    isSubscriptionExpiryFilter,
+} from './client.subscription-expiry-filter.js';
 import { buildClientListScopeQuery } from './client.list-scope.js';
 import { buildClientListSummary } from './client.list-summary.js';
 import workoutPlanService from '../workout-plans/workout-plan.service.js';
@@ -407,7 +414,15 @@ const countPendingRegistrationRequests = async (trainerId) => {
  */
 const listTrainerClients = async (
     trainerId,
-    { page = 1, limit = 10, search, status, packageDuration } = {}
+    {
+        page = 1,
+        limit = 10,
+        search,
+        status,
+        packageDuration,
+        subscriptionExpiry,
+        needsAttention,
+    } = {}
 ) => {
     const scopeQuery = buildClientListScopeQuery(trainerId, {
         search,
@@ -419,14 +434,63 @@ const listTrainerClients = async (
     const pendingRegistrationRequestsPromise =
         countPendingRegistrationRequests(trainerId);
 
-    if (search && String(search).trim()) {
+    const expiryFilter = isSubscriptionExpiryFilter(subscriptionExpiry)
+        ? subscriptionExpiry
+        : undefined;
+    const needsAttentionFilter = needsAttention === true;
+    const hasSearch = Boolean(search && String(search).trim());
+
+    // Search / subscriptionExpiry / needsAttention require a full roster pass before pagination.
+    if (hasSearch || expiryFilter || needsAttentionFilter) {
         const clients = await User.find(scopeQuery)
             .populate('trainer', 'firstName lastName email')
             .sort({ createdAt: -1 });
 
+        let filtered = expiryFilter
+            ? filterClientsBySubscriptionExpiry(clients, expiryFilter)
+            : clients;
+
+        if (needsAttentionFilter) {
+            filtered = filtered.filter((client) =>
+                isClientInNeedsAttentionSet(
+                    {
+                        startDate: client.startDate,
+                        packageDuration: client.packageDuration,
+                        endDate: client.endDate,
+                        isActive: client.isActive,
+                    },
+                    new Date()
+                )
+            );
+        }
+
+        let pageClients = filtered;
+        let pagination;
+
+        if (hasSearch) {
+            pagination = {
+                page: 1,
+                limit: filtered.length,
+                total: filtered.length,
+                pages: filtered.length > 0 ? 1 : 0,
+            };
+        } else {
+            const total = filtered.length;
+            const safeLimit = Math.max(1, Number(limit) || 10);
+            const safePage = Math.max(1, Number(page) || 1);
+            const skip = (safePage - 1) * safeLimit;
+            pageClients = filtered.slice(skip, skip + safeLimit);
+            pagination = {
+                page: safePage,
+                limit: safeLimit,
+                total,
+                pages: Math.ceil(total / safeLimit) || 0,
+            };
+        }
+
         const enriched = await enrichClientListRows(
             trainerId,
-            clients.map((client) => client.getPublicProfile())
+            pageClients.map((client) => client.getPublicProfile())
         );
 
         const [summary, pendingRegistrationRequests] = await Promise.all([
@@ -436,12 +500,7 @@ const listTrainerClients = async (
 
         return {
             clients: enriched,
-            pagination: {
-                page: 1,
-                limit: enriched.length,
-                total: enriched.length,
-                pages: enriched.length > 0 ? 1 : 0,
-            },
+            pagination,
             summary,
             pendingRegistrationRequests,
         };

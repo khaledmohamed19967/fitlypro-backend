@@ -90,6 +90,31 @@ const config = {
     clientProspectInvitation: {
         expiresIn: process.env.PROSPECT_INVITATION_EXPIRES_IN || '7d',
     },
+
+    // Contact Us — public landing form notifications
+    // Provider: `resend` (HTTP) when RESEND_API_KEY + CONTACT_EMAIL_FROM are set.
+    // Without credentials, messages are still stored; emailStatus becomes `skipped`.
+    email: {
+        provider: String(process.env.EMAIL_PROVIDER || '')
+            .trim()
+            .toLowerCase() || null,
+        resendApiKey: process.env.RESEND_API_KEY
+            ? String(process.env.RESEND_API_KEY).trim()
+            : null,
+        from: process.env.CONTACT_EMAIL_FROM
+            ? String(process.env.CONTACT_EMAIL_FROM).trim()
+            : null,
+        supportInbox: process.env.CONTACT_SUPPORT_EMAIL
+            ? String(process.env.CONTACT_SUPPORT_EMAIL).trim()
+            : 'support@fitlyflow.com',
+    },
+
+    contact: {
+        ipHashSalt:
+            process.env.CONTACT_IP_HASH_SALT ||
+            process.env.JWT_SECRET ||
+            'fitlyflow-contact',
+    },
 };
 
 export default config;

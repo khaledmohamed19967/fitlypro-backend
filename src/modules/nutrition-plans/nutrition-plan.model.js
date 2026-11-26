@@ -113,6 +113,24 @@ const servingOptionSnapshotSchema = new mongoose.Schema(
     { _id: false }
 );
 
+const foodSnapshotImageSchema = new mongoose.Schema(
+    {
+        url: {
+            type: String,
+            trim: true,
+            maxlength: [2048, 'Image URL cannot exceed 2048 characters'],
+            default: null,
+        },
+        thumbnailUrl: {
+            type: String,
+            trim: true,
+            maxlength: [2048, 'Thumbnail URL cannot exceed 2048 characters'],
+            default: null,
+        },
+    },
+    { _id: false }
+);
+
 export const foodSnapshotSchema = new mongoose.Schema(
     {
         name: {
@@ -142,6 +160,11 @@ export const foodSnapshotSchema = new mongoose.Schema(
         },
         servings: {
             type: [servingOptionSnapshotSchema],
+            default: undefined,
+        },
+        /** Optional FatSecret/catalog image frozen at plan save time. */
+        image: {
+            type: foodSnapshotImageSchema,
             default: undefined,
         },
     },

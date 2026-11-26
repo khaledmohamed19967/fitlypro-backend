@@ -300,22 +300,49 @@ const searchExternalFoods = async (query) => {
 };
 
 /**
+ * Accept optional https image URLs from FatSecret search (food.get does not return images).
+ * @param {unknown} image
+ * @returns {{ url: string|null, thumbnailUrl: string|null }|null}
+ */
+const normalizeMaterializeImageHint = (image) => {
+    if (!image || typeof image !== 'object') return null;
+    const clean = (value) => {
+        if (typeof value !== 'string') return null;
+        const trimmed = value.trim().slice(0, 2048);
+        if (!trimmed || !/^https:\/\//i.test(trimmed)) return null;
+        return trimmed;
+    };
+    const url = clean(image.url);
+    const thumbnailUrl = clean(image.thumbnailUrl);
+    if (!url && !thumbnailUrl) return null;
+    return { url, thumbnailUrl };
+};
+
+/**
  * Persist selected FatSecret foods as system Fitly Food documents.
  * Idempotent by source.externalProvider + source.externalId.
  * Never overwrites trainer-owned foods.
  *
+ * Image metadata is not available from food.get — optional `imageByExternalId`
+ * hints (from foods.search.v6) are applied on create and image-only backfill.
+ *
  * @param {string[]} externalIds
  * @param {string} trainerId
+ * @param {{ imageByExternalId?: Map<string, { url: string|null, thumbnailUrl: string|null }> }} [options]
  */
-const materializeExternalFoods = async (externalIds = [], trainerId) => {
+const materializeExternalFoods = async (externalIds = [], trainerId, options = {}) => {
     const ids = [...new Set(externalIds.map(extractFatSecretFoodId).filter(Boolean))];
     if (!ids.length) {
         throw new ApiError(400, 'At least one FatSecret food id is required');
     }
 
+    const imageByExternalId =
+        options.imageByExternalId instanceof Map ? options.imageByExternalId : new Map();
+
     const foods = [];
 
     for (const externalId of ids) {
+        const imageHint = normalizeMaterializeImageHint(imageByExternalId.get(externalId));
         const existing = await Food.findOne({
             'source.externalProvider': FATSECRET_PROVIDER,
             'source.externalId': externalId,
@@ -333,6 +360,7 @@ const materializeExternalFoods = async (externalIds = [], trainerId) => {
             // or defaultServingId (existing foods keep their originally materialized default).
             const needsServings =
                 !Array.isArray(existing.servings) || existing.servings.length === 0;
+            let dirty = false;
             if (needsServings) {
                 try {
                     const detailJson = await getFatSecretFoodById(externalId);
@@ -341,11 +369,24 @@ const materializeExternalFoods = async (externalIds = [], trainerId) => {
                     );
                     if (payload?.servings?.length) {
                         existing.servings = payload.servings;
-                        await existing.save();
+                        dirty = true;
                     }
                 } catch {
                     // Keep the existing food if detail enrichment fails.
                 }
+            }
+
+            // Image-only backfill when catalog row lacks images (food.get never returns them).
+            const hasImage =
+                Boolean(existing.image?.url?.trim?.()) ||
+                Boolean(existing.image?.thumbnailUrl?.trim?.());
+            if (!hasImage && imageHint) {
+                existing.image = imageHint;
+                dirty = true;
+            }
+
+            if (dirty) {
+                await existing.save();
             }
 
             foods.push(toPublicFood(existing));
@@ -357,6 +398,11 @@ const materializeExternalFoods = async (externalIds = [], trainerId) => {
         const mappedCheck = validateMappedFood(payload);
         if (!payload || !mappedCheck.valid) {
             throw new ApiError(422, `FatSecret food ${externalId} does not have usable nutrition data`);
+        }
+
+        // food.get omits images; attach search-provided https URLs when present.
+        if (!payload.image && imageHint) {
+            payload.image = imageHint;
         }
 
         const created = await Food.create(payload);

@@ -144,7 +144,7 @@ const manyExpired = Array.from({ length: 8 }, (_, i) =>
 )
 const summaryMany = summarizeClientRoster(manyExpired, NOW)
 if (
-    summaryMany.needsAttention.count === 8 &&
+    summaryMany.needsAttention.count === 7 &&
     summaryMany.needsAttention.clients.length === SUMMARY_PREVIEW_LIMIT
 ) {
     pass('Unit: needAttention count full, preview capped at 5')
@@ -219,16 +219,58 @@ if (
     fail('Unit: recentlyExpired roster window boundaries', JSON.stringify(windowSummary.recentlyExpired))
 }
 
-if (summaryMany.needsAttention.count === 8) {
-    pass('Unit: needsAttention unchanged by recentlyExpired')
+if (summaryMany.needsAttention.count === 7) {
+    pass('Unit: needsAttention expired uses 7-day window (excludes 8th day)')
 } else {
-    fail('Unit: needsAttention unchanged by recentlyExpired', String(summaryMany.needsAttention.count))
+    fail(
+        'Unit: needsAttention expired uses 7-day window (excludes 8th day)',
+        String(summaryMany.needsAttention.count)
+    )
 }
 
 if (summaryMany.recentlyExpired.count === 7) {
     pass('Unit: recentlyExpired count across full roster (excludes 8th day)')
 } else {
     fail('Unit: recentlyExpired count across full roster', JSON.stringify(summaryMany.recentlyExpired))
+}
+
+// Needs Attention Expired mirrors Recently Expired window; Ends today stays separate.
+const attentionWindowRoster = [
+    rosterRow('att-yday', 'Yday', -1),
+    rosterRow('att-7', 'Seven', -7),
+    rosterRow('att-8', 'Eight', -8),
+    rosterRow('att-today', 'Today', 0),
+    rosterRow('att-future', 'Future', 3),
+    {
+        _id: 'att-ongoing',
+        firstName: 'Summary',
+        lastName: 'Ongoing',
+        packageDuration: 'ongoing',
+        startDate: utcOffsetDate(-30),
+        endDate: null,
+    },
+    {
+        _id: 'att-bad',
+        firstName: 'Summary',
+        lastName: 'Bad',
+        endDate: 'bad',
+    },
+]
+const attentionWindowSummary = summarizeClientRoster(attentionWindowRoster, NOW)
+if (
+    attentionWindowSummary.needsAttention.count === 3 &&
+    attentionWindowSummary.recentlyExpired.count === 2 &&
+    attentionWindowSummary.expiresToday.count === 1 &&
+    attentionWindowSummary.expiringSoon.count === 1 &&
+    attentionWindowSummary.needsAttention.clients.map((c) => c.id).sort().join(',') ===
+        'att-7,att-today,att-yday'
+) {
+    pass('Unit: needsAttention expired window matches recentlyExpired + today')
+} else {
+    fail(
+        'Unit: needsAttention expired window matches recentlyExpired + today',
+        JSON.stringify(attentionWindowSummary)
+    )
 }
 
 const previewIds = mixedSummary.needsAttention.clients.map((c) => c.id)

@@ -120,7 +120,28 @@ export const materializeExternalFoods = asyncHandler(async (req, res) => {
         req.body?.id,
     ].filter(Boolean);
 
-    const result = await foodService.materializeExternalFoods(ids, trainerId);
+    /** Optional search-time image hints keyed by FatSecret food id (food.get has no images). */
+    const imageByExternalId = new Map();
+    const collectImageHint = (externalId, image) => {
+        if (!externalId || !image || typeof image !== 'object') return;
+        const key = String(externalId).replace(/^fs:/i, '').trim();
+        if (!key || imageByExternalId.has(key)) return;
+        imageByExternalId.set(key, image);
+    };
+
+    if (Array.isArray(req.body?.foods)) {
+        for (const item of req.body.foods) {
+            const externalId = item?.externalId || item?.id;
+            collectImageHint(externalId, item?.image);
+        }
+    }
+    if (req.body?.image && (req.body?.externalId || req.body?.id)) {
+        collectImageHint(req.body.externalId || req.body.id, req.body.image);
+    }
+
+    const result = await foodService.materializeExternalFoods(ids, trainerId, {
+        imageByExternalId,
+    });
     res.status(200).json(new ApiResponse(200, result, 'Foods ready'));
 });
 

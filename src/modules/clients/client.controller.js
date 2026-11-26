@@ -31,8 +31,15 @@ export const createClient = asyncHandler(async (req, res) => {
  */
 export const getMyClients = asyncHandler(async (req, res) => {
     const trainerId = req.user.id;
-    const { page = 1, limit = 10, status, search, packageDuration } =
-        req.query;
+    const {
+        page = 1,
+        limit = 10,
+        status,
+        search,
+        packageDuration,
+        subscriptionExpiry,
+        needsAttention,
+    } = req.query;
 
     const statusFilter =
         status === 'active' || status === 'inactive' ? status : undefined;
@@ -50,12 +57,32 @@ export const getMyClients = asyncHandler(async (req, res) => {
             ? String(packageDuration)
             : undefined;
 
+    const allowedSubscriptionExpiry = new Set([
+        'expiring_soon',
+        'expires_today',
+        'recently_expired',
+        'expired',
+        'active',
+    ]);
+    const subscriptionExpiryFilter =
+        subscriptionExpiry &&
+        allowedSubscriptionExpiry.has(String(subscriptionExpiry))
+            ? String(subscriptionExpiry)
+            : undefined;
+
+    const needsAttentionFilter =
+        needsAttention === true ||
+        needsAttention === 'true' ||
+        needsAttention === '1';
+
     const result = await clientService.listTrainerClients(trainerId, {
         page: parseInt(page, 10),
         limit: parseInt(limit, 10),
         search: search ? String(search).trim() : undefined,
         status: search ? undefined : statusFilter,
         packageDuration: search ? undefined : packageDurationFilter,
+        subscriptionExpiry: subscriptionExpiryFilter,
+        needsAttention: needsAttentionFilter || undefined,
     });
 
     res.status(200).json(

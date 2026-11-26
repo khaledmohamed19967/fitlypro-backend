@@ -1,8 +1,9 @@
 import {
     SUBSCRIPTION_PACKAGE_BUCKETS,
     classifySubscriptionPackage,
+    isClientInNeedsAttentionSet,
+    resolveNeedsAttentionForClient,
     resolveSubscriptionDaysUntilEnd,
-    resolveSubscriptionNeedsAttention,
     utcCalendarDayMs,
 } from '../clients/client.subscription-attention.js';
 import { DASHBOARD_PREVIEW_LIMIT } from './coach-dashboard.constants.js';
@@ -177,7 +178,8 @@ export const buildSubscriptionsSection = (
 };
 
 /**
- * Needs-attention section: expired + expires_today only (matches summarizeClientRoster).
+ * Needs-attention section: shared membership via `isClientInNeedsAttentionSet`
+ * (recently-expired 7-day UTC window + expires_today). Same rules as My Clients filter.
  *
  * @param {Array<object>} roster
  * @param {Date} [now]
@@ -196,19 +198,16 @@ export const buildNeedsAttentionSection = (
             startDate: client.startDate,
             packageDuration: client.packageDuration,
             endDate: client.endDate,
+            isActive: client.isActive,
         };
 
-        const classified = classifySubscriptionPackage(packageFields, now);
-        if (
-            !classified ||
-            (classified.bucket !== SUBSCRIPTION_PACKAGE_BUCKETS.EXPIRED &&
-                classified.bucket !== SUBSCRIPTION_PACKAGE_BUCKETS.EXPIRES_TODAY)
-        ) {
+        if (!isClientInNeedsAttentionSet(packageFields, now)) {
             continue;
         }
 
-        const needsAttention = resolveSubscriptionNeedsAttention(packageFields, now);
-        if (!needsAttention) {
+        const needsAttention = resolveNeedsAttentionForClient(packageFields, now);
+        const classified = classifySubscriptionPackage(packageFields, now);
+        if (!needsAttention || !classified) {
             continue;
         }
 

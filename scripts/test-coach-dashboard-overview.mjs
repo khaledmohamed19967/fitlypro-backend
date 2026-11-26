@@ -138,8 +138,13 @@ async function main() {
     const cExpiringSoon = await mkClient(trainerA, 'Soon', {
         endDate: '2026-11-14T00:00:00.000Z',
     });
+    // Recently expired (within yesterday…7 days ago UTC relative to NOW=2026-11-11)
     const cExpired = await mkClient(trainerA, 'Expired', {
-        endDate: '2026-11-01T00:00:00.000Z',
+        endDate: '2026-11-05T00:00:00.000Z', // 6 days ago — included
+    });
+    // Older than 7-day attention window — must not appear in Needs Attention
+    const cExpiredOld = await mkClient(trainerA, 'ExpiredOld', {
+        endDate: '2026-11-03T00:00:00.000Z', // 8 days ago — excluded
     });
     const cOutsideWindow = await mkClient(trainerA, 'Far', {
         endDate: '2026-12-20T00:00:00.000Z',
@@ -197,7 +202,7 @@ async function main() {
     }
 
     // Active vs inactive: inactive client with today end must not inflate counts
-    if (overviewA.overview.totalClients === 6) {
+    if (overviewA.overview.totalClients === 7) {
         pass('Active-only totalClients (inactive excluded)');
     } else {
         fail(
@@ -247,21 +252,25 @@ async function main() {
         fail('Needs attention byReason (no expiring_soon)', JSON.stringify(reasons));
     }
 
-    // Far + ongoing not in needs attention / expiring
+    // Far future / ongoing / soon / older-than-7-days expired not in needs attention
     const previewIds = new Set(
         overviewA.needsAttention.preview.map((p) => p.clientId)
     );
     if (
         !previewIds.has(String(cOutsideWindow._id)) &&
         !previewIds.has(String(cNoEnd._id)) &&
-        !previewIds.has(String(cExpiringSoon._id))
+        !previewIds.has(String(cExpiringSoon._id)) &&
+        !previewIds.has(String(cExpiredOld._id))
     ) {
-        pass('Outside window / ongoing / soon excluded from needsAttention preview');
+        pass('Outside window / ongoing / soon / stale expired excluded from needsAttention preview');
     } else {
-        fail('Outside window / ongoing / soon excluded from needsAttention preview', '');
+        fail(
+            'Outside window / ongoing / soon / stale expired excluded from needsAttention preview',
+            ''
+        );
     }
 
-    // Suggested action present
+    // Suggested action present for recently expired
     const expiredPreview = overviewA.needsAttention.preview.find(
         (p) => p.clientId === String(cExpired._id)
     );
@@ -269,6 +278,24 @@ async function main() {
         pass('Expired client suggestedAction renew_or_archive');
     } else {
         fail('Expired client suggestedAction renew_or_archive', JSON.stringify(expiredPreview));
+    }
+
+    const reasonsAgree =
+        overviewA.needsAttention.byReason.find((r) => r.reason === 'subscription_expired')
+            ?.count === summary.recentlyExpired.count &&
+        overviewA.needsAttention.byReason.find((r) => r.reason === 'subscription_expires_today')
+            ?.count === summary.expiresToday.count;
+    if (reasonsAgree) {
+        pass('Overview expired reason count matches Clients recentlyExpired');
+    } else {
+        fail(
+            'Overview expired reason count matches Clients recentlyExpired',
+            JSON.stringify({
+                byReason: overviewA.needsAttention.byReason,
+                recentlyExpired: summary.recentlyExpired.count,
+                expiresToday: summary.expiresToday.count,
+            })
+        );
     }
 
     // Subscriptions week: today = 2 on 2026-11-11; soon on 2026-11-14
@@ -803,6 +830,7 @@ async function main() {
                 `dash-today-${suffix}@test.com`,
                 `dash-soon-${suffix}@test.com`,
                 `dash-expired-${suffix}@test.com`,
+                `dash-expiredold-${suffix}@test.com`,
                 `dash-far-${suffix}@test.com`,
                 `dash-ongoing-${suffix}@test.com`,
                 `dash-todaytwo-${suffix}@test.com`,
