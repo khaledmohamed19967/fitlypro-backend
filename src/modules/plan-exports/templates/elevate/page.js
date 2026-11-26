@@ -62,7 +62,7 @@ const DETAIL_LAYOUT = Object.freeze({
     cardGap: 14,
 });
 
-/** Section accents for Warm-up / Main / Cardio (day pill theme stays separate). */
+/** Section accents for Warm-up / Exercise / Cardio (day pill theme stays separate). */
 const SECTION_THEMES = Object.freeze({
     warmup: Object.freeze({
         id: 'warmup',
@@ -71,7 +71,7 @@ const SECTION_THEMES = Object.freeze({
     }),
     main: Object.freeze({
         id: 'main',
-        label: 'Main',
+        label: 'Exercise',
         accent: '#ccff01',
     }),
     cardio: Object.freeze({
@@ -378,12 +378,35 @@ export const buildHighlightedTitleHtml = (name) =>
     fitElevateTitleLayout(name).titleHtml;
 
 /**
+ * Rest days persist as workoutDays with no activities (frontend `kind` is UI-only).
+ * Detect via empty warmup + main + cardio — not by title matching alone.
+ * @param {object} day
+ * @returns {boolean}
+ */
+const isRestWorkoutDay = (day) => {
+    const warmup = Array.isArray(day?.warmupActivities)
+        ? day.warmupActivities.length
+        : 0;
+    const main = Array.isArray(day?.exercises) ? day.exercises.length : 0;
+    const cardio = Array.isArray(day?.cardioActivities)
+        ? day.cardioActivities.length
+        : 0;
+    return warmup + main + cardio === 0;
+};
+
+/**
+ * Letter labels for training days only (rest days keep sequence letters in overview).
  * @param {object[]} workoutDays
  */
 const buildWorkoutLabels = (workoutDays = []) => {
     if (!workoutDays.length) return '';
     return workoutDays
-        .map((_, index) => DAY_LETTERS[index] || String(index + 1))
+        .map((day, index) =>
+            isRestWorkoutDay(day)
+                ? null
+                : DAY_LETTERS[index] || String(index + 1)
+        )
+        .filter(Boolean)
         .join(', ');
 };
 
@@ -446,10 +469,25 @@ const countDayActivities = (day) => {
 
 /**
  * Page-02 workout summary rows from real workoutDays only.
+ * Rest days keep their sequence letter and render as compact overview rows.
  * @param {object[]} workoutDays
  */
 const buildWorkoutSummaries = (workoutDays = []) =>
     workoutDays.map((day, index) => {
+        const letter = DAY_LETTERS[index] || String(index + 1);
+        if (isRestWorkoutDay(day)) {
+            return {
+                letter,
+                name: 'Rest Day',
+                isRest: true,
+                exerciseCount: 0,
+                activityCount: 0,
+                setCount: 0,
+                meta: 'Take a long day recovery and rest',
+                muscles: [],
+            };
+        }
+
         const exercises = Array.isArray(day?.exercises) ? day.exercises : [];
         const counts = countDayActivities(day);
         const exerciseCount = counts.main;
@@ -457,7 +495,6 @@ const buildWorkoutSummaries = (workoutDays = []) =>
             (sum, exercise) => sum + countExerciseSets(exercise),
             0
         );
-        const letter = DAY_LETTERS[index] || String(index + 1);
         const name =
             String(day?.name ?? '').trim() ||
             (day?.dayNumber != null ? `Day ${day.dayNumber}` : `Workout ${letter}`);
@@ -468,6 +505,7 @@ const buildWorkoutSummaries = (workoutDays = []) =>
         return {
             letter,
             name,
+            isRest: false,
             exerciseCount,
             activityCount: counts.total,
             setCount,
@@ -479,16 +517,18 @@ const buildWorkoutSummaries = (workoutDays = []) =>
 /**
  * Illustrative Mon–Sun grid only (export model has no weekday fields).
  * Labeled "Example only" in the design — not a claimed schedule.
- * @param {{ letter: string }[]} summaries
+ * Only training (non-rest) summaries occupy active slots.
+ * @param {{ letter: string, isRest?: boolean }[]} summaries
  */
 const buildExampleWeekDays = (summaries = []) => {
     const labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     const activeSlots = [0, 2, 4];
+    const training = summaries.filter((row) => !row.isRest);
     return labels.map((label, index) => {
         const workoutIndex = activeSlots.indexOf(index);
         const summary =
-            workoutIndex >= 0 && workoutIndex < summaries.length
-                ? summaries[workoutIndex]
+            workoutIndex >= 0 && workoutIndex < training.length
+                ? training[workoutIndex]
                 : null;
         if (summary) {
             return {
@@ -506,13 +546,14 @@ const buildExampleWeekDays = (summaries = []) => {
  * @param {number|null} duration
  */
 const buildWorkoutsPageDek = (summaries, duration) => {
-    const count = summaries.length;
+    const training = summaries.filter((row) => !row.isRest);
+    const count = training.length;
     if (!count) {
         return duration != null
             ? `Your workout plan across ${duration} weeks.`
             : 'Your workout plan.';
     }
-    const labels = summaries.map((row) => row.letter).join(', ');
+    const labels = training.map((row) => row.letter).join(', ');
     const head = `${count} workout${count === 1 ? '' : 's'} (${labels}). Train them in any order`;
     if (duration != null) {
         return `${head}, as many rounds as the ${duration} weeks allow.`;
@@ -525,7 +566,10 @@ const buildWorkoutsPageDek = (summaries, duration) => {
  * @param {unknown} planNotes
  */
 const buildProgramNotes = (summaries, planNotes) => {
-    const labels = summaries.map((row) => row.letter).filter(Boolean);
+    const labels = summaries
+        .filter((row) => !row.isRest)
+        .map((row) => row.letter)
+        .filter(Boolean);
     const orderCopy = labels.length
         ? `Train ${labels.join(', ').replace(/, ([^,]*)$/, ' and $1')} in any order.`
         : 'Train your workouts in any order.';
@@ -951,7 +995,6 @@ export const deriveElevateViewModel = (exportModel) => {
         plan.duration != null && Number.isFinite(Number(plan.duration))
             ? Number(plan.duration)
             : null;
-    const workoutCount = workoutDays.length;
     const workoutLabels = buildWorkoutLabels(workoutDays);
     const totalExercises =
         plan.totalExercises != null &&
@@ -963,16 +1006,19 @@ export const deriveElevateViewModel = (exportModel) => {
                       (Array.isArray(day.exercises) ? day.exercises.length : 0),
                   0
               );
-    const perWorkout =
-        workoutCount > 0 ? Math.round(totalExercises / workoutCount) : null;
     const totalSets = countTotalSets(workoutDays);
     const workoutSummaries = buildWorkoutSummaries(workoutDays);
+    const workoutCount = workoutSummaries.filter((row) => !row.isRest).length;
+    const perWorkout =
+        workoutCount > 0 ? Math.round(totalExercises / workoutCount) : null;
     const exampleWeekDays = buildExampleWeekDays(workoutSummaries);
     const workoutsPageDek = buildWorkoutsPageDek(workoutSummaries, duration);
     const programNotes = buildProgramNotes(workoutSummaries, plan.notes);
-    const detailWorkouts = workoutDays.map((day, index) =>
-        buildDetailWorkout(day, index)
-    );
+    // Rest days appear in the overview only — skip empty detail pages.
+    const detailWorkouts = workoutDays
+        .map((day, index) => ({ day, index }))
+        .filter(({ day }) => !isRestWorkoutDay(day))
+        .map(({ day, index }) => buildDetailWorkout(day, index));
     const detailPages = packDetailPages(detailWorkouts);
     // Cover + workouts summary + one or more detail pages (continuation included).
     const totalPageCount = 2 + detailPages.length;
@@ -1397,10 +1443,13 @@ const applyDynamicContent = (html, view) => {
             ? view.workoutSummaries
                   .map((row) => {
                       const muscles =
-                          row.muscles.length > 0
+                          !row.isRest && row.muscles.length > 0
                               ? row.muscles.join(' · ')
                               : '';
-                      return `<article class="workout-row">
+                      const rowClass = row.isRest
+                          ? 'workout-row is-rest'
+                          : 'workout-row';
+                      return `<article class="${rowClass}">
         <span class="workout-letter">${escapeHtml(row.letter)}</span>
         <div class="workout-copy">
           <h2>${escapeHtml(row.name)}</h2>
@@ -1483,13 +1532,74 @@ const applyDynamicContent = (html, view) => {
         )
         .join('\n\n  ');
 
-    // Cards use <article>, so this can safely match each outer details page section.
-    next = next.replace(
-        /(?:\s*<section class="page page-workout-details"[\s\S]*?<\/section>)+/i,
-        `\n\n  ${detailPagesHtml}\n`
-    );
+    // Nested <section class="details-section"> inside the page must not truncate the match.
+    next = replacePageSectionsByClass(next, 'page-workout-details', detailPagesHtml);
 
     return next;
+};
+
+/**
+ * Replace every top-level <section class="... className ..."> block, respecting nested
+ * <section> depth. A naive non-greedy </section> match stops at the first child section.
+ *
+ * @param {string} html
+ * @param {string} className
+ * @param {string} replacement
+ * @returns {string}
+ */
+const replacePageSectionsByClass = (html, className, replacement) => {
+    const openRe = new RegExp(
+        `<section\\b[^>]*\\bclass\\s*=\\s*["'][^"']*\\b${className}\\b[^"']*["'][^>]*>`,
+        'i'
+    );
+    const ranges = [];
+    let searchFrom = 0;
+
+    while (searchFrom < html.length) {
+        const slice = html.slice(searchFrom);
+        const openMatch = openRe.exec(slice);
+        if (!openMatch) break;
+
+        const absoluteOpen = searchFrom + openMatch.index;
+        let cursor = absoluteOpen + openMatch[0].length;
+        let depth = 1;
+
+        while (cursor < html.length && depth > 0) {
+            const rest = html.slice(cursor);
+            const nextOpen = rest.search(/<section\b/i);
+            const nextClose = rest.search(/<\/section>/i);
+            if (nextClose === -1) {
+                depth = 0;
+                break;
+            }
+            if (nextOpen !== -1 && nextOpen < nextClose) {
+                depth += 1;
+                cursor += nextOpen + '<section'.length;
+                continue;
+            }
+            depth -= 1;
+            cursor += nextClose + '</section>'.length;
+        }
+
+        let rangeStart = absoluteOpen;
+        while (rangeStart > 0 && /\s/.test(html[rangeStart - 1])) {
+            rangeStart -= 1;
+        }
+        ranges.push([rangeStart, cursor]);
+        searchFrom = cursor;
+    }
+
+    if (!ranges.length) {
+        // No placeholder page — append before </body> when possible.
+        if (/<\/body>/i.test(html)) {
+            return html.replace(/<\/body>/i, `\n\n  ${replacement}\n</body>`);
+        }
+        return `${html}\n${replacement}`;
+    }
+
+    const firstStart = ranges[0][0];
+    const lastEnd = ranges[ranges.length - 1][1];
+    return `${html.slice(0, firstStart)}\n\n  ${replacement}\n${html.slice(lastEnd)}`;
 };
 
 /**

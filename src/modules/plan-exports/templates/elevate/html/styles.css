@@ -503,6 +503,20 @@ body {
   letter-spacing: -0.02em;
 }
 
+/* Rest Day overview row — same structure as workout rows, muted badge. */
+.page-workouts .workout-row.is-rest .workout-letter {
+  background: #2a2e35;
+  color: var(--muted);
+}
+
+.page-workouts .workout-row.is-rest .workout-copy h2 {
+  color: #fff;
+}
+
+.page-workouts .workout-row.is-rest .workout-copy p {
+  color: var(--muted);
+}
+
 .page-workouts .workout-copy {
   min-width: 0;
 }
@@ -1197,7 +1211,7 @@ background: linear-gradient(90deg, #CCFF01 0%, #B6E600 100%);
   color: var(--muted);
 }
 
-/* —— Warm-up / Main / Cardio section bands (full-bleed dark bar) —— */
+/* —— Warm-up / Exercise / Cardio section bands (full-bleed dark bar) —— */
 .page-workout-details .details-section-head td {
   padding: 0;
   border-bottom: 0;

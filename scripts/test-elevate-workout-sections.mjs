@@ -1,5 +1,5 @@
 /**
- * Elevate workout PDF — Warm-up / Main / Cardio section checks + sample PDFs.
+ * Elevate workout PDF — Warm-up / Exercise / Cardio section checks + sample PDFs.
  * Run: node scripts/test-elevate-workout-sections.mjs
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'fs';
@@ -238,13 +238,13 @@ function assertHtmlContracts() {
 
     const checks = [
         ['elevate html has Warm-up label', /Warm-up/],
-        ['elevate html has Main label', />\s*Main\s*</],
+        ['elevate html has Exercise label', />\s*Exercise\s*</],
         ['elevate html has Cardio label', /Cardio/],
         ['elevate html has section head warm-up', /details-section-head--warmup/],
         ['elevate html has section head main', /details-section-head--main/],
         ['elevate html has section head cardio', /details-section-head--cardio/],
         ['elevate html has duration/done on section bar', /details-section-col-duration[\s\S]*Duration[\s\S]*details-section-col-done[\s\S]*Done/],
-        ['elevate html has sets/reps/ticks on main bar', /details-section-head--main[\s\S]*details-section-col-sets[\s\S]*Sets[\s\S]*details-section-col-reps[\s\S]*Reps[\s\S]*details-section-col-ticks[\s\S]*Tick each set/],
+        ['elevate html has sets/reps/ticks on exercise bar', /details-section-head--main[\s\S]*details-section-col-sets[\s\S]*Sets[\s\S]*details-section-col-reps[\s\S]*Reps[\s\S]*details-section-col-ticks[\s\S]*Tick each set/],
         ['elevate html has activity table', /details-table--activity/],
         ['elevate html has strength table', /details-table--strength/],
         ['elevate html has no global day thead', /details-card-head[\s\S]*?details-card-body--sections/],
@@ -314,14 +314,15 @@ function assertHtmlContracts() {
     if (
         /Goblet Squat/.test(basicStack) &&
         /details-section-head--main/.test(basicStack) &&
+        />\s*Exercise\s*</.test(basicStack) &&
         !/details-section-head--warmup/.test(basicStack) &&
         !/details-section-head--cardio/.test(basicStack) &&
         !/Arm Circles/.test(basicStack)
     ) {
-        pass('basic fixture renders Main only (no empty sections)');
+        pass('basic fixture renders Exercise section only (no empty sections)');
     } else {
         fail(
-            'basic fixture renders Main only (no empty sections)',
+            'basic fixture renders Exercise section only (no empty sections)',
             `stack markers unexpected (len=${basicStack.length})`
         );
     }
@@ -348,6 +349,26 @@ async function generateSamples() {
         pass('PDF samples generated');
     } else {
         fail('PDF samples generated', 'PDF buffers too small');
+    }
+
+    const sectionsHtml = buildElevateWorkoutHtml(fixture);
+    const detailPageOpens = (
+        sectionsHtml.match(/<section class="page page-workout-details"/g) || []
+    ).length;
+    const view = deriveElevateViewModel(fixture);
+    const expectedDetailPages = view.detailPages?.length ?? 0;
+    if (
+        detailPageOpens === expectedDetailPages &&
+        expectedDetailPages >= 1 &&
+        !/>\s*Main\s*</.test(sectionsHtml) &&
+        />\s*Exercise\s*</.test(sectionsHtml)
+    ) {
+        pass('detail pages replace nested sections; section label is Exercise');
+    } else {
+        fail(
+            'detail pages replace nested sections; section label is Exercise',
+            `opens=${detailPageOpens} expected=${expectedDetailPages}`
+        );
     }
 
     return paths;
