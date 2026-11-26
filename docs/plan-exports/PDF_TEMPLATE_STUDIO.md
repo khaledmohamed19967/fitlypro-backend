@@ -90,7 +90,7 @@ Fixture:
   "planType": "workout",
   "source": "fixture",
   "fixtureId": "workout-basic",
-  "templateId": "classic",
+  "templateId": "elevate",
   "pageId": "full",
   "format": "html"
 }

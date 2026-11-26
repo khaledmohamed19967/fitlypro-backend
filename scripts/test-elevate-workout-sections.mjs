@@ -10,9 +10,7 @@ import {
     buildElevateWorkoutHtml,
     deriveElevateViewModel,
 } from '../src/modules/plan-exports/templates/elevate/page.js';
-import { buildClassicWorkoutHtml } from '../src/modules/plan-exports/templates/classic/workout.js';
 import { renderElevateWorkoutPdf } from '../src/modules/plan-exports/templates/elevate/index.js';
-import { renderClassicWorkoutPdf } from '../src/modules/plan-exports/templates/classic/index.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -328,17 +326,6 @@ function assertHtmlContracts() {
         );
     }
 
-    const classicHtml = buildClassicWorkoutHtml(fixture);
-    if (
-        /Warm-up/.test(classicHtml) &&
-        /Cardio/.test(classicHtml) &&
-        /Arm Circles/.test(classicHtml) &&
-        /15 min/.test(classicHtml)
-    ) {
-        pass('classic html includes warm-up and cardio');
-    } else {
-        fail('classic html includes warm-up and cardio', 'missing labels or duration');
-    }
 }
 
 async function generateSamples() {
@@ -348,19 +335,16 @@ async function generateSamples() {
 
     const elevateSections = await renderElevateWorkoutPdf(fixture);
     const elevateBasic = await renderElevateWorkoutPdf(basic);
-    const classicSections = await renderClassicWorkoutPdf(fixture);
 
     const paths = {
         elevateSections: join(OUT_DIR, 'elevate-workout-sections.pdf'),
         elevateBasic: join(OUT_DIR, 'elevate-workout-main-only.pdf'),
-        classicSections: join(OUT_DIR, 'classic-workout-sections.pdf'),
     };
 
     writeFileSync(paths.elevateSections, elevateSections);
     writeFileSync(paths.elevateBasic, elevateBasic);
-    writeFileSync(paths.classicSections, classicSections);
 
-    if (elevateSections.length > 1000 && classicSections.length > 1000) {
+    if (elevateSections.length > 1000 && elevateBasic.length > 1000) {
         pass('PDF samples generated');
     } else {
         fail('PDF samples generated', 'PDF buffers too small');

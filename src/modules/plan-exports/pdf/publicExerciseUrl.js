@@ -1,6 +1,6 @@
 /**
  * Build public Exercise Library detail URLs for PDF exports.
- * Reusable by any plan-export template (Classic today; Elevate later).
+ * Reusable by plan-export templates (Elevate).
  */
 
 import config from '../../../config/index.js';

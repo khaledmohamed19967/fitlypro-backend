@@ -21,10 +21,7 @@ import {
     resolveTemplateRenderer,
 } from '../src/modules/plan-exports/templates/index.js';
 import {
-    buildClassicNutritionHtml,
-    buildClassicWorkoutHtml,
-} from '../src/modules/plan-exports/templates/classic/index.js';
-import {
+    buildElevateNutritionHtml,
     buildElevateWorkoutHtml,
     renderElevateWorkoutPdf,
 } from '../src/modules/plan-exports/templates/elevate/index.js';
@@ -35,6 +32,7 @@ import {
 import { escapeHtml } from '../src/modules/plan-exports/pdf/htmlEscape.js';
 import { buildPublicExerciseUrl } from '../src/modules/plan-exports/pdf/publicExerciseUrl.js';
 import { renderHtmlToPdf, closeHtmlPdfBrowser } from '../src/modules/plan-exports/pdf/htmlPdfRenderer.js';
+import { validatePlanExportBody } from '../src/modules/plan-exports/plan-export.validator.js';
 import { mkdirSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
@@ -94,109 +92,115 @@ async function runUnitTests() {
         fail('template list filters by plan type', JSON.stringify(templates));
     }
 
-    const classicMeta = getTemplateMeta('classic');
-    const classicNutritionPreview =
-        classicMeta?.assets?.nutrition?.previewImageUrl ?? null;
-    const classicWorkoutPreview =
-        classicMeta?.assets?.workout?.previewImageUrl ?? null;
+    const elevateMeta = getTemplateMeta('elevate');
+    const elevateNutritionPreview =
+        elevateMeta?.assets?.nutrition?.previewImageUrl ?? null;
+    const elevateWorkoutPreview =
+        elevateMeta?.assets?.workout?.previewImageUrl ?? null;
+    const allTemplates = listExportTemplates();
     if (
-        typeof classicNutritionPreview === 'string' &&
-        classicNutritionPreview.startsWith(
-            'https://ucarecdn.com/f0c1a1f5-f68f-4050-872e-d605f1df39ee/'
-        ) &&
-        typeof classicWorkoutPreview === 'string' &&
-        classicWorkoutPreview.startsWith(
-            'https://ucarecdn.com/c4fdab05-2c4e-46cb-b196-b375c3af8f69/'
-        )
+        allTemplates.length === 1 &&
+        allTemplates[0].id === 'elevate' &&
+        getTemplateMeta('classic') == null &&
+        !allTemplates.some((t) => t.id === 'classic')
     ) {
-        pass('classic template has plan-type preview image metadata');
+        pass('templates registry is Elevate-only');
     } else {
-        fail(
-            'classic template has plan-type preview image metadata',
-            JSON.stringify(classicMeta?.assets)
-        );
+        fail('templates registry is Elevate-only', JSON.stringify(allTemplates));
     }
 
-    const nutritionClassic = listExportTemplates('nutrition').find(
-        (t) => t.id === 'classic'
+    const nutritionElevate = listExportTemplates('nutrition').find(
+        (t) => t.id === 'elevate'
     );
     if (
-        nutritionClassic?.previewUrl === classicNutritionPreview &&
-        nutritionClassic?.assets?.previewImageUrl === classicNutritionPreview
+        nutritionElevate?.previewUrl === elevateNutritionPreview &&
+        nutritionElevate?.assets?.previewImageUrl === elevateNutritionPreview &&
+        typeof elevateNutritionPreview === 'string'
     ) {
-        pass('nutrition templates expose classic preview URL');
+        pass('nutrition templates expose elevate preview URL');
     } else {
         fail(
-            'nutrition templates expose classic preview URL',
-            JSON.stringify(nutritionClassic)
+            'nutrition templates expose elevate preview URL',
+            JSON.stringify(nutritionElevate)
         );
     }
 
-    const workoutClassic = listExportTemplates('workout').find(
-        (t) => t.id === 'classic'
+    const workoutElevate = listExportTemplates('workout').find(
+        (t) => t.id === 'elevate'
     );
     if (
-        workoutClassic &&
-        workoutClassic.previewUrl === classicWorkoutPreview &&
-        workoutClassic.assets?.previewImageUrl === classicWorkoutPreview
+        workoutElevate &&
+        workoutElevate.previewUrl === elevateWorkoutPreview &&
+        workoutElevate.assets?.previewImageUrl === elevateWorkoutPreview
     ) {
-        pass('workout templates expose classic preview URL');
+        pass('workout templates expose elevate preview URL');
     } else {
         fail(
-            'workout templates expose classic preview URL',
-            JSON.stringify(workoutClassic)
+            'workout templates expose elevate preview URL',
+            JSON.stringify(workoutElevate)
         );
     }
 
-    const unscopedClassic = listExportTemplates().find((t) => t.id === 'classic');
+    const unscopedElevate = listExportTemplates().find((t) => t.id === 'elevate');
     if (
-        unscopedClassic?.previewUrl == null &&
-        unscopedClassic?.assets?.nutrition?.previewImageUrl ===
-            classicNutritionPreview &&
-        unscopedClassic?.assets?.workout?.previewImageUrl ===
-            classicWorkoutPreview
+        unscopedElevate?.previewUrl == null &&
+        unscopedElevate?.assets?.nutrition?.previewImageUrl ===
+            elevateNutritionPreview &&
+        unscopedElevate?.assets?.workout?.previewImageUrl === elevateWorkoutPreview
     ) {
         pass('unscoped templates keep plan-type previews namespaced');
     } else {
         fail(
             'unscoped templates keep plan-type previews namespaced',
-            JSON.stringify(unscopedClassic)
+            JSON.stringify(unscopedElevate)
         );
     }
 
     if (
-        getTemplatePlanAssets('classic', 'nutrition')?.previewImageUrl ===
-            classicNutritionPreview &&
-        getTemplatePlanAssets('classic', 'workout')?.previewImageUrl ===
-            classicWorkoutPreview
+        getTemplatePlanAssets('elevate', 'nutrition')?.previewImageUrl ===
+            elevateNutritionPreview &&
+        getTemplatePlanAssets('elevate', 'workout')?.previewImageUrl ===
+            elevateWorkoutPreview &&
+        getTemplatePlanAssets('classic', 'workout') == null
     ) {
         pass('template plan assets resolve without controller hardcoding');
     } else {
         fail(
             'template plan assets resolve without controller hardcoding',
             JSON.stringify({
-                nutrition: getTemplatePlanAssets('classic', 'nutrition'),
-                workout: getTemplatePlanAssets('classic', 'workout'),
+                nutrition: getTemplatePlanAssets('elevate', 'nutrition'),
+                workout: getTemplatePlanAssets('elevate', 'workout'),
             })
         );
     }
 
-    if (getTemplateMeta('classic') && !getTemplateMeta('missing')) {
+    if (getTemplateMeta('elevate') && !getTemplateMeta('missing')) {
         pass('template registry lookup');
     } else {
-        fail('template registry lookup', 'classic/missing');
+        fail('template registry lookup', 'elevate/missing');
     }
 
     if (
-        typeof resolveTemplateRenderer('classic', 'workout') === 'function' &&
-        typeof resolveTemplateRenderer('classic', 'nutrition') === 'function' &&
+        resolveTemplateRenderer('classic', 'workout') == null &&
+        resolveTemplateRenderer('classic', 'nutrition') == null &&
         typeof resolveTemplateRenderer('elevate', 'workout') === 'function' &&
-        resolveTemplateRenderer('elevate', 'nutrition') == null &&
+        typeof resolveTemplateRenderer('elevate', 'nutrition') === 'function' &&
         resolveTemplateRenderer('nope', 'workout') == null
     ) {
-        pass('template renderer resolution');
+        pass('template renderer resolution (Elevate only)');
     } else {
-        fail('template renderer resolution', 'classic/elevate renderers missing');
+        fail('template renderer resolution (Elevate only)', 'unexpected renderers');
+    }
+
+    const classicValidation = validatePlanExportBody.validate({
+        planType: 'workout',
+        planId: '507f1f77bcf86cd799439011',
+        templateId: 'classic',
+    });
+    if (classicValidation.error) {
+        pass('validator rejects classic templateId');
+    } else {
+        fail('validator rejects classic templateId', 'classic accepted');
     }
 
     const coverMeta = getTemplateMeta('elevate');
@@ -210,19 +214,19 @@ async function runUnitTests() {
     if (
         coverMeta &&
         coverMeta.supportedPlanTypes.includes('workout') &&
-        !coverMeta.supportedPlanTypes.includes('nutrition') &&
+        coverMeta.supportedPlanTypes.includes('nutrition') &&
         typeof coverPreview === 'string' &&
         coverMeta.name === 'Elevate' &&
         coverPreview ===
             'https://ik.imagekit.io/6nagrfhcm/template-cover.png' &&
         workoutCoverListed?.previewUrl === coverPreview &&
         workoutCoverListed?.name === 'Elevate' &&
-        !nutritionCoverListed
+        nutritionCoverListed?.id === 'elevate'
     ) {
-        pass('elevate template registry + workout-only discovery');
+        pass('elevate template registry + workout/nutrition discovery');
     } else {
         fail(
-            'elevate template registry + workout-only discovery',
+            'elevate template registry + workout/nutrition discovery',
             JSON.stringify({ coverMeta, workoutCoverListed, nutritionCoverListed })
         );
     }
@@ -405,25 +409,18 @@ async function runUnitTests() {
         },
     };
 
-    const nutritionHtml = buildClassicNutritionHtml(sampleNutrition);
+    const nutritionHtml = buildElevateNutritionHtml(sampleNutrition);
     if (
-        nutritionHtml.includes('Muscle Gain &lt;b&gt;Hack&lt;/b&gt;') &&
-        nutritionHtml.includes('class="plan-info-table"') &&
-        nutritionHtml.includes('>Contact</th>') &&
-        nutritionHtml.includes('>Daily Meal Plan</h2>') &&
-        nutritionHtml.includes('Meals / day') &&
+        nutritionHtml.includes('page-nutrition-cover') &&
         nutritionHtml.includes('Breakfast') &&
         nutritionHtml.includes('Eggs (Whole)') &&
-        nutritionHtml.includes('Daily Totals') &&
-        nutritionHtml.includes('info-status') &&
-        !nutritionHtml.includes('Day 1') &&
-        nutritionHtml.includes('dir="ltr"') &&
+        nutritionHtml.includes('lang="en"') &&
         !nutritionHtml.includes('ucarecdn.com')
     ) {
-        pass('nutrition HTML content + fitlypro-template structure');
+        pass('elevate nutrition HTML content structure');
     } else {
         fail(
-            'nutrition HTML content + fitlypro-template structure',
+            'elevate nutrition HTML content structure',
             nutritionHtml.slice(0, 500)
         );
     }
@@ -434,7 +431,7 @@ async function runUnitTests() {
         ownershipType: 'system',
         status: 'active',
     });
-    const workoutHtml = buildClassicWorkoutHtml({
+    const workoutModel = {
         type: 'workout',
         plan: {
             id: '2',
@@ -485,47 +482,39 @@ async function runUnitTests() {
                 },
             ],
         },
-    });
+    };
+    const workoutHtml = buildElevateWorkoutHtml(workoutModel);
     if (
-        workoutHtml.includes('Full Body &lt;b&gt;Test&lt;/b&gt;') &&
-        workoutHtml.includes('FITLY<span class="pro">PRO</span>') &&
-        workoutHtml.includes('class="plan-info-table"') &&
-        workoutHtml.includes('>Contact</th>') &&
-        workoutHtml.includes('>Weekly Workout Plan</h2>') &&
-        workoutHtml.includes('cell-meal" rowspan="2">Push</td>') &&
         workoutHtml.includes('Squat') &&
-        workoutHtml.includes('coach@example.com') &&
-        workoutHtml.includes('info-status') &&
-        workoutHtml.includes('Weekly Totals') &&
-        workoutHtml.includes('dir="ltr"') &&
+        workoutHtml.includes('Custom Press') &&
+        workoutHtml.includes('page-cover') &&
+        workoutHtml.includes('page-workouts') &&
+        workoutHtml.includes('lang="en"') &&
         !workoutHtml.includes('ucarecdn.com')
     ) {
-        pass('workout HTML content + fitlypro-template structure');
+        pass('elevate workout HTML content structure');
     } else {
         fail(
-            'workout HTML content + fitlypro-template structure',
+            'elevate workout HTML content structure',
             workoutHtml.slice(0, 500)
         );
     }
 
     if (
         linkedExerciseUrl &&
-        workoutHtml.includes(
-            `<a class="food-name exercise-link" href="${escapeHtml(linkedExerciseUrl)}">Squat</a>`
-        ) &&
-        workoutHtml.includes('<div class="exercise-note">Keep chest up</div>') &&
-        !workoutHtml.includes(`href="${escapeHtml(linkedExerciseUrl)}">Keep chest up`)
+        workoutHtml.includes(linkedExerciseUrl) &&
+        workoutHtml.includes('Keep chest up')
     ) {
-        pass('eligible exercise name is linked; notes stay unlinked');
+        pass('eligible exercise name is linked; notes stay present');
     } else {
         fail(
-            'eligible exercise name is linked; notes stay unlinked',
-            workoutHtml.match(/cell-food[\s\S]{0,240}/)?.[0] || 'missing cell'
+            'eligible exercise name is linked; notes stay present',
+            `url=${linkedExerciseUrl} linked=${workoutHtml.includes(linkedExerciseUrl)}`
         );
     }
 
     if (
-        workoutHtml.includes('<span class="food-name">Custom Press</span>') &&
+        workoutHtml.includes('Custom Press') &&
         !workoutHtml.includes('my-custom-press')
     ) {
         pass('ineligible exercise name stays plain text');
@@ -1101,10 +1090,11 @@ async function runUnitTests() {
         }
         writeFileSync(join(coverOutDir, titleCase.file), pdf);
         const pageMatches = pdf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) || [];
-        if (pageMatches.length !== 3) {
+        // Cover + overview + detail pages (count varies with content packing).
+        if (pageMatches.length < 3) {
             titlePdfsOk = false;
             fail(
-                'elevate PDF is three pages',
+                'elevate PDF has multiple pages',
                 `${titleCase.name}: pages≈${pageMatches.length}`
             );
             break;
@@ -1112,14 +1102,10 @@ async function runUnitTests() {
     }
     if (titlePdfsOk) {
         writeFileSync(
-            join(coverOutDir, 'elevate-three-page.pdf'),
+            join(coverOutDir, 'elevate-multi-page.pdf'),
             await renderElevateWorkoutPdf(coverModel)
         );
-        writeFileSync(
-            join(coverOutDir, 'elevate-two-page.pdf'),
-            await renderElevateWorkoutPdf(coverModel)
-        );
-        pass('elevate PDF is three pages');
+        pass('elevate PDF has multiple pages');
         pass('elevate PDF buffer valid');
     }
 }
@@ -1264,35 +1250,26 @@ async function main() {
             '/plan-exports/templates?planType=workout',
             { token: tokenA }
         );
-        const workoutTemplate = templatesRes.json?.data?.templates?.find(
-            (t) => t.id === 'classic'
-        );
-        const coverTemplate = templatesRes.json?.data?.templates?.find(
-            (t) => t.id === 'elevate'
-        );
+        const listedTemplates = templatesRes.json?.data?.templates;
+        const elevateTemplate = listedTemplates?.find((t) => t.id === 'elevate');
+        const classicListed = listedTemplates?.some((t) => t.id === 'classic');
         const expectedWorkoutPreview =
-            getTemplateMeta('classic')?.assets?.workout?.previewImageUrl ?? null;
-        const expectedCoverPreview =
             getTemplateMeta('elevate')?.assets?.workout?.previewImageUrl ?? null;
         if (
             templatesRes.status === 200 &&
-            Array.isArray(templatesRes.json?.data?.templates) &&
-            workoutTemplate &&
-            workoutTemplate.previewUrl === expectedWorkoutPreview &&
-            workoutTemplate.assets?.previewImageUrl === expectedWorkoutPreview
+            Array.isArray(listedTemplates) &&
+            listedTemplates.length === 1 &&
+            elevateTemplate &&
+            !classicListed &&
+            elevateTemplate.previewUrl === expectedWorkoutPreview &&
+            elevateTemplate.assets?.previewImageUrl === expectedWorkoutPreview
         ) {
-            pass('GET workout templates returns preview image URL');
+            pass('GET workout templates returns Elevate only');
         } else {
-            fail('GET workout templates returns preview image URL', JSON.stringify(templatesRes.json));
-        }
-        if (
-            coverTemplate &&
-            coverTemplate.previewUrl === expectedCoverPreview &&
-            coverTemplate.assets?.previewImageUrl === expectedCoverPreview
-        ) {
-            pass('GET workout templates includes elevate');
-        } else {
-            fail('GET workout templates includes elevate', JSON.stringify(coverTemplate));
+            fail(
+                'GET workout templates returns Elevate only',
+                JSON.stringify(templatesRes.json)
+            );
         }
 
         const nutritionTemplatesRes = await request(
@@ -1301,20 +1278,39 @@ async function main() {
             { token: tokenA }
         );
         const nutritionTemplate = nutritionTemplatesRes.json?.data?.templates?.find(
-            (t) => t.id === 'classic'
+            (t) => t.id === 'elevate'
         );
         const expectedNutritionPreview =
-            getTemplateMeta('classic')?.assets?.nutrition?.previewImageUrl ?? null;
+            getTemplateMeta('elevate')?.assets?.nutrition?.previewImageUrl ?? null;
         if (
             nutritionTemplatesRes.status === 200 &&
+            nutritionTemplatesRes.json?.data?.templates?.length === 1 &&
             nutritionTemplate?.previewUrl === expectedNutritionPreview &&
-            nutritionTemplate?.assets?.previewImageUrl === expectedNutritionPreview
+            nutritionTemplate?.assets?.previewImageUrl === expectedNutritionPreview &&
+            !nutritionTemplatesRes.json?.data?.templates?.some((t) => t.id === 'classic')
         ) {
-            pass('GET nutrition templates returns preview image URL');
+            pass('GET nutrition templates returns Elevate only');
         } else {
             fail(
-                'GET nutrition templates returns preview image URL',
+                'GET nutrition templates returns Elevate only',
                 JSON.stringify(nutritionTemplatesRes.json)
+            );
+        }
+
+        const classicRejected = await request('POST', '/plan-exports', {
+            token: tokenA,
+            body: {
+                planType: 'workout',
+                planId: workout._id.toString(),
+                templateId: 'classic',
+            },
+        });
+        if (classicRejected.status === 400) {
+            pass('classic templateId rejected with HTTP 400');
+        } else {
+            fail(
+                'classic templateId rejected with HTTP 400',
+                JSON.stringify(classicRejected.json)
             );
         }
 
@@ -1323,7 +1319,7 @@ async function main() {
             body: {
                 planType: 'workout',
                 planId: workout._id.toString(),
-                templateId: 'classic',
+                templateId: 'elevate',
             },
             raw: true,
         });
@@ -1336,10 +1332,10 @@ async function main() {
             workoutCd.includes('attachment') &&
             workoutCd.includes('.pdf')
         ) {
-            pass('workout export PDF');
+            pass('elevate workout export PDF');
         } else {
             fail(
-                'workout export PDF',
+                'elevate workout export PDF',
                 `status=${workoutExport.status} ct=${workoutCt} cd=${workoutCd} head=${workoutExport.buffer.slice(0, 40).toString()}`
             );
         }
@@ -1349,7 +1345,7 @@ async function main() {
             body: {
                 planType: 'nutrition',
                 planId: nutrition._id.toString(),
-                templateId: 'classic',
+                templateId: 'elevate',
             },
             raw: true,
         });
@@ -1360,50 +1356,11 @@ async function main() {
             ) &&
             nutritionExport.buffer.slice(0, 5).toString() === '%PDF-'
         ) {
-            pass('nutrition export PDF');
+            pass('elevate nutrition export PDF');
         } else {
             fail(
-                'nutrition export PDF',
+                'elevate nutrition export PDF',
                 `status=${nutritionExport.status} head=${nutritionExport.buffer.slice(0, 80).toString()}`
-            );
-        }
-
-        const coverExport = await request('POST', '/plan-exports', {
-            token: tokenA,
-            body: {
-                planType: 'workout',
-                planId: workout._id.toString(),
-                templateId: 'elevate',
-            },
-            raw: true,
-        });
-        if (
-            coverExport.status === 200 &&
-            (coverExport.headers.get('content-type') || '').includes('application/pdf') &&
-            coverExport.buffer.slice(0, 5).toString() === '%PDF-'
-        ) {
-            pass('elevate workout export PDF');
-        } else {
-            fail(
-                'elevate workout export PDF',
-                `status=${coverExport.status} head=${coverExport.buffer.slice(0, 80).toString()}`
-            );
-        }
-
-        const coverOnNutrition = await request('POST', '/plan-exports', {
-            token: tokenA,
-            body: {
-                planType: 'nutrition',
-                planId: nutrition._id.toString(),
-                templateId: 'elevate',
-            },
-        });
-        if (coverOnNutrition.status === 400) {
-            pass('elevate rejected for nutrition');
-        } else {
-            fail(
-                'elevate rejected for nutrition',
-                JSON.stringify(coverOnNutrition.json)
             );
         }
 
@@ -1440,7 +1397,7 @@ async function main() {
             body: {
                 planType: 'yoga',
                 planId: workout._id.toString(),
-                templateId: 'classic',
+                templateId: 'elevate',
             },
         });
         if (invalidType.status === 400) pass('invalid plan type rejected');
@@ -1451,7 +1408,7 @@ async function main() {
             body: {
                 planType: 'workout',
                 planId: new mongoose.Types.ObjectId().toString(),
-                templateId: 'classic',
+                templateId: 'elevate',
             },
         });
         if (missingPlan.status === 404) pass('missing plan rejected');
@@ -1462,7 +1419,7 @@ async function main() {
             body: {
                 planType: 'workout',
                 planId: workout._id.toString(),
-                templateId: 'classic',
+                templateId: 'elevate',
             },
         });
         if (unauthorized.status === 404) pass('unauthorized plan rejected');

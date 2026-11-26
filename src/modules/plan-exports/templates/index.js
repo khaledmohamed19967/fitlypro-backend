@@ -8,24 +8,16 @@ import {
     PLAN_EXPORT_TEMPLATES,
 } from '../plan-export.constants.js';
 import {
-    renderClassicNutritionPdf,
-    renderClassicWorkoutPdf,
-} from './classic/index.js';
-import {
     renderElevateNutritionPdf,
     renderElevateWorkoutPdf,
 } from './elevate/index.js';
 
 /**
  * Elevate — HTML source lives under templates/elevate/html/
- * Workout: page.js · Nutrition Page 01: nutrition.js
- * Same Playwright pipeline as Classic.
+ * Workout: page.js · Nutrition: nutrition.js
+ * Playwright pipeline via pdf/htmlPdfRenderer.js.
  */
 const RENDERERS = Object.freeze({
-    classic: Object.freeze({
-        workout: renderClassicWorkoutPdf,
-        nutrition: renderClassicNutritionPdf,
-    }),
     elevate: Object.freeze({
         workout: renderElevateWorkoutPdf,
         nutrition: renderElevateNutritionPdf,

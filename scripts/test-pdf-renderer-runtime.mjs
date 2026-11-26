@@ -14,7 +14,11 @@ import {
     renderHtmlToPdf,
     resolvePdfBrowserLaunchPlan,
 } from '../src/modules/plan-exports/pdf/htmlPdfRenderer.js';
-import { renderClassicWorkoutPdf } from '../src/modules/plan-exports/templates/classic/index.js';
+import {
+    getTemplateMeta,
+    listExportTemplates,
+    resolveTemplateRenderer,
+} from '../src/modules/plan-exports/templates/index.js';
 import { renderElevateWorkoutPdf } from '../src/modules/plan-exports/templates/elevate/index.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -38,6 +42,22 @@ const fixturePath = join(
     'src/modules/plan-exports/studio/fixtures/workout-basic.json'
 );
 const basicFixture = JSON.parse(readFileSync(fixturePath, 'utf8'));
+
+// --- Elevate-only registry ---
+const listed = listExportTemplates();
+if (
+    listed.length === 1 &&
+    listed[0].id === 'elevate' &&
+    !listed.some((t) => t.id === 'classic') &&
+    getTemplateMeta('classic') == null &&
+    resolveTemplateRenderer('classic', 'workout') == null &&
+    typeof resolveTemplateRenderer('elevate', 'workout') === 'function' &&
+    typeof resolveTemplateRenderer('elevate', 'nutrition') === 'function'
+) {
+    pass('registry exposes Elevate only (Classic unavailable)');
+} else {
+    fail('registry exposes Elevate only (Classic unavailable)', JSON.stringify(listed));
+}
 
 // --- Runtime detection (no browser launch) ---
 if (!isServerlessPdfRuntime({})) {
@@ -115,13 +135,6 @@ try {
             'local HTML→PDF returns valid %PDF- buffer',
             htmlPdf?.slice?.(0, 20)?.toString?.()
         );
-    }
-
-    const classicPdf = await renderClassicWorkoutPdf(basicFixture);
-    if (isPdf(classicPdf)) {
-        pass('local Classic workout PDF is valid');
-    } else {
-        fail('local Classic workout PDF is valid', classicPdf?.slice?.(0, 20)?.toString?.());
     }
 
     const elevatePdf = await renderElevateWorkoutPdf(basicFixture);

@@ -7,7 +7,7 @@ Single-page A4 cover template for workout plan PDF exports.
 - Renderer: Playwright Chromium via `pdf/htmlPdfRenderer.js`
 - Design source: `html/` (`index.html`, `styles.css`, `images/`, `fonts/`)
 
-Does not replace `classic`.
+Elevate is the only production PDF export template.
 
 ## Local development
 

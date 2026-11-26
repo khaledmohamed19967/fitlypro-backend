@@ -62,10 +62,8 @@ import {
     verifyAccessToken,
 } from '../src/utils/verifyAccessToken.js';
 import { closeHtmlPdfBrowser } from '../src/modules/plan-exports/pdf/htmlPdfRenderer.js';
-import { CLASSIC_PDF_OPTIONS } from '../src/modules/plan-exports/templates/classic/index.js';
 import { ELEVATE_PDF_OPTIONS } from '../src/modules/plan-exports/templates/elevate/index.js';
 import { buildElevateWorkoutHtml } from '../src/modules/plan-exports/templates/elevate/page.js';
-import { buildClassicWorkoutHtml } from '../src/modules/plan-exports/templates/classic/workout.js';
 import {
     getStudioModuleCacheEntry,
     loadStudioHtmlBuilder,
@@ -170,28 +168,28 @@ function runRegistryTests() {
 
     const keys = (all.templates || []).map((t) => `${t.templateId}:${t.planType}`);
     expect(
-        'registry exposes classic workout/nutrition and elevate workout',
-        keys.includes('classic:workout') &&
-            keys.includes('classic:nutrition') &&
-            keys.includes('elevate:workout') &&
-            keys.length === 3,
+        'registry exposes elevate workout/nutrition only',
+        keys.includes('elevate:workout') &&
+            keys.includes('elevate:nutrition') &&
+            !keys.some((k) => k.startsWith('classic:')) &&
+            keys.length === 2,
         JSON.stringify(keys)
     );
 
     expect(
-        'classic appears once per plan type (no collapsed duplicate id)',
-        keys.filter((k) => k.startsWith('classic:')).length === 2 &&
+        'elevate appears once per plan type (no collapsed duplicate id)',
+        keys.filter((k) => k.startsWith('elevate:')).length === 2 &&
             new Set(keys).size === keys.length,
         JSON.stringify(keys)
     );
 
     expect(
-        'classic workout exposes full page',
-        resolveStudioPages('classic', 'workout').defaultPageId === 'full'
+        'elevate workout exposes full page',
+        resolveStudioPages('elevate', 'workout').defaultPageId === 'full'
     );
     expect(
-        'classic nutrition exposes full page',
-        resolveStudioPages('classic', 'nutrition').defaultPageId === 'full'
+        'elevate nutrition exposes full page',
+        resolveStudioPages('elevate', 'nutrition').defaultPageId === 'full'
     );
     expect(
         'elevate workout exposes single full page (html design)',
@@ -207,8 +205,8 @@ function runRegistryTests() {
     );
 
     expect(
-        'unsupported elevate + nutrition rejected',
-        isStudioCombinationSupported('elevate', 'nutrition') === false
+        'elevate + nutrition is supported',
+        isStudioCombinationSupported('elevate', 'nutrition') === true
     );
     expect(
         'unknown template rejected',
@@ -216,7 +214,7 @@ function runRegistryTests() {
     );
     expect(
         'unknown page id rejected',
-        resolveStudioPage('classic', 'workout', 'cover').ok === false
+        resolveStudioPage('elevate', 'workout', 'cover').ok === false
     );
     expect(
         'invalid planType filter rejected by registry',
@@ -231,14 +229,9 @@ function runRegistryTests() {
         'empty pages rejected by validateStudioRegistry',
         () =>
             validateStudioRegistry({
-                classic: {
+                elevate: {
                     workout: [],
                     nutrition: [
-                        { id: 'full', label: 'Full document', isDefault: true },
-                    ],
-                },
-                elevate: {
-                    workout: [
                         { id: 'full', label: 'Full document', isDefault: true },
                     ],
                 },
@@ -250,17 +243,12 @@ function runRegistryTests() {
         'multiple defaults rejected by validateStudioRegistry',
         () =>
             validateStudioRegistry({
-                classic: {
+                elevate: {
                     workout: [
                         { id: 'full', label: 'Full', isDefault: true },
                         { id: 'alt', label: 'Alt', isDefault: true },
                     ],
                     nutrition: [
-                        { id: 'full', label: 'Full document', isDefault: true },
-                    ],
-                },
-                elevate: {
-                    workout: [
                         { id: 'full', label: 'Full document', isDefault: true },
                     ],
                 },
@@ -272,7 +260,7 @@ function runRegistryTests() {
         'orphan Studio declaration rejected',
         () =>
             validateStudioRegistry({
-                classic: {
+                elevate: {
                     workout: [
                         { id: 'full', label: 'Full document', isDefault: true },
                     ],
@@ -280,11 +268,8 @@ function runRegistryTests() {
                         { id: 'full', label: 'Full document', isDefault: true },
                     ],
                 },
-                elevate: {
+                orphan_template: {
                     workout: [
-                        { id: 'full', label: 'Full document', isDefault: true },
-                    ],
-                    nutrition: [
                         { id: 'full', label: 'Full document', isDefault: true },
                     ],
                 },
@@ -296,18 +281,13 @@ function runRegistryTests() {
         'missing production combination rejected (drift)',
         () =>
             validateStudioRegistry({
-                classic: {
-                    workout: [
-                        { id: 'full', label: 'Full document', isDefault: true },
-                    ],
-                },
                 elevate: {
                     workout: [
                         { id: 'full', label: 'Full document', isDefault: true },
                     ],
                 },
             }),
-        /Missing Studio pages for production combination classic:nutrition/
+        /Missing Studio pages for production combination elevate:nutrition/
     );
 }
 
@@ -423,13 +403,13 @@ async function runRenderingTests() {
         fixtureId: 'workout-basic',
     });
     const classicHtml = await buildStudioHtml({
-        templateId: 'classic',
+        templateId: 'elevate',
         planType: 'workout',
         pageId: 'full',
         exportModel: loaded.exportModel,
     });
     expect(
-        'registered classic HTML builder used (escaped name)',
+        'registered elevate HTML builder used (escaped name)',
         classicHtml.includes('Studio Fixture &lt;b&gt;Workout&lt;/b&gt;') &&
             classicHtml.includes('<!DOCTYPE html>'),
         classicHtml.slice(0, 200)
@@ -457,7 +437,7 @@ async function runRenderingTests() {
     let unknownPageThrew = false;
     try {
         await buildStudioHtml({
-            templateId: 'classic',
+            templateId: 'elevate',
             planType: 'workout',
             pageId: 'nope',
             exportModel: loaded.exportModel,
@@ -471,7 +451,7 @@ async function runRenderingTests() {
         planType: 'workout',
         source: 'fixture',
         fixtureId: 'workout-basic',
-        templateId: 'classic',
+        templateId: 'elevate',
         pageId: 'full',
         format: 'pdf',
     });
@@ -482,9 +462,9 @@ async function runRenderingTests() {
         pdfPreview.buffer?.slice?.(0, 8)?.toString?.()
     );
     expect(
-        'classic PDF options respected',
+        'elevate PDF options respected',
         pdfPreview.pdfOptions?.preferCSSPageSize ===
-            CLASSIC_PDF_OPTIONS.preferCSSPageSize &&
+            ELEVATE_PDF_OPTIONS.preferCSSPageSize &&
             pdfPreview.pdfOptions?.margin?.top === '0'
     );
 
@@ -575,7 +555,7 @@ async function runApiTests() {
             planType: 'workout',
             source: 'fixture',
             fixtureId: 'workout-basic',
-            templateId: 'classic',
+            templateId: 'elevate',
             pageId: 'full',
             format: 'html',
         },
@@ -612,7 +592,7 @@ async function runApiTests() {
             planType: 'workout',
             source: 'plan',
             planId: 'aaaaaaaaaaaaaaaaaaaaaaaa',
-            templateId: 'classic',
+            templateId: 'elevate',
             pageId: 'full',
             format: 'html',
         },
@@ -628,7 +608,7 @@ async function runApiTests() {
             planType: 'workout',
             source: 'plan',
             planId: 'aaaaaaaaaaaaaaaaaaaaaaaa',
-            templateId: 'classic',
+            templateId: 'elevate',
             pageId: 'full',
             format: 'html',
         },
@@ -650,7 +630,7 @@ async function runApiTests() {
             planType: 'workout',
             source: 'plan',
             planId: 'aaaaaaaaaaaaaaaaaaaaaaaa',
-            templateId: 'classic',
+            templateId: 'elevate',
             pageId: 'full',
             format: 'html',
         },
@@ -667,7 +647,7 @@ async function runApiTests() {
             planType: 'workout',
             source: 'fixture',
             fixtureId: 'workout-basic',
-            templateId: 'classic',
+            templateId: 'elevate',
             pageId: 'full',
             format: 'html',
             trainerId: 'bbbbbbbbbbbbbbbbbbbbbbbb',
@@ -684,7 +664,7 @@ async function runApiTests() {
             planType: 'workout',
             source: 'fixture',
             fixtureId: 'workout-basic',
-            templateId: 'classic',
+            templateId: 'elevate',
             pageId: 'full',
             format: 'html',
             html: '<script>alert(1)</script>',
@@ -701,7 +681,7 @@ async function runApiTests() {
             planType: 'workout',
             source: 'fixture',
             fixtureId: 'workout-basic',
-            templateId: 'classic',
+            templateId: 'elevate',
             pageId: 'full',
             format: 'html',
             path: '../secrets',
@@ -718,7 +698,7 @@ async function runApiTests() {
             planType: 'workout',
             source: 'fixture',
             fixtureId: 'workout-basic',
-            templateId: 'classic',
+            templateId: 'elevate',
             pageId: 'cover',
             format: 'html',
         },
@@ -835,7 +815,7 @@ async function runOptionalDbAuthTests() {
                 planType: 'workout',
                 source: 'plan',
                 planId: String(ownWorkout._id),
-                templateId: 'classic',
+                templateId: 'elevate',
                 pageId: 'full',
                 format: 'html',
             },
@@ -856,7 +836,7 @@ async function runOptionalDbAuthTests() {
                 planType: 'nutrition',
                 source: 'plan',
                 planId: String(ownNutrition._id),
-                templateId: 'classic',
+                templateId: 'elevate',
                 pageId: 'full',
                 format: 'html',
             },
@@ -879,7 +859,7 @@ async function runOptionalDbAuthTests() {
                     planType: 'workout',
                     source: 'plan',
                     planId: String(foreign._id),
-                    templateId: 'classic',
+                    templateId: 'elevate',
                     pageId: 'full',
                     format: 'html',
                 },
@@ -902,7 +882,7 @@ async function runOptionalDbAuthTests() {
             planType: 'workout',
             source: 'plan',
             planId: 'not-an-object-id',
-            templateId: 'classic',
+            templateId: 'elevate',
             pageId: 'full',
             format: 'html',
         },
@@ -923,7 +903,7 @@ async function runOptionalDbAuthTests() {
                 planType: 'workout',
                 source: 'plan',
                 planId: String(ownWorkout._id),
-                templateId: 'classic',
+                templateId: 'elevate',
                 pageId: 'full',
                 format: 'html',
             },
@@ -1014,7 +994,7 @@ async function runPhaseB1AsyncTests() {
     );
     const workoutCssPath = join(
         __dirname,
-        '../src/modules/plan-exports/templates/classic/workout.css'
+        '../src/modules/plan-exports/templates/elevate/html/styles.css'
     );
     const coverOriginal = readFileSync(coverCssPath, 'utf8');
     const workoutOriginal = readFileSync(workoutCssPath, 'utf8');
@@ -1057,7 +1037,7 @@ async function runPhaseB1AsyncTests() {
         writeFileSync(workoutCssPath, `${workoutOriginal}\n${marker}\n`);
 
         const coverHtml = buildElevateWorkoutHtml(sampleWorkout);
-        const classicHtml = buildClassicWorkoutHtml(sampleWorkout);
+        const classicHtml = buildElevateWorkoutHtml(sampleWorkout);
 
         expect(
             'elevate CSS change appears on next HTML build (no restart)',
@@ -1067,13 +1047,13 @@ async function runPhaseB1AsyncTests() {
                 : coverHtml.slice(0, 120)
         );
         expect(
-            'classic workout CSS change appears on next HTML build (no restart)',
+            'elevate CSS change appears on next HTML build (no restart)',
             classicHtml.includes(marker),
-            'marker missing in classic html'
+            'marker missing in elevate html'
         );
 
         expect(
-            'classic HTML still contains DOCTYPE + plan name',
+            'elevate HTML still contains DOCTYPE + plan name',
             classicHtml.includes('<!DOCTYPE html>') &&
                 classicHtml.includes('Reload Check')
         );
@@ -1185,13 +1165,13 @@ function runPhaseCWatcherUnitTests() {
     expect(
         'resolveStudioModuleSpec rejects unknown template',
         resolveStudioModuleSpec('not_a_template', 'workout') == null &&
-            resolveStudioModuleSpec('classic', 'missing') == null
+            resolveStudioModuleSpec('elevate', 'missing') == null
     );
 }
 
 async function runPhaseCWatcherIntegrationTests() {
     const base = mkdtempSync(join(tmpdir(), 'fitly-studio-watch-'));
-    const classicDir = join(base, 'classic');
+    const classicDir = join(base, 'elevate');
     const coverDir = join(base, 'elevate');
     const outsideDir = join(base, 'outside');
     mkdirSync(classicDir, { recursive: true });
@@ -1213,7 +1193,7 @@ async function runPhaseCWatcherIntegrationTests() {
 
     const watcher = startStudioWatcher({
         roots: [
-            { templateId: 'classic', watchDir: classicDir },
+            { templateId: 'elevate', watchDir: classicDir },
             { templateId: 'elevate', watchDir: coverDir },
         ],
         debounceMs: 80,
@@ -1234,7 +1214,7 @@ async function runPhaseCWatcherIntegrationTests() {
         writeFileSync(cssPath, '/* css-change-3 */\n');
         await wait(220);
         const assetCss = emitted.filter(
-            (e) => e.type === 'assets' && e.templateId === 'classic'
+            (e) => e.type === 'assets' && e.templateId === 'elevate'
         );
         expect(
             'registered CSS modification emits assets (debounced)',
@@ -1245,7 +1225,7 @@ async function runPhaseCWatcherIntegrationTests() {
         writeFileSync(imgPath, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d]));
         await wait(220);
         const assetImg = emitted.filter(
-            (e) => e.type === 'assets' && e.templateId === 'classic'
+            (e) => e.type === 'assets' && e.templateId === 'elevate'
         );
         expect(
             'registered image modification emits assets',
@@ -1295,44 +1275,40 @@ async function runPhaseCModuleReloadTests() {
     resetStudioModuleCache();
 
     const builders = {
-        classic: Object.assign(() => '<html>classic-v1</html>', { tag: 'v1' }),
-        cover: Object.assign(() => '<html>cover-v1</html>', { tag: 'v1' }),
+        elevate: Object.assign(() => '<html>elevate-v1</html>', { tag: 'v1' }),
     };
 
     const importFn = async (href) => {
-        if (href.includes('classic') && href.includes('workout')) {
-            return { buildClassicWorkoutHtml: builders.classic };
+        if (href.includes('elevate') && href.includes('page.js')) {
+            return { buildElevateWorkoutHtml: builders.elevate };
         }
-        if (href.includes('classic') && href.includes('nutrition')) {
+        if (href.includes('elevate') && href.includes('nutrition')) {
             return {
-                buildClassicNutritionHtml: Object.assign(() => '<html>n</html>', {
+                buildElevateNutritionHtml: Object.assign(() => '<html>n</html>', {
                     tag: 'n',
                 }),
             };
         }
-        if (href.includes('elevate') && href.includes('page.js')) {
-            return { buildElevateWorkoutHtml: builders.cover };
-        }
         throw new Error(`unexpected import ${href}`);
     };
 
-    const first = await loadStudioHtmlBuilder('classic', 'workout', { importFn });
+    const first = await loadStudioHtmlBuilder('elevate', 'workout', { importFn });
     expect(
         'initial module load caches builder',
-        first.builder === builders.classic && first.version === 1
+        first.builder === builders.elevate && first.version === 1
     );
 
-    builders.classic = Object.assign(() => '<html>classic-v2</html>', { tag: 'v2' });
-    const reloaded = await reloadStudioTemplateModules('classic', { importFn });
+    builders.elevate = Object.assign(() => '<html>elevate-v2</html>', { tag: 'v2' });
+    const reloaded = await reloadStudioTemplateModules('elevate', { importFn });
     expect(
         'updated JS builder used after reload',
         reloaded.ok &&
-            getStudioModuleCacheEntry('classic', 'workout')?.builder?.tag === 'v2',
+            getStudioModuleCacheEntry('elevate', 'workout')?.builder?.tag === 'v2',
         JSON.stringify(reloaded)
     );
 
-    const held = getStudioModuleCacheEntry('classic', 'workout').builder;
-    builders.classic = Object.assign(() => {
+    const held = getStudioModuleCacheEntry('elevate', 'workout').builder;
+    builders.elevate = Object.assign(() => {
         throw new Error('boom');
     }, { tag: 'bad' });
 
@@ -1340,22 +1316,22 @@ async function runPhaseCModuleReloadTests() {
         const text = String(href);
         if (
             text.includes('studioReload') &&
-            text.includes('classic') &&
-            text.includes('workout')
+            text.includes('elevate') &&
+            text.includes('page.js')
         ) {
             throw new Error('simulated import failure');
         }
         return importFn(href);
     };
 
-    const failed = await reloadStudioTemplateModules('classic', {
+    const failed = await reloadStudioTemplateModules('elevate', {
         importFn: failedImportFn,
     });
     expect(
         'failed module import retains previous working module',
         failed.ok === false &&
-            getStudioModuleCacheEntry('classic', 'workout')?.builder === held &&
-            getStudioModuleCacheEntry('classic', 'workout')?.builder?.tag === 'v2',
+            getStudioModuleCacheEntry('elevate', 'workout')?.builder === held &&
+            getStudioModuleCacheEntry('elevate', 'workout')?.builder?.tag === 'v2',
         JSON.stringify(failed)
     );
 
@@ -1367,12 +1343,12 @@ async function runPhaseCModuleReloadTests() {
     }
     expect('client input cannot select an arbitrary module path', arbitraryThrew);
 
-    const productionBefore = buildClassicWorkoutHtml;
-    await reloadStudioTemplateModules('classic', { importFn });
+    const productionBefore = buildElevateWorkoutHtml;
+    await reloadStudioTemplateModules('elevate', { importFn });
     expect(
         'production module imports remain unaffected',
-        buildClassicWorkoutHtml === productionBefore &&
-            typeof buildClassicWorkoutHtml === 'function'
+        buildElevateWorkoutHtml === productionBefore &&
+            typeof buildElevateWorkoutHtml === 'function'
     );
 
     resetStudioModuleCache();
@@ -1381,88 +1357,67 @@ async function runPhaseCModuleReloadTests() {
 async function runPhaseCConcurrencyTests() {
     resetStudioModuleCache();
 
-    let classicImports = 0;
-    let coverImports = 0;
-    let classicDelayResolve;
-    const classicGate = new Promise((resolve) => {
-        classicDelayResolve = resolve;
+    let elevateImports = 0;
+    let elevateDelayResolve;
+    const elevateGate = new Promise((resolve) => {
+        elevateDelayResolve = resolve;
     });
 
-    const classicV1 = Object.assign(() => 'c1', { tag: 'c1' });
-    const classicV2 = Object.assign(() => 'c2', { tag: 'c2' });
-    const coverV1 = Object.assign(() => 'f1', { tag: 'f1' });
-    const coverV2 = Object.assign(() => 'f2', { tag: 'f2' });
+    const elevateV1 = Object.assign(() => 'e1', { tag: 'e1' });
+    const elevateV2 = Object.assign(() => 'e2', { tag: 'e2' });
 
-    let classicBuilder = classicV1;
-    let coverBuilder = coverV1;
+    let elevateBuilder = elevateV1;
 
     const importFn = async (href) => {
-        if (href.includes('classic') && href.includes('workout')) {
-            classicImports += 1;
-            if (String(href).includes('studioReload')) {
-                await classicGate;
-            }
-            return { buildClassicWorkoutHtml: classicBuilder };
-        }
         if (href.includes('elevate') && href.includes('page.js')) {
-            coverImports += 1;
-            return { buildElevateWorkoutHtml: coverBuilder };
+            elevateImports += 1;
+            if (String(href).includes('studioReload')) {
+                await elevateGate;
+            }
+            return { buildElevateWorkoutHtml: elevateBuilder };
         }
-        if (href.includes('classic') && href.includes('nutrition')) {
+        if (href.includes('elevate') && href.includes('nutrition')) {
             return {
-                buildClassicNutritionHtml: Object.assign(() => 'n', { tag: 'n' }),
+                buildElevateNutritionHtml: Object.assign(() => 'n', { tag: 'n' }),
             };
         }
         throw new Error(href);
     };
 
-    await loadStudioHtmlBuilder('classic', 'workout', { importFn });
+    await loadStudioHtmlBuilder('elevate', 'workout', { importFn });
     await loadStudioHtmlBuilder('elevate', 'workout', { importFn });
 
-    const inFlightBuilder = getStudioModuleCacheEntry('classic', 'workout').builder;
+    const inFlightBuilder = getStudioModuleCacheEntry('elevate', 'workout').builder;
     expect(
         'in-flight preview holds original module version reference',
-        inFlightBuilder?.tag === 'c1'
+        inFlightBuilder?.tag === 'e1'
     );
 
-    classicBuilder = classicV2;
-    const reloadPromise = reloadStudioTemplateModules('classic', { importFn });
-    const overlapping = reloadStudioTemplateModules('classic', { importFn });
-
-    coverBuilder = coverV2;
-    const coverReload = reloadStudioTemplateModules('elevate', { importFn });
+    elevateBuilder = elevateV2;
+    const reloadPromise = reloadStudioTemplateModules('elevate', { importFn });
+    const overlapping = reloadStudioTemplateModules('elevate', { importFn });
 
     await wait(30);
     expect(
         'in-flight preview still sees original builder while reload pending',
-        inFlightBuilder?.tag === 'c1'
+        inFlightBuilder?.tag === 'e1'
     );
 
-    classicDelayResolve();
-    const [classicResult, overlapResult, coverResult] = await Promise.all([
+    elevateDelayResolve();
+    const [elevateResult, overlapResult] = await Promise.all([
         reloadPromise,
         overlapping,
-        coverReload,
     ]);
 
     expect(
         'multiple reload events do not overlap for the same template',
-        classicResult === overlapResult && classicImports === 2,
-        `imports=${classicImports}`
+        elevateResult === overlapResult && elevateImports === 2,
+        `imports=${elevateImports}`
     );
 
     expect(
         'new preview uses latest successfully loaded version',
-        getStudioModuleCacheEntry('classic', 'workout')?.builder?.tag === 'c2'
-    );
-
-    expect(
-        'different templates can reload independently',
-        coverResult.ok &&
-            getStudioModuleCacheEntry('elevate', 'workout', 'full')?.builder
-                ?.tag === 'f2' &&
-            coverImports >= 2,
-        `coverImports=${coverImports}`
+        getStudioModuleCacheEntry('elevate', 'workout')?.builder?.tag === 'e2'
     );
 
     resetStudioModuleCache();
@@ -1501,7 +1456,7 @@ async function runPhaseCSseTests() {
         await wait(60);
         const payload = broadcastStudioEvent({
             type: 'assets',
-            templateId: 'classic',
+            templateId: 'elevate',
             category: 'assets',
             message: null,
         });
@@ -1509,7 +1464,7 @@ async function runPhaseCSseTests() {
         expect(
             'SSE event format is safe and typed',
             payload.type === 'assets' &&
-                payload.templateId === 'classic' &&
+                payload.templateId === 'elevate' &&
                 payload.category === 'assets' &&
                 typeof payload.revision === 'number' &&
                 typeof payload.at === 'string' &&

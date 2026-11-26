@@ -38,10 +38,6 @@ export const resolveStudioHtmlBuilder = async (
  * @param {string} templateId
  */
 export const resolveStudioPdfOptions = async (templateId) => {
-    if (templateId === 'classic') {
-        const mod = await import('../templates/classic/index.js');
-        return { ...mod.CLASSIC_PDF_OPTIONS };
-    }
     if (templateId === 'elevate') {
         const mod = await import('../templates/elevate/index.js');
         return { ...mod.ELEVATE_PDF_OPTIONS };

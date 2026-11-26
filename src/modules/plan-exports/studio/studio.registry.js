@@ -29,14 +29,10 @@ const FULL_PAGE = Object.freeze({
  * Combinations must also exist in PLAN_EXPORT_TEMPLATES.supportedPlanTypes.
  */
 const STUDIO_PAGES = Object.freeze({
-    classic: Object.freeze({
-        workout: Object.freeze([FULL_PAGE]),
-        nutrition: Object.freeze([FULL_PAGE]),
-    }),
     elevate: Object.freeze({
         // Workout: full multi-page document via page.js
         workout: Object.freeze([FULL_PAGE]),
-        // Nutrition: Page 01 cover & overview via nutrition.js
+        // Nutrition: Pages 01–03 via nutrition.js
         nutrition: Object.freeze([FULL_PAGE]),
     }),
 });
@@ -51,24 +47,6 @@ export const ELEVATE_HTML_ASSET_MOUNT = '/studio-assets/elevate/html';
 const toModuleHref = (absolutePath) => pathToFileURL(absolutePath).href;
 
 export const STUDIO_TEMPLATE_SOURCES = Object.freeze({
-    classic: Object.freeze({
-        templateId: 'classic',
-        watchDir: join(TEMPLATES_ROOT, 'classic'),
-        modules: Object.freeze([
-            Object.freeze({
-                planType: 'workout',
-                exportName: 'buildClassicWorkoutHtml',
-                filePath: join(TEMPLATES_ROOT, 'classic', 'workout.js'),
-                href: toModuleHref(join(TEMPLATES_ROOT, 'classic', 'workout.js')),
-            }),
-            Object.freeze({
-                planType: 'nutrition',
-                exportName: 'buildClassicNutritionHtml',
-                filePath: join(TEMPLATES_ROOT, 'classic', 'nutrition.js'),
-                href: toModuleHref(join(TEMPLATES_ROOT, 'classic', 'nutrition.js')),
-            }),
-        ]),
-    }),
     elevate: Object.freeze({
         templateId: 'elevate',
         watchDir: join(TEMPLATES_ROOT, 'elevate'),
@@ -103,7 +81,7 @@ export const listStudioWatchRoots = () =>
 
 /**
  * Resolve trusted module import metadata for a Studio page.
- * Prefer an exact pageId match; fall back to planType-only entries (classic).
+ * Prefer an exact pageId match; fall back to planType-only entries.
  *
  * @param {string} templateId
  * @param {string} planType

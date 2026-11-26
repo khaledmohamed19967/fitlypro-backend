@@ -35,7 +35,7 @@ const SET_CONTENT_TIMEOUT_MS = 30_000;
  */
 const REMOTE_IMAGE_TIMEOUT_MS = 4_000;
 
-/** Best-effort wait for webfonts (Classic loads Inter from CDN). */
+/** Best-effort wait for webfonts (bundled or CDN fonts). */
 const FONT_READY_TIMEOUT_MS = 2_000;
 
 /**
