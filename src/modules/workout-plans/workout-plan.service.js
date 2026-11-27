@@ -27,8 +27,6 @@ import {
 import {
     DEFAULT_WORKOUT_PLAN_ICON,
     CANCELLABLE_ASSIGNMENT_STATUSES,
-    WARMUP_EXERCISE_CATEGORY,
-    CARDIO_EXERCISE_CATEGORY,
 } from './workout-plan.constants.js';
 
 /**
@@ -529,8 +527,6 @@ const processDayActivities = async (
     allowedIds
 ) => {
     const sorted = [...(activities ?? [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-    const requiredCategory =
-        section === 'warmup' ? WARMUP_EXERCISE_CATEGORY : CARDIO_EXERCISE_CATEGORY;
     const processed = [];
 
     for (let index = 0; index < sorted.length; index += 1) {
@@ -545,21 +541,14 @@ const processDayActivities = async (
         let catalogExercise = null;
         let exerciseObjectId = null;
 
+        // Warm-up / Cardio may reference any visible catalog exercise (any category).
+        // Main `exercises[]` keep their own required-id validation elsewhere.
         if (activity.exerciseId) {
             catalogExercise = await validateAndLoadExercise(
                 activity.exerciseId,
                 trainerId,
                 `${fieldPath}.exerciseId`
             );
-
-            if (catalogExercise.category !== requiredCategory) {
-                throw new ApiError(400, 'Exercise category is not compatible', [
-                    {
-                        field: `${fieldPath}.exerciseId`,
-                        message: `Exercise category must be ${requiredCategory} for ${section} activities`,
-                    },
-                ]);
-            }
 
             exerciseObjectId = catalogExercise._id;
         }

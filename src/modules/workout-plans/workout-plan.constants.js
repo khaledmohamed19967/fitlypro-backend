@@ -94,7 +94,3 @@ export const ACTIVITY_DURATION_MINUTES_MAX = 300;
 
 /** Max warm-up or cardio rows per workout day. */
 export const MAX_DAY_ACTIVITIES = 20;
-
-/** Exercise catalog category required when linking exerciseId into a section. */
-export const WARMUP_EXERCISE_CATEGORY = 'warmup';
-export const CARDIO_EXERCISE_CATEGORY = 'cardio';

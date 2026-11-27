@@ -21,16 +21,13 @@ import { readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import {
-    clearPdfRemoteImageCache,
     closeHtmlPdfBrowser,
-    getHtmlPdfActivePageCount,
+    getActivePdfRenderCount,
     isServerlessPdfRuntime,
     renderHtmlToPdf,
+    resolvePdfRenderDeadlineMs,
 } from '../src/modules/plan-exports/pdf/htmlPdfRenderer.js';
-import {
-    createPdfExportTrace,
-    resolvePdfExportDeadlineMs,
-} from '../src/modules/plan-exports/pdf/pdfExportTrace.js';
+import { createPdfExportTrace } from '../src/modules/plan-exports/pdf/pdfExportTrace.js';
 import {
     buildElevateNutritionHtml,
     deriveElevateNutritionViewModel,
@@ -196,7 +193,7 @@ const countRelativeImgs = (html) =>
 
 // --- Deadline helper ---
 {
-    const ms = resolvePdfExportDeadlineMs({ PDF_EXPORT_DEADLINE_MS: '50000' });
+    const ms = resolvePdfRenderDeadlineMs({ PDF_EXPORT_DEADLINE_MS: '50000' });
     if (ms === 50_000) pass('PDF_EXPORT_DEADLINE_MS default margin config (50s)');
     else fail('PDF_EXPORT_DEADLINE_MS default margin config (50s)', String(ms));
 }
@@ -245,34 +242,47 @@ try {
     fail('large nutrition PDF valid', error instanceof Error ? error.message : String(error));
 }
 
-// --- Many pages / unique decorative image refs (local assets via routing) ---
+// --- Many pages stay compact with asset routing (corners are CSS, not data-URIs) ---
 try {
     const many = makeLargeNutrition({ meals: 24, foodsPerMeal: 4 });
-    const html = buildElevateNutritionHtml(many, { inlineAssets: false });
-    const relImgs = countRelativeImgs(html);
+    const htmlRouted = buildElevateNutritionHtml(many, { inlineAssets: false });
+    const htmlInlined = buildElevateNutritionHtml(many, { inlineAssets: true });
+    const metrics = getNutritionExportSafeMetrics(many);
     const pdf = await renderElevateNutritionPdf(many, {
         exportId: 'test-nutrition-many-images',
     });
-    if (isPdf(pdf) && relImgs >= 20 && countDataUriImgs(html) === 0) {
+    const routedKB = Buffer.byteLength(htmlRouted) / 1024;
+    const inlinedKB = Buffer.byteLength(htmlInlined) / 1024;
+    if (
+        isPdf(pdf) &&
+        metrics.totalPages >= 8 &&
+        countDataUriImgs(htmlRouted) === 0 &&
+        routedKB < inlinedKB * 0.55
+    ) {
         pass(
-            `many unique page image refs served via routing (${relImgs} relative imgs, pdf ${pdf.length} bytes)`
+            `many-page nutrition stays compact via routing (${Math.round(routedKB)}KB vs ${Math.round(inlinedKB)}KB, pages=${metrics.totalPages}, pdf ${pdf.length} bytes)`
         );
     } else {
         fail(
-            'many unique page image refs served via routing',
-            JSON.stringify({ relImgs, dataUris: countDataUriImgs(html), pdfOk: isPdf(pdf) })
+            'many-page nutrition stays compact via routing',
+            JSON.stringify({
+                routedKB: Math.round(routedKB),
+                inlinedKB: Math.round(inlinedKB),
+                dataUris: countDataUriImgs(htmlRouted),
+                pages: metrics.totalPages,
+                pdfOk: isPdf(pdf),
+            })
         );
     }
 } catch (error) {
     fail(
-        'many unique page image refs served via routing',
+        'many-page nutrition stays compact via routing',
         error instanceof Error ? error.message : String(error)
     );
 }
 
 // --- Slow + failed remote images (shared renderer; Nutrition path can still host them) ---
 {
-    clearPdfRemoteImageCache();
     const slowServer = createServer((req, res) => {
         if (req.url?.includes('fail')) {
             res.statusCode = 500;
@@ -308,10 +318,10 @@ try {
             margin: { top: '0', right: '0', bottom: '0', left: '0' },
             exportId: 'test-remote-images',
             planType: 'nutrition',
-            deadlineAt: Date.now() + 20_000,
+            deadlineMs: 20_000,
         });
         const ms = Date.now() - t0;
-        // Should not wait the full 2.5s * N sequentially beyond per-image cap (~4s parallel).
+        // Should not wait the full 2.5s * N sequentially beyond per-image/stage caps.
         if (isPdf(pdf) && ms < 12_000) {
             pass(`slow/failed remote images bounded (${ms}ms)`);
         } else {
@@ -324,7 +334,6 @@ try {
         );
     } finally {
         await new Promise((resolve) => slowServer.close(resolve));
-        clearPdfRemoteImageCache();
     }
 }
 
@@ -337,14 +346,14 @@ try {
         renderElevateNutritionPdf(largeModel, { exportId: 'concurrent-c' }),
     ]);
     const ms = Date.now() - t0;
-    if (buffers.every(isPdf) && getHtmlPdfActivePageCount() === 0) {
+    if (buffers.every(isPdf) && getActivePdfRenderCount() === 0) {
         pass(`concurrent nutrition exports (${buffers.length} PDFs, ${ms}ms, pages cleaned)`);
     } else {
         fail(
             'concurrent nutrition exports',
             JSON.stringify({
                 ok: buffers.map(isPdf),
-                activePages: getHtmlPdfActivePageCount(),
+                activePages: getActivePdfRenderCount(),
             })
         );
     }
@@ -357,31 +366,27 @@ try {
 
 // --- Deadline cleanup ---
 try {
-    const trace = createPdfExportTrace({
-        exportId: 'deadline-cleanup',
+    const trace = createPdfExportTrace('deadline-cleanup', {
         planType: 'nutrition',
-        deadlineMs: 30,
     });
     let threw = null;
     try {
         await renderElevateNutritionPdf(largeModel, {
             trace,
-            deadlineAt: Date.now() - 1,
-            exportId: 'deadline-cleanup',
+            deadlineMs: 1,
         });
     } catch (error) {
         threw = error;
     }
-    trace.finish({
-        ok: false,
-        error: threw || new Error('expected deadline'),
+    trace.fail({
+        phase: threw?.pdfPhase || 'render_deadline',
+        message: threw?.message || 'expected deadline',
     });
 
     if (
         threw &&
         threw.statusCode === 504 &&
-        threw.pdfPhase === 'deadline' &&
-        getHtmlPdfActivePageCount() === 0
+        getActivePdfRenderCount() === 0
     ) {
         pass('deadline cleanup closes page without leaking');
     } else {
@@ -390,7 +395,7 @@ try {
             JSON.stringify({
                 statusCode: threw?.statusCode,
                 pdfPhase: threw?.pdfPhase,
-                activePages: getHtmlPdfActivePageCount(),
+                activePages: getActivePdfRenderCount(),
                 message: threw?.message,
             })
         );

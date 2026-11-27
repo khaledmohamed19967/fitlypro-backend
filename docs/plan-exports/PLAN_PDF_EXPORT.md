@@ -49,5 +49,7 @@ Requests with `templateId: "classic"` (or any unknown id) are rejected with HTTP
 
 - Local: `playwright` + `npx playwright install chromium`
 - Production (Vercel): `playwright-core` + `@sparticuz/chromium` (see `htmlPdfRenderer.js`)
-- Vercel: keep legacy `builds`/`routes` so Express receives the original request path (not `/server.js`); `maxDuration` 60s via `server.js` `export const config`; Elevate assets via `builds[].config.includeFiles`
+- Vercel: keep legacy `builds`/`routes` so Express receives the original request path (not `/server.js`); `maxDuration` 60s + `memory` 1024 via **both** `server.js` `export const config` and `builds[].config` (builds config is what `@vercel/node` reliably applies); Elevate assets via `builds[].config.includeFiles`
+- Soft render deadline: `PDF_EXPORT_DEADLINE_MS` (default 50000) races the full Playwright render; timed-out exports return HTTP 504 and close the page without tearing down in-use shared browsers
+- Structured stage logs: JSON lines with `scope: "plan-export"` + `exportId` (also returned as `X-Export-Id`)
 - Frontend export modal loads templates from the API (Elevate only)

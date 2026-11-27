@@ -154,6 +154,56 @@ try {
             fail('empty HTML returns controlled ApiError', String(error?.message));
         }
     }
+
+    // Concurrent exports must not share mutable page state / must both succeed.
+    const [a, b] = await Promise.all([
+        renderHtmlToPdf(
+            '<!DOCTYPE html><html><body><h1>A</h1></body></html>'
+        ),
+        renderHtmlToPdf(
+            '<!DOCTYPE html><html><body><h1>B</h1></body></html>'
+        ),
+    ]);
+    if (isPdf(a) && isPdf(b)) {
+        pass('concurrent HTML→PDF exports both succeed');
+    } else {
+        fail('concurrent HTML→PDF exports both succeed', 'invalid pdf');
+    }
+
+    // Deadline must fail closed and leave active render count at 0.
+    try {
+        await renderHtmlToPdf(
+            '<!DOCTYPE html><html><body><h1>timeout</h1></body></html>',
+            {
+                deadlineMs: 1,
+                preparePage: async () => {
+                    await new Promise((resolve) => setTimeout(resolve, 50));
+                },
+            }
+        );
+        fail('render deadline returns 504 ApiError', 'no throw');
+    } catch (error) {
+        if (error?.statusCode === 504 && error?.pdfPhase) {
+            pass('render deadline returns 504 ApiError');
+        } else {
+            fail(
+                'render deadline returns 504 ApiError',
+                `${error?.statusCode} ${error?.pdfPhase} ${error?.message}`
+            );
+        }
+    }
+
+    const { getActivePdfRenderCount } = await import(
+        '../src/modules/plan-exports/pdf/htmlPdfRenderer.js'
+    );
+    if (getActivePdfRenderCount() === 0) {
+        pass('active render count is zero after timeout cleanup');
+    } else {
+        fail(
+            'active render count is zero after timeout cleanup',
+            String(getActivePdfRenderCount())
+        );
+    }
 } catch (error) {
     fail('local PDF smoke suite', error instanceof Error ? error.message : String(error));
 } finally {

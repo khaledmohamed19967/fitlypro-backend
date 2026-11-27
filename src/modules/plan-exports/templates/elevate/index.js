@@ -10,7 +10,7 @@
  */
 
 import { renderHtmlToPdf } from '../../pdf/htmlPdfRenderer.js';
-import { createPdfExportTrace } from '../../pdf/pdfExportTrace.js';
+import { countElevateHtmlPages } from '../../pdf/pdfExportTrace.js';
 import {
     buildElevateWorkoutHtml,
     buildHighlightedTitleHtml,
@@ -54,107 +54,63 @@ export const ELEVATE_NUTRITION_PDF_OPTIONS = Object.freeze({
 
 /**
  * @param {object} exportModel
- * @param {{
- *   trace?: ReturnType<typeof createPdfExportTrace>,
- *   deadlineAt?: number,
- *   exportId?: string,
- * }} [ctx]
+ * @param {{ trace?: object, modelMetrics?: object, deadlineMs?: number }} [options]
  * @returns {Promise<Buffer>}
  */
-export const renderElevateWorkoutPdf = async (exportModel, ctx = {}) => {
-    const ownsTrace = !ctx.trace;
-    const trace =
-        ctx.trace ||
-        createPdfExportTrace({
-            exportId: ctx.exportId || 'workout-render',
-            planType: 'workout',
-        });
-    const deadlineAt = ctx.deadlineAt || trace.deadlineAt;
+export const renderElevateWorkoutPdf = async (exportModel, options = {}) => {
+    const html = options.trace?.time
+        ? await options.trace.time('html_template', () =>
+              buildElevateWorkoutHtml(exportModel, { inlineAssets: false })
+          )
+        : buildElevateWorkoutHtml(exportModel, { inlineAssets: false });
 
-    try {
-        trace.mark('html_generate_start', { planType: 'workout' });
-        const html = buildElevateWorkoutHtml(exportModel, {
-            inlineAssets: false,
-        });
-        trace.mark('html_generate', {
-            htmlBytes: Buffer.byteLength(html),
-            inlinedAssets: false,
-        });
+    const htmlBytes = Buffer.byteLength(html, 'utf8');
+    const htmlPages = countElevateHtmlPages(html);
+    options.trace?.log?.('html_built', {
+        htmlBytes,
+        htmlPages,
+        inlinedAssets: false,
+        ...(options.modelMetrics || {}),
+    });
 
-        const buffer = await renderHtmlToPdf(html, {
-            ...ELEVATE_WORKOUT_PDF_OPTIONS,
-            trace,
-            deadlineAt,
-            exportId: ctx.exportId || trace.exportId,
-            planType: 'workout',
-        });
-
-        if (ownsTrace) {
-            trace.finish({ ok: true, extra: { pdfBytes: buffer.length } });
-        }
-        return buffer;
-    } catch (error) {
-        if (ownsTrace) {
-            trace.finish({ ok: false, error });
-        }
-        throw error;
-    }
+    return renderHtmlToPdf(html, {
+        ...ELEVATE_WORKOUT_PDF_OPTIONS,
+        trace: options.trace,
+        deadlineMs: options.deadlineMs,
+    });
 };
 
 /**
  * Elevate Nutrition — Cover, Daily Meal Plan, Supplements & Notes.
  *
  * @param {object} exportModel
- * @param {{
- *   trace?: ReturnType<typeof createPdfExportTrace>,
- *   deadlineAt?: number,
- *   exportId?: string,
- * }} [ctx]
+ * @param {{ trace?: object, modelMetrics?: object, deadlineMs?: number }} [options]
  * @returns {Promise<Buffer>}
  */
-export const renderElevateNutritionPdf = async (exportModel, ctx = {}) => {
-    const ownsTrace = !ctx.trace;
-    const trace =
-        ctx.trace ||
-        createPdfExportTrace({
-            exportId: ctx.exportId || 'nutrition-render',
-            planType: 'nutrition',
-        });
-    const deadlineAt = ctx.deadlineAt || trace.deadlineAt;
+export const renderElevateNutritionPdf = async (exportModel, options = {}) => {
+    const metrics =
+        options.modelMetrics || getNutritionExportSafeMetrics(exportModel);
 
-    try {
-        const metrics = getNutritionExportSafeMetrics(exportModel);
-        trace.mark('nutrition_prepare', metrics);
+    const html = options.trace?.time
+        ? await options.trace.time('html_template', () =>
+              buildElevateNutritionHtml(exportModel, { inlineAssets: false })
+          )
+        : buildElevateNutritionHtml(exportModel, { inlineAssets: false });
 
-        const html = buildElevateNutritionHtml(exportModel, {
-            inlineAssets: false,
-        });
-        trace.mark('html_generate', {
-            htmlBytes: Buffer.byteLength(html),
-            inlinedAssets: false,
-            totalPages: metrics.totalPages,
-            mealPages: metrics.mealPages,
-            notesPages: metrics.notesPages,
-        });
+    const htmlBytes = Buffer.byteLength(html, 'utf8');
+    const htmlPages = countElevateHtmlPages(html);
+    options.trace?.log?.('html_built', {
+        htmlBytes,
+        htmlPages,
+        inlinedAssets: false,
+        ...metrics,
+    });
 
-        const buffer = await renderHtmlToPdf(html, {
-            ...ELEVATE_NUTRITION_PDF_OPTIONS,
-            trace,
-            deadlineAt,
-            exportId: ctx.exportId || trace.exportId,
-            planType: 'nutrition',
-        });
-
-        if (ownsTrace) {
-            trace.finish({ ok: true, extra: { pdfBytes: buffer.length } });
-        }
-        return buffer;
-    } catch (error) {
-        if (ownsTrace) {
-            trace.finish({ ok: false, error });
-        }
-        throw error;
-    }
+    return renderHtmlToPdf(html, {
+        ...ELEVATE_NUTRITION_PDF_OPTIONS,
+        trace: options.trace,
+        deadlineMs: options.deadlineMs,
+    });
 };
 
 export {

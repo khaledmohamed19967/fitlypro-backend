@@ -796,6 +796,11 @@ body {
   flex: none;
 }
 
+/*
+ * Decorative page chrome as CSS backgrounds (not <img src>).
+ * Inlined once via the stylesheet instead of repeating multi-KB data-URIs on
+ * every meals/notes/detail page — critical for Nutrition multi-page PDF size.
+ */
 .page-workout-details .details-corner,
 .page-nutrition-meals .details-corner,
 .page-nutrition-notes .details-corner {
@@ -803,6 +808,7 @@ body {
   z-index: 1;
   top: 0;
   right: 0;
+  display: block;
   pointer-events: none;
   user-select: none;
 }
@@ -812,7 +818,7 @@ body {
 .page-nutrition-notes .details-corner-dark {
   width: 220px;
   height: 220px;
-  object-fit: cover;
+  background: url("images/top-corner-2.png") center / cover no-repeat;
   opacity: 0.95;
 }
 
@@ -821,7 +827,7 @@ body {
 .page-nutrition-notes .details-corner-lime {
   width: 150px;
   height: 200px;
-  object-fit: cover;
+  background: url("images/top-corner-1.png") center / cover no-repeat;
 }
 
 .page-workout-details .details-slash,
@@ -831,8 +837,10 @@ body {
   z-index: 1;
   right: 0;
   bottom: 0;
+  display: block;
   width: 210px;
-  height: auto;
+  height: 160px;
+  background: url("images/Frame-Cornars.png") right bottom / contain no-repeat;
   pointer-events: none;
   user-select: none;
 }
@@ -1063,6 +1071,7 @@ background: linear-gradient(90deg, #CCFF01 0%, #B6E600 100%);
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
+  margin-top: 12px;
 }
 
 .page-workout-details .details-table th,

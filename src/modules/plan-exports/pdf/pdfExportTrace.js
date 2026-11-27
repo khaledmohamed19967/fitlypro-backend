@@ -1,216 +1,224 @@
-/**
- * Stage-level tracing for plan PDF exports.
- * Logs safe metrics only — never client PII or plan content.
+﻿/**
+ * Safe, structured timing for plan PDF export (no PII).
  */
 
 import { randomUUID } from 'crypto';
 
-/** Default app deadline: below Vercel `maxDuration: 60` with response-flush margin. */
-export const DEFAULT_PDF_EXPORT_DEADLINE_MS = 50_000;
-
 /**
- * @param {NodeJS.ProcessEnv} [env]
- * @returns {number}
- */
-export const resolvePdfExportDeadlineMs = (env = process.env) => {
-    const raw = env.PDF_EXPORT_DEADLINE_MS;
-    if (raw == null || raw === '') return DEFAULT_PDF_EXPORT_DEADLINE_MS;
-    const n = Number(raw);
-    if (!Number.isFinite(n) || n < 5_000) return DEFAULT_PDF_EXPORT_DEADLINE_MS;
-    return Math.floor(n);
-};
-
-/**
- * @param {string} [incoming]
+ * @param {import('express').Request|null|undefined} req
  * @returns {string}
  */
-export const createExportId = (incoming) => {
-    const trimmed = typeof incoming === 'string' ? incoming.trim() : '';
-    if (trimmed && /^[A-Za-z0-9_-]{8,64}$/.test(trimmed)) return trimmed;
+export const createPdfExportId = (req) => {
+    const header =
+        req?.headers?.['x-request-id'] ||
+        req?.headers?.['x-vercel-id'] ||
+        req?.headers?.['x-correlation-id'];
+    if (typeof header === 'string' && header.trim()) {
+        return header.trim().slice(0, 128);
+    }
     return randomUUID();
 };
 
 /**
- * @param {{
- *   exportId: string,
- *   planType: 'workout'|'nutrition'|string,
- *   templateId?: string,
- *   deadlineMs?: number,
- * }} opts
+ * @param {object|null|undefined} exportModel
  */
-export const createPdfExportTrace = (opts) => {
-    const exportId = opts.exportId;
-    const planType = opts.planType;
-    const templateId = opts.templateId || 'elevate';
-    const deadlineMs =
-        opts.deadlineMs ?? resolvePdfExportDeadlineMs();
-    const startedAt = Date.now();
-    const deadlineAt = startedAt + deadlineMs;
-    /** @type {Array<{ stage: string, ms: number, at: number, meta?: Record<string, unknown> }>} */
-    const stages = [];
-    let lastAt = startedAt;
-    let finished = false;
-    let failureStage = null;
+export const summarizeExportModelMetrics = (exportModel) => {
+    const workoutDays = Array.isArray(exportModel?.content?.workoutDays)
+        ? exportModel.content.workoutDays
+        : [];
+    const nutritionDays = Array.isArray(exportModel?.content?.nutritionDays)
+        ? exportModel.content.nutritionDays
+        : [];
 
-    const base = () => ({
-        exportId,
-        planType,
-        templateId,
-        deadlineMs,
-    });
+    let exerciseCount = 0;
+    let warmupActivityCount = 0;
+    let cardioActivityCount = 0;
+    let mealCount = 0;
+    let foodItemCount = 0;
+    let remoteImageUrlCount = 0;
+    const uniqueRemoteImages = new Set();
 
-    const mark = (stage, meta) => {
-        const at = Date.now();
-        const ms = at - lastAt;
-        lastAt = at;
-        const entry = {
-            stage,
-            ms,
-            at,
-            ...(meta && typeof meta === 'object' ? { meta: sanitizeMeta(meta) } : {}),
-        };
-        stages.push(entry);
-        console.info('[pdf-export]', {
-            ...base(),
-            event: 'stage',
-            stage,
-            stageMs: ms,
-            elapsedMs: at - startedAt,
-            remainingMs: Math.max(0, deadlineAt - at),
-            ...(entry.meta ? { meta: entry.meta } : {}),
-        });
-        return entry;
-    };
+    for (const day of workoutDays) {
+        const exercises = Array.isArray(day.exercises) ? day.exercises : [];
+        const warmups = Array.isArray(day.warmupActivities)
+            ? day.warmupActivities
+            : [];
+        const cardios = Array.isArray(day.cardioActivities)
+            ? day.cardioActivities
+            : [];
+        exerciseCount += exercises.length;
+        warmupActivityCount += warmups.length;
+        cardioActivityCount += cardios.length;
 
-    const remainingMs = () => Math.max(0, deadlineAt - Date.now());
-
-    const isExpired = () => Date.now() >= deadlineAt;
-
-    /**
-     * Always emit a terminal log (success or failure), including deadline cases.
-     * @param {{ ok: boolean, error?: unknown, extra?: Record<string, unknown> }} result
-     */
-    const finish = (result) => {
-        if (finished) return;
-        finished = true;
-        const at = Date.now();
-        const totalMs = at - startedAt;
-        const ok = Boolean(result?.ok);
-        const err = result?.error;
-        const phase =
-            (err && typeof err === 'object' && 'pdfPhase' in err && err.pdfPhase) ||
-            failureStage ||
-            (ok ? null : 'unknown');
-
-        if (!ok && phase) {
-            failureStage = String(phase);
+        for (const row of [...exercises, ...warmups, ...cardios]) {
+            const url =
+                typeof row?.thumbnailUrl === 'string'
+                    ? row.thumbnailUrl.trim()
+                    : '';
+            if (/^https?:\/\//i.test(url)) {
+                remoteImageUrlCount += 1;
+                uniqueRemoteImages.add(url);
+            }
         }
+    }
 
-        console[ok ? 'info' : 'error']('[pdf-export]', {
-            ...base(),
-            event: ok ? 'complete' : 'failed',
-            ok,
-            totalMs,
-            deadlineHit: !ok && (phase === 'deadline' || isExpired()),
-            failureStage: failureStage || null,
-            stages: stages.map((s) => ({
-                stage: s.stage,
-                ms: s.ms,
-                ...(s.meta ? { meta: s.meta } : {}),
-            })),
-            ...(result?.extra && typeof result.extra === 'object'
-                ? sanitizeMeta(result.extra)
-                : {}),
-            ...(err
-                ? {
-                      errorMessage:
-                          err instanceof Error ? err.message : String(err),
-                      pdfPhase:
-                          err && typeof err === 'object' && 'pdfPhase' in err
-                              ? err.pdfPhase
-                              : undefined,
-                  }
-                : {}),
-        });
-    };
+    for (const day of nutritionDays) {
+        const meals = Array.isArray(day.meals) ? day.meals : [];
+        mealCount += meals.length;
+        for (const meal of meals) {
+            const foods = Array.isArray(meal.foodItems) ? meal.foodItems : [];
+            foodItemCount += foods.length;
+            for (const item of foods) {
+                const url =
+                    typeof item?.thumbnailUrl === 'string'
+                        ? item.thumbnailUrl.trim()
+                        : typeof item?.imageUrl === 'string'
+                          ? item.imageUrl.trim()
+                          : '';
+                if (/^https?:\/\//i.test(url)) {
+                    remoteImageUrlCount += 1;
+                    uniqueRemoteImages.add(url);
+                }
+            }
+        }
+    }
 
-    const setFailureStage = (stage) => {
-        failureStage = stage;
-    };
-
-    console.info('[pdf-export]', {
-        ...base(),
-        event: 'start',
-        startedAt,
-        deadlineAt,
-    });
+    const supplementCount = Array.isArray(exportModel?.plan?.supplements)
+        ? exportModel.plan.supplements.length
+        : 0;
+    const vitaminCount = Array.isArray(exportModel?.plan?.vitamins)
+        ? exportModel.plan.vitamins.length
+        : 0;
 
     return {
-        exportId,
-        planType,
-        templateId,
-        startedAt,
-        deadlineAt,
-        deadlineMs,
-        mark,
-        remainingMs,
-        isExpired,
-        finish,
-        setFailureStage,
-        getStages: () => stages.slice(),
+        planType: exportModel?.type ?? null,
+        workoutDayCount: workoutDays.length,
+        nutritionDayCount: nutritionDays.length,
+        exerciseCount,
+        warmupActivityCount,
+        cardioActivityCount,
+        mealCount,
+        foodItemCount,
+        supplementCount,
+        vitaminCount,
+        remoteImageUrlCount,
+        uniqueRemoteImageCount: uniqueRemoteImages.size,
     };
 };
 
 /**
- * Strip accidental sensitive keys from meta payloads.
- * @param {Record<string, unknown>} meta
+ * True when HTML references remote http(s) images (src or CSS url()).
+ * Used to skip image route/settle work for Nutrition (text-only food rows).
+ *
+ * @param {string} html
  */
-const sanitizeMeta = (meta) => {
-    const blocked = new Set([
-        'name',
-        'fullName',
-        'email',
-        'phone',
-        'client',
-        'clientName',
-        'notes',
-        'instruction',
-        'foodItems',
-        'meals',
-        'html',
-        'buffer',
-    ]);
-    /** @type {Record<string, unknown>} */
-    const out = {};
-    for (const [key, value] of Object.entries(meta)) {
-        if (blocked.has(key)) continue;
-        if (typeof value === 'string' && value.length > 200) {
-            out[key] = `[string:${value.length}]`;
-            continue;
+export const htmlHasRemoteImages = (html) => {
+    if (typeof html !== 'string' || !html) return false;
+    return (
+        /\bsrc=["']https?:\/\//i.test(html) ||
+        /\burl\(\s*["']?https?:\/\//i.test(html)
+    );
+};
+
+/**
+ * @param {string} html
+ */
+export const countElevateHtmlPages = (html) => {
+    if (typeof html !== 'string' || !html) return 0;
+    const matches = html.match(/class="[^"]*\bpage\b[^"]*"/g);
+    return matches ? matches.length : 0;
+};
+
+/**
+ * @param {string} exportId
+ * @param {object} [baseMeta]
+ */
+export const createPdfExportTrace = (exportId, baseMeta = {}) => {
+    const startedAt = Date.now();
+    /** @type {Record<string, { ms: number, ok: boolean, detail?: object }>} */
+    const stages = {};
+
+    const log = (event, payload = {}) => {
+        console.info(
+            JSON.stringify({
+                scope: 'plan-export',
+                event,
+                exportId,
+                elapsedMs: Date.now() - startedAt,
+                ...baseMeta,
+                ...payload,
+            })
+        );
+    };
+
+    /**
+     * @template T
+     * @param {string} stage
+     * @param {() => Promise<T>|T} fn
+     * @param {object} [detail]
+     * @returns {Promise<T>}
+     */
+    const time = async (stage, fn, detail = {}) => {
+        const t0 = Date.now();
+        try {
+            const result = await fn();
+            const ms = Date.now() - t0;
+            stages[stage] = { ms, ok: true, detail };
+            log('stage', { stage, ok: true, ms, ...detail });
+            return result;
+        } catch (error) {
+            const ms = Date.now() - t0;
+            stages[stage] = {
+                ms,
+                ok: false,
+                detail: {
+                    ...detail,
+                    message: error instanceof Error ? error.message : String(error),
+                },
+            };
+            log('stage', {
+                stage,
+                ok: false,
+                ms,
+                ...detail,
+                message: error instanceof Error ? error.message : String(error),
+            });
+            throw error;
         }
-        if (
-            typeof value === 'number' ||
-            typeof value === 'boolean' ||
-            value == null
-        ) {
-            out[key] = value;
-            continue;
-        }
-        if (Array.isArray(value)) {
-            out[key] = { length: value.length };
-            continue;
-        }
-        if (typeof value === 'object') {
-            out[key] = { keys: Object.keys(value).length };
-            continue;
-        }
-    }
-    return out;
+    };
+
+    const finish = (payload = {}) => {
+        log('complete', {
+            totalMs: Date.now() - startedAt,
+            stages,
+            ...payload,
+        });
+    };
+
+    const fail = (payload = {}) => {
+        log('failed', {
+            totalMs: Date.now() - startedAt,
+            stages,
+            ...payload,
+        });
+    };
+
+    return {
+        exportId,
+        startedAt,
+        stages,
+        log,
+        time,
+        finish,
+        fail,
+        totalMs: () => Date.now() - startedAt,
+    };
 };
 
 export default {
+    createPdfExportId,
     createPdfExportTrace,
-    createExportId,
-    resolvePdfExportDeadlineMs,
-    DEFAULT_PDF_EXPORT_DEADLINE_MS,
+    summarizeExportModelMetrics,
+    countElevateHtmlPages,
+    htmlHasRemoteImages,
 };
