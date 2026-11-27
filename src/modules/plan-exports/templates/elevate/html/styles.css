@@ -68,7 +68,7 @@ body {
   flex: none;
 }
 
-.page-workouts {
+.page.page-workouts {
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -76,9 +76,12 @@ body {
   gap: 10px;
   page-break-before: always;
   break-before: page;
-  /* Content-based height (not fixed A4). PDF box sized in contentPageSizes.js. */
+  /* Content-based height (not fixed A4). PDF box sized in contentPageSizes.js.
+     Higher specificity than `.page { height: 1123px }` so print engines cannot
+     keep the overview stuck at full A4 and stretch Example Week into it. */
   height: auto;
   min-height: 0;
+  max-height: none;
   overflow: visible;
 }
 
@@ -566,14 +569,19 @@ body {
   position: relative;
   z-index: 3;
   flex: none;
-  align-self: start;
+  align-self: flex-start;
   width: 100%;
   height: auto;
   min-height: 0;
+  max-height: none;
   padding: 12px 14px 14px;
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: 16px;
+  /* Keep the whole week card on one PDF page — prevents empty stretched
+     fragments on one page and day labels overlapping the next page. */
+  break-inside: avoid;
+  page-break-inside: avoid;
 }
 
 .example-week-head {
@@ -612,23 +620,31 @@ body {
 }
 
 .example-week-grid {
-  display: grid;
-  grid-template-columns: repeat(var(--example-week-cols, 7), 1fr);
-  /* Content-sized rows — never stretch day cards to fill leftover page height. */
-  grid-template-rows: auto;
-  grid-auto-rows: auto;
-  align-items: start;
-  align-content: start;
+  /* Flex row (not CSS Grid): production Chromium print was stretching grid
+     tracks to the page fragmentainer. Equal widths via flex-grow. */
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  align-content: flex-start;
+  justify-content: flex-start;
   height: auto;
   min-height: 0;
+  max-height: none;
   gap: 8px;
 }
 
 .week-day {
+  /* Equal-width flex items; height is content-based and pixel-locked in
+     preparePage so print fragmentainers cannot stretch cards page-tall. */
+  box-sizing: border-box;
+  flex: 1 1 0;
+  width: 0;
+  min-width: 0;
   min-height: 78px;
   height: auto;
   max-height: none;
-  align-self: start;
+  align-self: flex-start;
   border-radius: 0 0 12px 12px;
   background: rgba(255, 255, 255, 0.03);
   border: 2px solid rgba(255, 255, 255, 0.06);
@@ -639,8 +655,8 @@ body {
   gap: 4px;
   padding: 7px 4px;
   text-align: center;
-  min-width: 0;
-  flex: none;
+  break-inside: avoid;
+  page-break-inside: avoid;
 }
 
 .week-day.is-active {
@@ -650,6 +666,7 @@ body {
 .week-day-icon {
   width: 20px;
   height: 20px;
+  flex: none;
 }
 
 .week-day.is-active .week-day-icon {
@@ -1971,27 +1988,37 @@ background: linear-gradient(90deg, #CCFF01 0%, #B6E600 100%);
     break-after: avoid;
   }
 
-  /* Production Chromium can stretch flex/grid tracks to the page box; keep
-     Example Week day cards content-sized in print/PDF. */
-  .page-workouts .workouts-grid,
-  .example-week,
-  .example-week-grid {
-    flex: none !important;
+  /* Production Chromium can stretch tracks to the print fragmentainer.
+     Keep Example Week content-sized; pixel locks from preparePage win via
+     inline !important when present. */
+  .page.page-workouts {
     height: auto !important;
-    min-height: 0 !important;
+    max-height: none !important;
+  }
+
+  .page-workouts .workouts-grid {
+    flex: none !important;
+  }
+
+  .example-week {
+    flex: none !important;
+    align-self: flex-start !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
   }
 
   .example-week-grid {
-    align-items: start !important;
-    align-content: start !important;
-    grid-auto-rows: auto !important;
-    grid-template-rows: auto !important;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: flex-start !important;
+    align-content: flex-start !important;
   }
 
   .week-day {
-    height: auto !important;
-    align-self: start !important;
-    flex: none !important;
+    align-self: flex-start !important;
+    flex-grow: 0 !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
   }
 }
 

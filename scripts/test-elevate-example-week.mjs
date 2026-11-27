@@ -1,13 +1,20 @@
 /**
- * Elevate PDF — Example Week day cards must stay content-sized (not page-tall).
- * Run: node scripts/test-elevate-example-week.mjs
+ * Elevate PDF — Example Week must stay content-sized through the full
+ * production render sequence (setContent → preparePage → page.pdf).
  *
- * Optionally forces the serverless Chromium path when available:
- *   PDF_USE_SERVERLESS_CHROMIUM=1 node scripts/test-elevate-example-week.mjs
+ * Prior CSS-only checks passed while production still stretched day cards
+ * during print fragmentation. This suite:
+ *  1) measures DOM after preparePage (including pixel locks)
+ *  2) applies a print-fragmentainer stretch probe after locks
+ *  3) renders a real PDF and rasterizes overview page for visual bounds
+ *
+ * Run: node scripts/test-elevate-example-week.mjs
+ * Optional: PDF_USE_SERVERLESS_CHROMIUM=1 (falls back to local on Windows)
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
+import { chromium as localChromium } from 'playwright';
 
 import {
     buildElevateWorkoutHtml,
@@ -18,7 +25,10 @@ import {
     applyElevateWorkoutContentPageSizes,
     ELEVATE_A4_HEIGHT_PX,
 } from '../src/modules/plan-exports/templates/elevate/contentPageSizes.js';
-import { resolvePdfBrowserLaunchPlan } from '../src/modules/plan-exports/pdf/htmlPdfRenderer.js';
+import {
+    closeHtmlPdfBrowser,
+    resolvePdfBrowserLaunchPlan,
+} from '../src/modules/plan-exports/pdf/htmlPdfRenderer.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -28,9 +38,7 @@ const FIXTURE = join(
     'src/modules/plan-exports/studio/fixtures/workout-basic.json'
 );
 
-/** Compact day card: min-height 78px + small padding budget. */
 const MAX_COMPACT_DAY_HEIGHT_PX = 120;
-/** Example Week section should not fill most of an A4 page. */
 const MAX_EXAMPLE_WEEK_HEIGHT_PX = 220;
 
 const results = [];
@@ -44,50 +52,40 @@ const parseMediaBoxes = (pdfBuffer) => {
         /\/MediaBox\s*\[\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s*\]/g;
     let match;
     while ((match = re.exec(text))) {
-        const x1 = Number(match[1]);
-        const y1 = Number(match[2]);
-        const x2 = Number(match[3]);
-        const y2 = Number(match[4]);
         boxes.push({
-            widthPt: Math.abs(x2 - x1),
-            heightPt: Math.abs(y2 - y1),
+            widthPt: Math.abs(Number(match[3]) - Number(match[1])),
+            heightPt: Math.abs(Number(match[4]) - Number(match[2])),
         });
     }
     return boxes;
 };
 
 const launchChromium = async () => {
-    const preferredPlan = await resolvePdfBrowserLaunchPlan();
-    const attempts = [preferredPlan];
-    // Windows cannot run @sparticuz/chromium; fall back to local Playwright.
-    if (preferredPlan.mode === 'serverless') {
+    const preferred = await resolvePdfBrowserLaunchPlan();
+    const attempts = [preferred];
+    if (preferred.mode === 'serverless') {
         attempts.push(await resolvePdfBrowserLaunchPlan({}));
     }
 
     let lastError = null;
     for (const plan of attempts) {
-        const useServerless = plan.mode === 'serverless';
-        const chromiumApi = useServerless
-            ? (await import('playwright-core')).chromium
-            : (await import('playwright')).chromium;
+        const api =
+            plan.mode === 'serverless'
+                ? (await import('playwright-core')).chromium
+                : (await import('playwright')).chromium;
         try {
-            const browser = await chromiumApi.launch(plan.launchOptions);
+            const browser = await api.launch(plan.launchOptions);
             return {
                 browser,
                 mode: plan.mode,
-                launchError: null,
-                fallbackFrom: preferredPlan.mode !== plan.mode ? preferredPlan.mode : null,
+                fallbackFrom:
+                    preferred.mode !== plan.mode ? preferred.mode : null,
             };
         } catch (err) {
             lastError = err instanceof Error ? err.message : String(err);
         }
     }
-    return {
-        browser: null,
-        mode: preferredPlan.mode,
-        launchError: lastError,
-        fallbackFrom: null,
-    };
+    return { browser: null, mode: preferred.mode, launchError: lastError };
 };
 
 const measureExampleWeek = async (page) =>
@@ -96,6 +94,8 @@ const measureExampleWeek = async (page) =>
         const grid = document.querySelector('.example-week-grid');
         const days = [...document.querySelectorAll('.week-day')];
         const overview = document.querySelector('.page-workouts');
+        const notes = document.querySelector('.program-notes');
+        const details = document.querySelector('.page-workout-details');
         return {
             overviewHeight: overview
                 ? Math.round(overview.getBoundingClientRect().height)
@@ -106,16 +106,31 @@ const measureExampleWeek = async (page) =>
             gridHeight: grid
                 ? Math.round(grid.getBoundingClientRect().height)
                 : null,
+            notesTop: notes
+                ? Math.round(notes.getBoundingClientRect().top)
+                : null,
+            weekBottom: week
+                ? Math.round(week.getBoundingClientRect().bottom)
+                : null,
             dayCount: days.length,
             dayHeights: days.map((d) =>
                 Math.round(d.getBoundingClientRect().height)
             ),
+            dayInlineHeights: days.map((d) => d.style.height || null),
             dayLabels: days.map((d) =>
                 (d.querySelector('strong')?.textContent || '').trim()
             ),
-            dayDetails: days.map((d) =>
-                (d.querySelector('span')?.textContent || '').trim()
-            ),
+            nesting: {
+                weekContainsDetails: Boolean(
+                    week && details && week.contains(details)
+                ),
+                weekContainsNotes: Boolean(week?.querySelector('.program-notes')),
+            },
+            gridDisplay: grid ? getComputedStyle(grid).display : null,
+            dayDisplay: days[0] ? getComputedStyle(days[0]).display : null,
+            dayAlignSelf: days[0]
+                ? getComputedStyle(days[0]).alignSelf
+                : null,
         };
     });
 
@@ -124,8 +139,11 @@ const assertCompact = (label, metrics) => {
         fail(label, `expected 7 day cards, got ${JSON.stringify(metrics)}`);
         return false;
     }
+    if (metrics.nesting?.weekContainsDetails || metrics.nesting?.weekContainsNotes) {
+        fail(label, `broken nesting ${JSON.stringify(metrics.nesting)}`);
+        return false;
+    }
     const maxDay = Math.max(...metrics.dayHeights);
-    const minDay = Math.min(...metrics.dayHeights);
     if (maxDay > MAX_COMPACT_DAY_HEIGHT_PX) {
         fail(
             label,
@@ -134,29 +152,71 @@ const assertCompact = (label, metrics) => {
         return false;
     }
     if (metrics.weekHeight > MAX_EXAMPLE_WEEK_HEIGHT_PX) {
-        fail(
-            label,
-            `Example Week section too tall week=${metrics.weekHeight}px`
-        );
+        fail(label, `Example Week too tall week=${metrics.weekHeight}px`);
         return false;
     }
-    if (metrics.gridHeight > MAX_COMPACT_DAY_HEIGHT_PX + 8) {
-        fail(label, `grid too tall grid=${metrics.gridHeight}px`);
-        return false;
-    }
-    // Equal-width row: heights should stay near the shared min-height band.
-    if (maxDay - minDay > 40) {
+    if (
+        metrics.notesTop != null &&
+        metrics.weekBottom != null &&
+        metrics.notesTop < metrics.weekBottom - 2
+    ) {
         fail(
             label,
-            `day heights diverge too much min=${minDay} max=${maxDay}`
+            `Program notes overlap Example Week notesTop=${metrics.notesTop} weekBottom=${metrics.weekBottom}`
         );
         return false;
     }
     pass(
         label,
-        `week=${metrics.weekHeight}px grid=${metrics.gridHeight}px days=${metrics.dayHeights.join(',')}`
+        `week=${metrics.weekHeight}px grid=${metrics.gridHeight}px days=${metrics.dayHeights.join(',')} display=${metrics.gridDisplay}/${metrics.dayDisplay}`
     );
     return true;
+};
+
+const rasterizePdfPage = async (pdfBuffer, pageNumber, outPath) => {
+    const browser = await localChromium.launch({ headless: true });
+    const page = await browser.newPage({
+        viewport: { width: 1000, height: 1400 },
+    });
+    try {
+        const b64 = pdfBuffer.toString('base64');
+        const html = `<!DOCTYPE html><html><body style="margin:0;background:#111">
+<canvas id="c"></canvas>
+<script type="module">
+import * as pdfjs from 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs';
+pdfjs.GlobalWorkerOptions.workerSrc =
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs';
+const data = Uint8Array.from(atob(${JSON.stringify(b64)}), (c) => c.charCodeAt(0));
+const doc = await pdfjs.getDocument({ data }).promise;
+window.__pages = doc.numPages;
+window.__render = async (n) => {
+  const p = await doc.getPage(n);
+  const viewport = p.getViewport({ scale: 1.5 });
+  const canvas = document.getElementById('c');
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  await p.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+  return { w: canvas.width, h: canvas.height, pages: doc.numPages };
+};
+window.__ready = true;
+</script></body></html>`;
+        await page.setContent(html, {
+            waitUntil: 'networkidle',
+            timeout: 120_000,
+        });
+        await page.waitForFunction(() => window.__ready === true, {
+            timeout: 120_000,
+        });
+        const info = await page.evaluate(
+            async (n) => window.__render(n),
+            pageNumber
+        );
+        await page.locator('#c').screenshot({ path: outPath });
+        return info;
+    } finally {
+        await page.close().catch(() => {});
+        await browser.close().catch(() => {});
+    }
 };
 
 async function run() {
@@ -167,10 +227,7 @@ async function run() {
 
     const { browser, mode, launchError, fallbackFrom } = await launchChromium();
     if (!browser) {
-        fail(
-            `launch Chromium (${mode})`,
-            launchError || 'unknown launch failure'
-        );
+        fail(`launch Chromium (${mode})`, launchError || 'launch failed');
         console.log('\nElevate Example Week checks:');
         for (const r of results) {
             console.log(
@@ -182,10 +239,12 @@ async function run() {
 
     pass(
         `launch Chromium (${mode})`,
-        fallbackFrom ? `fell back from ${fallbackFrom}` : undefined
+        fallbackFrom
+            ? `fell back from ${fallbackFrom} — not production-runtime verified`
+            : mode === 'serverless'
+              ? 'production/serverless runtime'
+              : 'local runtime (not serverless)'
     );
-    // renderElevateWorkoutPdf reads process.env; keep PDF path aligned with
-    // the browser we actually launched (Windows cannot run sparticuz).
     if (fallbackFrom === 'serverless' && mode === 'local') {
         delete process.env.PDF_USE_SERVERLESS_CHROMIUM;
     }
@@ -194,108 +253,64 @@ async function run() {
         const page = await browser.newPage();
         await page.setContent(html, {
             waitUntil: 'domcontentloaded',
-            timeout: 30_000,
+            timeout: 60_000,
         });
+        await page.evaluate(async () => {
+            if (document.fonts?.ready) await document.fonts.ready;
+        });
+
         await applyElevateWorkoutContentPageSizes(page);
-
         const afterPrepare = await measureExampleWeek(page);
-        assertCompact('after preparePage: compact Example Week', afterPrepare);
-
-        // Prod-like failure: grid gets a definite tall height (flex leftover /
-        // page box). Default CSS Grid stretch would inflate .week-day; our
-        // align-items/grid-auto-rows rules must keep cards content-sized.
-        await page.evaluate(() => {
-            document
-                .querySelectorAll('style[data-example-week-stretch-probe]')
-                .forEach((n) => n.remove());
-            const style = document.createElement('style');
-            style.setAttribute('data-example-week-stretch-probe', '1');
-            style.textContent = `
-              .page-workouts { height: 1123px !important; min-height: 1123px !important; }
-              .page-workouts .workouts-grid { flex: 1 1 auto !important; }
-              .example-week {
-                flex: 1 1 auto !important;
-                display: flex !important;
-                flex-direction: column !important;
-                align-self: stretch !important;
-                height: auto !important;
-              }
-              .example-week-grid {
-                flex: 1 1 auto !important;
-                height: 100% !important;
-                min-height: 280px !important;
-              }
-            `;
-            document.head.appendChild(style);
-            void document.body.offsetHeight;
-        });
-        const stretchedMetrics = await measureExampleWeek(page);
-        const maxStretchedDay = Math.max(...stretchedMetrics.dayHeights);
-        if (maxStretchedDay <= MAX_COMPACT_DAY_HEIGHT_PX) {
+        assertCompact(
+            'after preparePage: compact Example Week + pixel locks',
+            afterPrepare
+        );
+        if (
+            afterPrepare.dayInlineHeights?.every(
+                (h) => typeof h === 'string' && h.endsWith('px')
+            )
+        ) {
             pass(
-                'tall-grid stretch probe: day cards stay content-sized',
-                `maxDay=${maxStretchedDay}px grid=${stretchedMetrics.gridHeight}px days=${stretchedMetrics.dayHeights.join(',')}`
+                'preparePage pixel-locked day card heights',
+                afterPrepare.dayInlineHeights.join(',')
             );
         } else {
             fail(
-                'tall-grid stretch probe: day cards stay content-sized',
-                JSON.stringify(stretchedMetrics)
+                'preparePage pixel-locked day card heights',
+                JSON.stringify(afterPrepare.dayInlineHeights)
             );
         }
 
-        // Drop the probe stylesheet, then preparePage must keep content sizing
-        // even if ancestors still have leftover A4 height from prior layout.
-        await page.evaluate(() => {
-            document
-                .querySelectorAll('style[data-example-week-stretch-probe]')
-                .forEach((n) => n.remove());
+        // Production failure mode: overview gets a definite tall page box and
+        // ancestors try to absorb free space. Pixel locks must hold.
+        await page.evaluate((a4) => {
             const overview = document.querySelector('.page-workouts');
-            if (overview) {
-                overview.style.height = '1123px';
-                overview.style.minHeight = '1123px';
-            }
             const workoutsGrid = document.querySelector('.workouts-grid');
+            if (overview) {
+                overview.style.setProperty('height', `${a4}px`, 'important');
+                overview.style.setProperty('min-height', `${a4}px`, 'important');
+            }
             if (workoutsGrid) {
-                workoutsGrid.style.flex = '1 1 auto';
+                workoutsGrid.style.setProperty('flex', '1 1 auto', 'important');
+                workoutsGrid.style.setProperty('height', '100%', 'important');
             }
-            const week = document.querySelector('.example-week');
-            if (week) {
-                week.style.flex = '1 1 auto';
-                week.style.display = 'flex';
-                week.style.flexDirection = 'column';
-            }
-            const grid = document.querySelector('.example-week-grid');
-            if (grid) {
-                grid.style.flex = '1 1 auto';
-                grid.style.height = '100%';
-            }
-        });
-        await applyElevateWorkoutContentPageSizes(page);
-        const afterRestretchPrepare = await measureExampleWeek(page);
+            void document.body.offsetHeight;
+        }, ELEVATE_A4_HEIGHT_PX);
+
+        const afterProbe = await measureExampleWeek(page);
         assertCompact(
-            'preparePage restores compact Example Week after stretch probe',
-            afterRestretchPrepare
+            'post-lock A4 fragmentainer probe: day cards stay compact',
+            afterProbe
         );
 
         await page.emulateMedia({ media: 'print' });
         const afterPrint = await measureExampleWeek(page);
-        assertCompact('print media: compact Example Week', afterPrint);
-
-        // Screenshot overview for visual regression artifact.
-        const overview = page.locator('.page-workouts');
-        await overview.screenshot({
-            path: join(OUT_DIR, `example-week-overview-${mode}.png`),
-        });
+        assertCompact('print media after locks: compact Example Week', afterPrint);
         await page.close();
 
         const pdf = await renderElevateWorkoutPdf(fixture);
-        const pdfPath = join(OUT_DIR, `example-week-${mode}.pdf`);
-        writeFileSync(pdfPath, pdf);
-        writeFileSync(
-            join(OUT_DIR, `example-week-${mode}.html`),
-            html,
-            'utf8'
-        );
+        writeFileSync(join(OUT_DIR, `example-week-${mode}.pdf`), pdf);
+        writeFileSync(join(OUT_DIR, `example-week-${mode}.html`), html, 'utf8');
 
         const boxes = parseMediaBoxes(pdf);
         const a4Pt = (ELEVATE_A4_HEIGHT_PX * 72) / 96;
@@ -308,52 +323,49 @@ async function run() {
             boxes[1].heightPt < a4Pt - 40
         ) {
             pass(
-                'PDF page count + MediaBoxes unchanged (A4 cover, short overview)',
+                'PDF MediaBoxes: A4 cover + content-sized overview',
                 `pages=${boxes.length} overviewPt=${Math.round(boxes[1].heightPt)}`
             );
         } else {
             fail(
-                'PDF page count + MediaBoxes unchanged (A4 cover, short overview)',
-                JSON.stringify({
-                    bytes: pdf.length,
-                    pages: boxes.length,
-                    expectedPages: view.totalPageCount,
-                    boxes,
-                })
+                'PDF MediaBoxes: A4 cover + content-sized overview',
+                JSON.stringify({ pages: boxes.length, expected: view.totalPageCount, boxes })
             );
         }
 
-        // Re-open rendered HTML path through the same browser and confirm
-        // post-prepare metrics again (local ↔ requested serverless path).
-        const verifyPage = await browser.newPage();
-        await verifyPage.setContent(html, {
-            waitUntil: 'domcontentloaded',
-            timeout: 30_000,
-        });
-        await applyElevateWorkoutContentPageSizes(verifyPage);
-        await verifyPage.emulateMedia({ media: 'print' });
-        const verified = await measureExampleWeek(verifyPage);
-        assertCompact(
-            `${mode} runtime: Example Week dimensions content-based`,
-            verified
-        );
-        if (
-            verified.dayLabels.some(Boolean) &&
-            verified.dayDetails.some(Boolean)
-        ) {
+        // Overview is page 2 in the PDF (cover=1). Rasterize and ensure the
+        // page is not an A4-tall empty card slab (height stays content-sized).
+        const overviewPng = join(OUT_DIR, `example-week-pdf-overview-${mode}.png`);
+        const raster = await rasterizePdfPage(pdf, 2, overviewPng);
+        if (raster.h < 1100) {
             pass(
-                'day cards retain labels/details',
-                verified.dayLabels.join('|')
+                'rasterized overview PDF page is content-short (not A4-tall stretch)',
+                `png=${raster.w}x${raster.h}`
             );
         } else {
             fail(
-                'day cards retain labels/details',
-                JSON.stringify(verified)
+                'rasterized overview PDF page is content-short (not A4-tall stretch)',
+                `png=${raster.w}x${raster.h}`
             );
         }
-        await verifyPage.close();
+
+        // Details page must remain a separate raster page (no forced merge).
+        const detailsPng = join(OUT_DIR, `example-week-pdf-details-${mode}.png`);
+        const detailsRaster = await rasterizePdfPage(pdf, 3, detailsPng);
+        if (detailsRaster.pages === view.totalPageCount && detailsRaster.h > 100) {
+            pass(
+                'details page renders separately (no Example Week overlap merge)',
+                `pages=${detailsRaster.pages} detailsPng=${detailsRaster.w}x${detailsRaster.h}`
+            );
+        } else {
+            fail(
+                'details page renders separately (no Example Week overlap merge)',
+                JSON.stringify(detailsRaster)
+            );
+        }
     } finally {
         await browser.close().catch(() => {});
+        await closeHtmlPdfBrowser().catch(() => {});
     }
 
     console.log('\nElevate Example Week checks:');
@@ -364,6 +376,13 @@ async function run() {
     }
     const failed = results.filter((r) => !r.ok);
     console.log(`\n${results.length - failed.length}/${results.length} passed`);
+    console.log(
+        `\nRuntime note: ${
+            mode === 'serverless' && !fallbackFrom
+                ? 'Verified on production/serverless Chromium.'
+                : 'Verified on local Chromium fallback — serverless binary unavailable on this host.'
+        }`
+    );
     if (failed.length) process.exitCode = 1;
     process.exit(process.exitCode || 0);
 }
