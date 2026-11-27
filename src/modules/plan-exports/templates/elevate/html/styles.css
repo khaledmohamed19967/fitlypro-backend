@@ -68,7 +68,7 @@ body {
   flex: none;
 }
 
-.page.page-workouts {
+.page-workouts {
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -76,12 +76,9 @@ body {
   gap: 10px;
   page-break-before: always;
   break-before: page;
-  /* Content-based height (not fixed A4). PDF box sized in contentPageSizes.js.
-     Higher specificity than `.page { height: 1123px }` so print engines cannot
-     keep the overview stuck at full A4 and stretch Example Week into it. */
+  /* Content-based height (not fixed A4). PDF box sized in contentPageSizes.js. */
   height: auto;
   min-height: 0;
-  max-height: none;
   overflow: visible;
 }
 
@@ -452,10 +449,6 @@ body {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  /* Do not absorb leftover page height — keeps Example Week content-sized. */
-  flex: none;
-  height: auto;
-  min-height: 0;
   gap: 16px;
 }
 
@@ -569,19 +562,11 @@ body {
   position: relative;
   z-index: 3;
   flex: none;
-  align-self: flex-start;
   width: 100%;
-  height: auto;
-  min-height: 0;
-  max-height: none;
   padding: 12px 14px 14px;
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: 16px;
-  /* Keep the whole week card on one PDF page — prevents empty stretched
-     fragments on one page and day labels overlapping the next page. */
-  break-inside: avoid;
-  page-break-inside: avoid;
 }
 
 .example-week-head {
@@ -590,7 +575,6 @@ body {
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 12px;
-  flex: none;
 }
 
 .example-week-title {
@@ -620,31 +604,13 @@ body {
 }
 
 .example-week-grid {
-  /* Flex row (not CSS Grid): production Chromium print was stretching grid
-     tracks to the page fragmentainer. Equal widths via flex-grow. */
-  display: flex;
-  flex-direction: row;
-  flex-wrap: nowrap;
-  align-items: flex-start;
-  align-content: flex-start;
-  justify-content: flex-start;
-  height: auto;
-  min-height: 0;
-  max-height: none;
+  display: grid;
+  grid-template-columns: repeat(var(--example-week-cols, 7), 1fr);
   gap: 8px;
 }
 
 .week-day {
-  /* Equal-width flex items; height is content-based and pixel-locked in
-     preparePage so print fragmentainers cannot stretch cards page-tall. */
-  box-sizing: border-box;
-  flex: 1 1 0;
-  width: 0;
-  min-width: 0;
   min-height: 78px;
-  height: auto;
-  max-height: none;
-  align-self: flex-start;
   border-radius: 0 0 12px 12px;
   background: rgba(255, 255, 255, 0.03);
   border: 2px solid rgba(255, 255, 255, 0.06);
@@ -655,8 +621,7 @@ body {
   gap: 4px;
   padding: 7px 4px;
   text-align: center;
-  break-inside: avoid;
-  page-break-inside: avoid;
+  min-width: 0;
 }
 
 .week-day.is-active {
@@ -666,7 +631,6 @@ body {
 .week-day-icon {
   width: 20px;
   height: 20px;
-  flex: none;
 }
 
 .week-day.is-active .week-day-icon {
@@ -832,6 +796,11 @@ body {
   flex: none;
 }
 
+/*
+ * Decorative page chrome as CSS backgrounds (not <img src>).
+ * Inlined once via the stylesheet instead of repeating multi-KB data-URIs on
+ * every meals/notes/detail page — critical for Nutrition multi-page PDF size.
+ */
 .page-workout-details .details-corner,
 .page-nutrition-meals .details-corner,
 .page-nutrition-notes .details-corner {
@@ -839,6 +808,7 @@ body {
   z-index: 1;
   top: 0;
   right: 0;
+  display: block;
   pointer-events: none;
   user-select: none;
 }
@@ -848,7 +818,7 @@ body {
 .page-nutrition-notes .details-corner-dark {
   width: 220px;
   height: 220px;
-  object-fit: cover;
+  background: url("images/top-corner-2.png") center / cover no-repeat;
   opacity: 0.95;
 }
 
@@ -857,7 +827,7 @@ body {
 .page-nutrition-notes .details-corner-lime {
   width: 150px;
   height: 200px;
-  object-fit: cover;
+  background: url("images/top-corner-1.png") center / cover no-repeat;
 }
 
 .page-workout-details .details-slash,
@@ -867,8 +837,10 @@ body {
   z-index: 1;
   right: 0;
   bottom: 0;
+  display: block;
   width: 210px;
-  height: auto;
+  height: 160px;
+  background: url("images/Frame-Cornars.png") right bottom / contain no-repeat;
   pointer-events: none;
   user-select: none;
 }
@@ -1986,39 +1958,6 @@ background: linear-gradient(90deg, #CCFF01 0%, #B6E600 100%);
   .page-workout-details:last-of-type {
     page-break-after: avoid;
     break-after: avoid;
-  }
-
-  /* Production Chromium can stretch tracks to the print fragmentainer.
-     Keep Example Week content-sized; pixel locks from preparePage win via
-     inline !important when present. */
-  .page.page-workouts {
-    height: auto !important;
-    max-height: none !important;
-  }
-
-  .page-workouts .workouts-grid {
-    flex: none !important;
-  }
-
-  .example-week {
-    flex: none !important;
-    align-self: flex-start !important;
-    break-inside: avoid !important;
-    page-break-inside: avoid !important;
-  }
-
-  .example-week-grid {
-    display: flex !important;
-    flex-direction: row !important;
-    align-items: flex-start !important;
-    align-content: flex-start !important;
-  }
-
-  .week-day {
-    align-self: flex-start !important;
-    flex-grow: 0 !important;
-    break-inside: avoid !important;
-    page-break-inside: avoid !important;
   }
 }
 

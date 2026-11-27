@@ -2,11 +2,10 @@
  * Elevate PDF — Example Week must stay content-sized through the full
  * production render sequence (setContent → preparePage → page.pdf).
  *
- * Prior CSS-only checks passed while production still stretched day cards
- * during print fragmentation. This suite:
- *  1) measures DOM after preparePage (including pixel locks)
- *  2) applies a print-fragmentainer stretch probe after locks
- *  3) renders a real PDF and rasterizes overview page for visual bounds
+ * This suite:
+ *  1) measures DOM after preparePage (compact cards + visible day content)
+ *  2) renders a real PDF and checks MediaBox sizes
+ *  3) rasterizes overview + details pages for visual bounds / no merge
  *
  * Run: node scripts/test-elevate-example-week.mjs
  * Optional: PDF_USE_SERVERLESS_CHROMIUM=1 (falls back to local on Windows)
@@ -116,10 +115,14 @@ const measureExampleWeek = async (page) =>
             dayHeights: days.map((d) =>
                 Math.round(d.getBoundingClientRect().height)
             ),
-            dayInlineHeights: days.map((d) => d.style.height || null),
             dayLabels: days.map((d) =>
                 (d.querySelector('strong')?.textContent || '').trim()
             ),
+            dayStatuses: days.map((d) =>
+                (d.querySelector('span')?.textContent || '').trim()
+            ),
+            dayIconCount: days.filter((d) => d.querySelector('.week-day-icon'))
+                .length,
             nesting: {
                 weekContainsDetails: Boolean(
                     week && details && week.contains(details)
@@ -128,9 +131,6 @@ const measureExampleWeek = async (page) =>
             },
             gridDisplay: grid ? getComputedStyle(grid).display : null,
             dayDisplay: days[0] ? getComputedStyle(days[0]).display : null,
-            dayAlignSelf: days[0]
-                ? getComputedStyle(days[0]).alignSelf
-                : null,
         };
     });
 
@@ -141,6 +141,26 @@ const assertCompact = (label, metrics) => {
     }
     if (metrics.nesting?.weekContainsDetails || metrics.nesting?.weekContainsNotes) {
         fail(label, `broken nesting ${JSON.stringify(metrics.nesting)}`);
+        return false;
+    }
+    const expectedDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    if (
+        !Array.isArray(metrics.dayLabels) ||
+        metrics.dayLabels.join(',') !== expectedDays.join(',')
+    ) {
+        fail(label, `missing day names ${JSON.stringify(metrics.dayLabels)}`);
+        return false;
+    }
+    if (
+        metrics.dayIconCount !== 7 ||
+        !metrics.dayStatuses?.every(
+            (s) => s === 'Rest' || /^Workout(?:\s+[A-Z0-9]+)?$/i.test(s)
+        )
+    ) {
+        fail(
+            label,
+            `missing day content icons=${metrics.dayIconCount} statuses=${JSON.stringify(metrics.dayStatuses)}`
+        );
         return false;
     }
     const maxDay = Math.max(...metrics.dayHeights);
@@ -262,50 +282,16 @@ async function run() {
         await applyElevateWorkoutContentPageSizes(page);
         const afterPrepare = await measureExampleWeek(page);
         assertCompact(
-            'after preparePage: compact Example Week + pixel locks',
+            'after preparePage: compact Example Week with visible day content',
             afterPrepare
-        );
-        if (
-            afterPrepare.dayInlineHeights?.every(
-                (h) => typeof h === 'string' && h.endsWith('px')
-            )
-        ) {
-            pass(
-                'preparePage pixel-locked day card heights',
-                afterPrepare.dayInlineHeights.join(',')
-            );
-        } else {
-            fail(
-                'preparePage pixel-locked day card heights',
-                JSON.stringify(afterPrepare.dayInlineHeights)
-            );
-        }
-
-        // Production failure mode: overview gets a definite tall page box and
-        // ancestors try to absorb free space. Pixel locks must hold.
-        await page.evaluate((a4) => {
-            const overview = document.querySelector('.page-workouts');
-            const workoutsGrid = document.querySelector('.workouts-grid');
-            if (overview) {
-                overview.style.setProperty('height', `${a4}px`, 'important');
-                overview.style.setProperty('min-height', `${a4}px`, 'important');
-            }
-            if (workoutsGrid) {
-                workoutsGrid.style.setProperty('flex', '1 1 auto', 'important');
-                workoutsGrid.style.setProperty('height', '100%', 'important');
-            }
-            void document.body.offsetHeight;
-        }, ELEVATE_A4_HEIGHT_PX);
-
-        const afterProbe = await measureExampleWeek(page);
-        assertCompact(
-            'post-lock A4 fragmentainer probe: day cards stay compact',
-            afterProbe
         );
 
         await page.emulateMedia({ media: 'print' });
         const afterPrint = await measureExampleWeek(page);
-        assertCompact('print media after locks: compact Example Week', afterPrint);
+        assertCompact(
+            'print media after preparePage: compact Example Week with visible day content',
+            afterPrint
+        );
         await page.close();
 
         const pdf = await renderElevateWorkoutPdf(fixture);

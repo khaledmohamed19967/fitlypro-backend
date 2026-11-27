@@ -23,29 +23,38 @@ export const createPdfExportId = (req) => {
  * @param {object|null|undefined} exportModel
  */
 export const summarizeExportModelMetrics = (exportModel) => {
-    const days = Array.isArray(exportModel?.content?.workoutDays)
+    const workoutDays = Array.isArray(exportModel?.content?.workoutDays)
         ? exportModel.content.workoutDays
-        : Array.isArray(exportModel?.content?.nutritionDays)
-          ? exportModel.content.nutritionDays
-          : [];
+        : [];
+    const nutritionDays = Array.isArray(exportModel?.content?.nutritionDays)
+        ? exportModel.content.nutritionDays
+        : [];
 
     let exerciseCount = 0;
     let warmupActivityCount = 0;
     let cardioActivityCount = 0;
+    let mealCount = 0;
+    let foodItemCount = 0;
     let remoteImageUrlCount = 0;
     const uniqueRemoteImages = new Set();
 
-    for (const day of days) {
+    for (const day of workoutDays) {
         const exercises = Array.isArray(day.exercises) ? day.exercises : [];
-        const warmups = Array.isArray(day.warmupActivities) ? day.warmupActivities : [];
-        const cardios = Array.isArray(day.cardioActivities) ? day.cardioActivities : [];
+        const warmups = Array.isArray(day.warmupActivities)
+            ? day.warmupActivities
+            : [];
+        const cardios = Array.isArray(day.cardioActivities)
+            ? day.cardioActivities
+            : [];
         exerciseCount += exercises.length;
         warmupActivityCount += warmups.length;
         cardioActivityCount += cardios.length;
 
         for (const row of [...exercises, ...warmups, ...cardios]) {
             const url =
-                typeof row?.thumbnailUrl === 'string' ? row.thumbnailUrl.trim() : '';
+                typeof row?.thumbnailUrl === 'string'
+                    ? row.thumbnailUrl.trim()
+                    : '';
             if (/^https?:\/\//i.test(url)) {
                 remoteImageUrlCount += 1;
                 uniqueRemoteImages.add(url);
@@ -53,20 +62,62 @@ export const summarizeExportModelMetrics = (exportModel) => {
         }
     }
 
+    for (const day of nutritionDays) {
+        const meals = Array.isArray(day.meals) ? day.meals : [];
+        mealCount += meals.length;
+        for (const meal of meals) {
+            const foods = Array.isArray(meal.foodItems) ? meal.foodItems : [];
+            foodItemCount += foods.length;
+            for (const item of foods) {
+                const url =
+                    typeof item?.thumbnailUrl === 'string'
+                        ? item.thumbnailUrl.trim()
+                        : typeof item?.imageUrl === 'string'
+                          ? item.imageUrl.trim()
+                          : '';
+                if (/^https?:\/\//i.test(url)) {
+                    remoteImageUrlCount += 1;
+                    uniqueRemoteImages.add(url);
+                }
+            }
+        }
+    }
+
+    const supplementCount = Array.isArray(exportModel?.plan?.supplements)
+        ? exportModel.plan.supplements.length
+        : 0;
+    const vitaminCount = Array.isArray(exportModel?.plan?.vitamins)
+        ? exportModel.plan.vitamins.length
+        : 0;
+
     return {
         planType: exportModel?.type ?? null,
-        workoutDayCount: Array.isArray(exportModel?.content?.workoutDays)
-            ? exportModel.content.workoutDays.length
-            : 0,
-        nutritionDayCount: Array.isArray(exportModel?.content?.nutritionDays)
-            ? exportModel.content.nutritionDays.length
-            : 0,
+        workoutDayCount: workoutDays.length,
+        nutritionDayCount: nutritionDays.length,
         exerciseCount,
         warmupActivityCount,
         cardioActivityCount,
+        mealCount,
+        foodItemCount,
+        supplementCount,
+        vitaminCount,
         remoteImageUrlCount,
         uniqueRemoteImageCount: uniqueRemoteImages.size,
     };
+};
+
+/**
+ * True when HTML references remote http(s) images (src or CSS url()).
+ * Used to skip image route/settle work for Nutrition (text-only food rows).
+ *
+ * @param {string} html
+ */
+export const htmlHasRemoteImages = (html) => {
+    if (typeof html !== 'string' || !html) return false;
+    return (
+        /\bsrc=["']https?:\/\//i.test(html) ||
+        /\burl\(\s*["']?https?:\/\//i.test(html)
+    );
 };
 
 /**
@@ -169,4 +220,5 @@ export default {
     createPdfExportTrace,
     summarizeExportModelMetrics,
     countElevateHtmlPages,
+    htmlHasRemoteImages,
 };

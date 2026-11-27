@@ -8,6 +8,7 @@
 
 import { ApiError } from '../../../utils/ApiError.js';
 import { EXERCISE_IMAGE_FALLBACK } from './exerciseImageFallback.js';
+import { htmlHasRemoteImages } from './pdfExportTrace.js';
 
 /** @type {import('playwright-core').Browser | null} */
 let sharedBrowser = null;
@@ -432,7 +433,18 @@ export const renderHtmlToPdf = async (html, pdfOptions = {}) => {
                 }
 
                 page = await time('page_create', () => browser.newPage());
-                uninstallRoute = await installImageResponseCache(page);
+
+                // Nutrition PDFs (and some workouts) use only inlined data-URI
+                // assets. Skip route interception + settle when there is nothing
+                // remote to fetch — saves cold-start budget on Vercel.
+                const needsRemoteImagePipeline = htmlHasRemoteImages(html);
+                if (needsRemoteImagePipeline) {
+                    uninstallRoute = await installImageResponseCache(page);
+                } else if (trace?.log) {
+                    trace.log('image_pipeline_skipped', {
+                        reason: 'no_remote_images',
+                    });
+                }
 
                 await time('set_content', () =>
                     page.setContent(html, {
@@ -450,14 +462,25 @@ export const renderHtmlToPdf = async (html, pdfOptions = {}) => {
                     Math.floor(remainingAfterContent * 0.35)
                 );
 
-                const imageStats = await time(
-                    'image_settle',
-                    () =>
-                        settleRemoteImages(page, {
-                            stageBudgetMs: imageBudget,
-                        }),
-                    { stageBudgetMs: imageBudget }
-                );
+                const imageStats = needsRemoteImagePipeline
+                    ? await time(
+                          'image_settle',
+                          () =>
+                              settleRemoteImages(page, {
+                                  stageBudgetMs: imageBudget,
+                              }),
+                          { stageBudgetMs: imageBudget }
+                      )
+                    : await time(
+                          'image_settle',
+                          async () => ({
+                              settled: 0,
+                              failed: 0,
+                              timedOutStage: false,
+                              skipped: true,
+                          }),
+                          { skipped: true, reason: 'no_remote_images' }
+                      );
 
                 await time('font_ready', () => waitForFontsReady(page));
 

@@ -1336,9 +1336,9 @@ const renderDetailPage = (
         : '';
 
     return `<section class="${pageClass}" aria-label="Workout plan details">
-    <img class="details-corner details-corner-dark" src="images/top-corner-2.png" alt="">
-    <img class="details-corner details-corner-lime" src="images/top-corner-1.png" alt="">
-    <img class="details-slash" src="images/Frame-Cornars.png" alt="">
+    <span class="details-corner details-corner-dark" aria-hidden="true"></span>
+    <span class="details-corner details-corner-lime" aria-hidden="true"></span>
+    <span class="details-slash" aria-hidden="true"></span>
 
     <p class="logo details-logo">
       <span class="logo-f">F</span><span class="logo-word">itlyPro</span>

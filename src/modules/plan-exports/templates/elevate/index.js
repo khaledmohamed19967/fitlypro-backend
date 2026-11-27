@@ -65,6 +65,7 @@ export const renderElevateWorkoutPdf = async (exportModel, options = {}) => {
     return renderHtmlToPdf(html, {
         ...ELEVATE_WORKOUT_PDF_OPTIONS,
         trace: options.trace,
+        deadlineMs: options.deadlineMs,
     });
 };
 
@@ -90,9 +91,11 @@ export const renderElevateNutritionPdf = async (exportModel, options = {}) => {
         ...(options.modelMetrics || {}),
     });
 
+    // Pass deadline through shared renderer (same budget as Workout).
     return renderHtmlToPdf(html, {
         ...ELEVATE_NUTRITION_PDF_OPTIONS,
         trace: options.trace,
+        deadlineMs: options.deadlineMs,
     });
 };
 
