@@ -773,7 +773,28 @@ body {
   color: #c9d0d6;
 }
 
-/* Decorative gym image stays in normal flow after Program Notes (no flex push). */
+/*
+ * Photo + footer stay in normal flow immediately after Program Notes.
+ * Unbreakable end block prevents Chromium print from fragmenting the gym
+ * photo onto the following Workout Plan page (empty overview gap + bleed).
+ */
+.page-workouts .workouts-end {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  flex: none;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  gap: 12px;
+  break-inside: avoid;
+  page-break-inside: avoid;
+  break-before: avoid;
+  page-break-before: avoid;
+}
+
 .page-workouts .workouts-photo {
   position: relative;
   z-index: 3;
@@ -788,7 +809,15 @@ body {
   border-radius: 12px;
   flex: none;
   min-height: 96px;
+  break-inside: avoid;
+  page-break-inside: avoid;
+  break-after: avoid;
+  page-break-after: avoid;
   user-select: none;
+}
+
+.page-workouts .workouts-end .workouts-photo {
+  margin: 0;
 }
 
 .page-workouts .workouts-footer {
@@ -802,6 +831,14 @@ body {
   font-size: 11px;
   color: var(--muted);
   letter-spacing: 0.01em;
+  break-inside: avoid;
+  page-break-inside: avoid;
+  break-before: avoid;
+  page-break-before: avoid;
+}
+
+.page-workouts .workouts-end .workouts-footer {
+  margin-top: 0;
 }
 
 /* —— Page 03+: WORKOUT PLAN details (flow layout; decorative corners absolute) —— */
@@ -2009,6 +2046,24 @@ background: linear-gradient(90deg, #CCFF01 0%, #B6E600 100%);
 
   .page-workouts .workouts-grid {
     flex: none !important;
+  }
+
+  .page-workouts .workouts-end,
+  .page-workouts .workouts-photo,
+  .page-workouts .workouts-footer {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  .page-workouts .workouts-end,
+  .page-workouts .workouts-photo {
+    break-before: avoid !important;
+    page-break-before: avoid !important;
+  }
+
+  .page-workouts .workouts-footer {
+    break-before: avoid !important;
+    page-break-before: avoid !important;
   }
 
   .example-week {

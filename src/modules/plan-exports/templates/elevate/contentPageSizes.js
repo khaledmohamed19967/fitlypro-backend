@@ -269,14 +269,73 @@ export const applyElevateContentPageSizes = async (page) => {
                 }
 
                 if (el.classList.contains('page-workouts')) {
+                    const end = el.querySelector('.workouts-end');
+                    if (end) {
+                        end.style.setProperty('flex', 'none', 'important');
+                        end.style.setProperty('break-inside', 'avoid', 'important');
+                        end.style.setProperty(
+                            'page-break-inside',
+                            'avoid',
+                            'important'
+                        );
+                        end.style.setProperty('break-before', 'avoid', 'important');
+                        end.style.setProperty(
+                            'page-break-before',
+                            'avoid',
+                            'important'
+                        );
+                    }
                     const photo = el.querySelector('.workouts-photo');
                     if (photo) {
-                        photo.style.marginTop = '12px';
-                        photo.style.marginBottom = '0';
                         photo.style.flex = 'none';
+                        photo.style.marginBottom = '0';
+                        // Keep a tight gap after notes when photo is not wrapped.
+                        if (!end) photo.style.marginTop = '12px';
+                        photo.style.setProperty(
+                            'break-inside',
+                            'avoid',
+                            'important'
+                        );
+                        photo.style.setProperty(
+                            'page-break-inside',
+                            'avoid',
+                            'important'
+                        );
+                        photo.style.setProperty(
+                            'break-after',
+                            'avoid',
+                            'important'
+                        );
+                        photo.style.setProperty(
+                            'page-break-after',
+                            'avoid',
+                            'important'
+                        );
                     }
                     const footer = el.querySelector('.workouts-footer');
-                    if (footer) footer.style.marginTop = '12px';
+                    if (footer) {
+                        if (!end) footer.style.marginTop = '12px';
+                        footer.style.setProperty(
+                            'break-inside',
+                            'avoid',
+                            'important'
+                        );
+                        footer.style.setProperty(
+                            'page-break-inside',
+                            'avoid',
+                            'important'
+                        );
+                        footer.style.setProperty(
+                            'break-before',
+                            'avoid',
+                            'important'
+                        );
+                        footer.style.setProperty(
+                            'page-break-before',
+                            'avoid',
+                            'important'
+                        );
+                    }
                     lockExampleWeekContentHeights(el);
                 }
 
@@ -310,10 +369,29 @@ export const applyElevateContentPageSizes = async (page) => {
                     // a stretched fragmentainer cannot inflate the page box.
                     if (el.classList.contains('page-workouts')) {
                         lockExampleWeekContentHeights(el);
+
+                        // Pixel-lock the gym photo to its laid-out height so print
+                        // cannot grow/shrink it and push it onto the next page.
+                        const photo = el.querySelector('.workouts-photo');
+                        if (photo) {
+                            void document.body.offsetHeight;
+                            const photoH = Math.ceil(
+                                Math.max(
+                                    photo.getBoundingClientRect().height,
+                                    96
+                                )
+                            );
+                            lockPx(photo, Math.min(240, photoH));
+                            photo.style.setProperty(
+                                'object-fit',
+                                'cover',
+                                'important'
+                            );
+                        }
+
                         void document.body.offsetHeight;
-                        // Overview: size from last in-flow child (footer), not the
-                        // possibly stretched page box — keeps MediaBox tight after
-                        // Example Week is excluded and print CSS unlocks height.
+                        // Overview: size from last in-flow child (end/footer), not
+                        // a stretched page box — includes photo + footer.
                         heightPx = Math.max(
                             measureInFlowContentHeight(el),
                             minContentHeight
@@ -330,6 +408,15 @@ export const applyElevateContentPageSizes = async (page) => {
                     // !important so @media print `height: auto` cannot drop the
                     // locked box and leave the named @page taller than content.
                     lockPx(el, heightPx);
+                    // Clip overflow so the photo cannot paint onto the next page
+                    // if print layout drifts by a few pixels.
+                    el.style.setProperty('overflow', 'hidden', 'important');
+                    el.style.setProperty('break-inside', 'avoid', 'important');
+                    el.style.setProperty(
+                        'page-break-inside',
+                        'avoid',
+                        'important'
+                    );
                 } else {
                     el.style.height = `${heightPx}px`;
                 }
