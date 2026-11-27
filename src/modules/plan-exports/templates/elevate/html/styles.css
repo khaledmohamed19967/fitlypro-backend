@@ -449,6 +449,10 @@ body {
   display: flex;
   flex-direction: column;
   align-items: stretch;
+  /* Do not absorb leftover page height — keeps Example Week content-sized. */
+  flex: none;
+  height: auto;
+  min-height: 0;
   gap: 16px;
 }
 
@@ -562,7 +566,10 @@ body {
   position: relative;
   z-index: 3;
   flex: none;
+  align-self: start;
   width: 100%;
+  height: auto;
+  min-height: 0;
   padding: 12px 14px 14px;
   background: var(--card);
   border: 1px solid var(--line);
@@ -575,6 +582,7 @@ body {
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 12px;
+  flex: none;
 }
 
 .example-week-title {
@@ -606,11 +614,21 @@ body {
 .example-week-grid {
   display: grid;
   grid-template-columns: repeat(var(--example-week-cols, 7), 1fr);
+  /* Content-sized rows — never stretch day cards to fill leftover page height. */
+  grid-template-rows: auto;
+  grid-auto-rows: auto;
+  align-items: start;
+  align-content: start;
+  height: auto;
+  min-height: 0;
   gap: 8px;
 }
 
 .week-day {
   min-height: 78px;
+  height: auto;
+  max-height: none;
+  align-self: start;
   border-radius: 0 0 12px 12px;
   background: rgba(255, 255, 255, 0.03);
   border: 2px solid rgba(255, 255, 255, 0.06);
@@ -622,6 +640,7 @@ body {
   padding: 7px 4px;
   text-align: center;
   min-width: 0;
+  flex: none;
 }
 
 .week-day.is-active {
@@ -1950,6 +1969,29 @@ background: linear-gradient(90deg, #CCFF01 0%, #B6E600 100%);
   .page-workout-details:last-of-type {
     page-break-after: avoid;
     break-after: avoid;
+  }
+
+  /* Production Chromium can stretch flex/grid tracks to the page box; keep
+     Example Week day cards content-sized in print/PDF. */
+  .page-workouts .workouts-grid,
+  .example-week,
+  .example-week-grid {
+    flex: none !important;
+    height: auto !important;
+    min-height: 0 !important;
+  }
+
+  .example-week-grid {
+    align-items: start !important;
+    align-content: start !important;
+    grid-auto-rows: auto !important;
+    grid-template-rows: auto !important;
+  }
+
+  .week-day {
+    height: auto !important;
+    align-self: start !important;
+    flex: none !important;
   }
 }
 

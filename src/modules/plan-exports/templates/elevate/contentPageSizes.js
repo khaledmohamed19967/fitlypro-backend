@@ -60,6 +60,37 @@ export const applyElevateContentPageSizes = async (page) => {
                     }
                     const footer = el.querySelector('.workouts-footer');
                     if (footer) footer.style.marginTop = '12px';
+
+                    // Lock Example Week to content height so day cards cannot
+                    // stretch when a flex/grid ancestor absorbs leftover page space
+                    // (observed in production/serverless Chromium PDF output).
+                    const workoutsGrid = el.querySelector('.workouts-grid');
+                    if (workoutsGrid) {
+                        workoutsGrid.style.flex = 'none';
+                        workoutsGrid.style.height = 'auto';
+                        workoutsGrid.style.minHeight = '0';
+                    }
+                    const exampleWeek = el.querySelector('.example-week');
+                    if (exampleWeek) {
+                        exampleWeek.style.flex = 'none';
+                        exampleWeek.style.height = 'auto';
+                        exampleWeek.style.minHeight = '0';
+                        exampleWeek.style.alignSelf = 'start';
+                    }
+                    const exampleGrid = el.querySelector('.example-week-grid');
+                    if (exampleGrid) {
+                        exampleGrid.style.height = 'auto';
+                        exampleGrid.style.minHeight = '0';
+                        exampleGrid.style.alignItems = 'start';
+                        exampleGrid.style.alignContent = 'start';
+                        exampleGrid.style.gridAutoRows = 'auto';
+                        exampleGrid.style.gridTemplateRows = 'auto';
+                    }
+                    el.querySelectorAll('.week-day').forEach((day) => {
+                        day.style.height = 'auto';
+                        day.style.alignSelf = 'start';
+                        day.style.flex = 'none';
+                    });
                 }
 
                 if (el.classList.contains('page-nutrition-notes')) {
