@@ -1998,10 +1998,11 @@ background: linear-gradient(90deg, #CCFF01 0%, #B6E600 100%);
     break-after: avoid;
   }
 
-  /* Production Chromium can stretch tracks to the print fragmentainer.
-     Keep Example Week content-sized; pixel locks from preparePage win via
-     inline !important when present. */
-  .page.page-workouts {
+  /* Before named-page locks: keep overview content-sized (not A4).
+     After preparePage adds elevate-named-page-*, inline !important height
+     from contentPageSizes.js must win — do not force height:auto then, or
+     the named @page box can stay taller than the painted content. */
+  .page.page-workouts:not([class*="elevate-named-page-"]) {
     height: auto !important;
     max-height: none !important;
   }

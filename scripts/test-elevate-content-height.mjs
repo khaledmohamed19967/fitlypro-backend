@@ -10,13 +10,22 @@ import { chromium } from 'playwright';
 import {
     buildElevateWorkoutHtml,
     deriveElevateViewModel,
+    ELEVATE_HTML_DIR,
+    ELEVATE_INCLUDE_EXAMPLE_WEEK_IN_PDF,
 } from '../src/modules/plan-exports/templates/elevate/page.js';
-import { renderElevateWorkoutPdf } from '../src/modules/plan-exports/templates/elevate/index.js';
+import {
+    ELEVATE_WORKOUT_PDF_OPTIONS,
+    renderElevateWorkoutPdf,
+} from '../src/modules/plan-exports/templates/elevate/index.js';
 import {
     applyElevateWorkoutContentPageSizes,
     ELEVATE_A4_HEIGHT_PX,
     ELEVATE_PAGE_WIDTH_PX,
 } from '../src/modules/plan-exports/templates/elevate/contentPageSizes.js';
+import {
+    closeHtmlPdfBrowser,
+    renderHtmlToPdf,
+} from '../src/modules/plan-exports/pdf/htmlPdfRenderer.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -333,6 +342,129 @@ async function run() {
     if (written.every((w) => w.bytes > 1000)) pass('all sample PDFs generated');
     else fail('all sample PDFs generated', JSON.stringify(written.map((w) => w.bytes)));
 
+    // Overview MediaBox must track in-flow content (footer), not leftover A4 /
+    // fragmentainer blank space — especially with Example Week excluded.
+    const overviewDays = [
+        day(1, 'Push', { exercises: [strength('Bench', 1), strength('Fly', 2)] }),
+        day(2, 'Pull', { exercises: [strength('Row', 1), strength('Curl', 2)] }),
+        day(3, 'Legs', {
+            exercises: [
+                strength('Squat', 1),
+                strength('RDL', 2),
+                strength('Lunge', 3),
+            ],
+        }),
+        day(4, 'Rest Day', {}),
+        day(5, 'Upper', { exercises: [strength('OHP', 1)] }),
+        day(6, 'Lower', { exercises: [strength('Leg Press', 1)] }),
+        day(7, 'Rest Day', {}),
+    ];
+    // Mark rest days empty the way production rest rows are detected.
+    overviewDays[3].exercises = [];
+    overviewDays[3].warmupActivities = [];
+    overviewDays[3].cardioActivities = [];
+    overviewDays[6].exercises = [];
+    overviewDays[6].warmupActivities = [];
+    overviewDays[6].cardioActivities = [];
+
+    const overviewModel = modelFromDays(overviewDays, 'Overview Slack Probe');
+    const overviewHtml = buildElevateWorkoutHtml(overviewModel, {
+        inlineAssets: false,
+    });
+
+    /** @type {{ pageH: number, contentBottom: number, slack: number, hasExampleWeek: boolean } | null} */
+    let overviewProbe = null;
+    const overviewPdf = await renderHtmlToPdf(overviewHtml, {
+        ...ELEVATE_WORKOUT_PDF_OPTIONS,
+        localAssetRoot: ELEVATE_HTML_DIR,
+        preparePage: async (page) => {
+            await applyElevateWorkoutContentPageSizes(page);
+            overviewProbe = await page.evaluate(() => {
+                const el = document.querySelector('.page-workouts');
+                if (!el) return null;
+                const footer = el.querySelector('.workouts-footer');
+                const pageTop = el.getBoundingClientRect().top;
+                const pageH = el.getBoundingClientRect().height;
+                const contentBottom = footer
+                    ? footer.getBoundingClientRect().bottom - pageTop
+                    : pageH;
+                return {
+                    pageH,
+                    contentBottom,
+                    slack: pageH - contentBottom,
+                    hasExampleWeek: Boolean(el.querySelector('.example-week')),
+                };
+            });
+        },
+        deadlineMs: 60_000,
+    });
+    writeFileSync(join(OUT_DIR, 'elevate-overview-content-slack.pdf'), overviewPdf);
+
+    const overviewBoxes = parseMediaBoxes(overviewPdf);
+    const overviewMediaPx =
+        overviewBoxes[1] != null
+            ? (overviewBoxes[1].heightPt * 96) / 72
+            : null;
+    const mediaSlack =
+        overviewMediaPx != null && overviewProbe != null
+            ? overviewMediaPx - overviewProbe.contentBottom
+            : null;
+    const MAX_OVERVIEW_SLACK_PX = 48;
+
+    if (!ELEVATE_INCLUDE_EXAMPLE_WEEK_IN_PDF && overviewProbe?.hasExampleWeek) {
+        fail(
+            'TEMP: Example Week stays excluded from overview HTML',
+            JSON.stringify(overviewProbe)
+        );
+    } else if (
+        !ELEVATE_INCLUDE_EXAMPLE_WEEK_IN_PDF &&
+        !overviewProbe?.hasExampleWeek
+    ) {
+        pass('TEMP: Example Week stays excluded from overview HTML');
+    }
+
+    if (
+        overviewProbe &&
+        overviewBoxes[0] &&
+        Math.abs(overviewBoxes[0].heightPt - a4Pt) < 3 &&
+        overviewBoxes[1] &&
+        overviewBoxes[1].heightPt < a4Pt - 40 &&
+        overviewProbe.slack <= MAX_OVERVIEW_SLACK_PX &&
+        mediaSlack != null &&
+        mediaSlack <= MAX_OVERVIEW_SLACK_PX &&
+        Math.abs(overviewMediaPx - overviewProbe.pageH) < 3
+    ) {
+        pass(
+            'overview MediaBox height matches in-flow content (no excess blank)',
+            `slack=${Math.round(mediaSlack)}px pageH=${Math.round(overviewProbe.pageH)}`
+        );
+    } else {
+        fail(
+            'overview MediaBox height matches in-flow content (no excess blank)',
+            JSON.stringify({
+                overviewProbe,
+                overviewMediaPx,
+                mediaSlack,
+                overviewPt: overviewBoxes[1]?.heightPt,
+                coverPt: overviewBoxes[0]?.heightPt,
+            })
+        );
+    }
+
+    // Detail pages after overview must remain content-sized (unchanged contract).
+    const detailBoxes = overviewBoxes.slice(2);
+    if (
+        detailBoxes.length >= 1 &&
+        detailBoxes.every((b) => b.heightPt < a4Pt - 40)
+    ) {
+        pass('detail pages stay content-sized while overview slack is tight');
+    } else {
+        fail(
+            'detail pages stay content-sized while overview slack is tight',
+            JSON.stringify(detailBoxes)
+        );
+    }
+
     console.log('\nElevate content-height checks:');
     for (const r of results) {
         console.log(`${r.ok ? 'PASS' : 'FAIL'}  ${r.name}${r.detail ? ` — ${r.detail}` : ''}`);
@@ -342,8 +474,16 @@ async function run() {
         const heights = w.boxes.map((b) => Math.round(b.heightPt)).join(', ');
         console.log(`- ${w.name}: ${w.pages} pages · MediaBox heights(pt)=[${heights}]`);
     }
+    if (overviewBoxes.length) {
+        console.log(
+            `- elevate-overview-content-slack.pdf: ${overviewBoxes.length} pages · MediaBox heights(pt)=[${overviewBoxes
+                .map((b) => Math.round(b.heightPt))
+                .join(', ')}] · slackPx=${mediaSlack != null ? Math.round(mediaSlack) : 'n/a'}`
+        );
+    }
     const failed = results.filter((r) => !r.ok);
     console.log(`\n${results.length - failed.length}/${results.length} passed`);
+    await closeHtmlPdfBrowser().catch(() => {});
     if (failed.length) process.exitCode = 1;
     process.exit(process.exitCode || 0);
 }

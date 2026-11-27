@@ -54,6 +54,32 @@ export const applyElevateContentPageSizes = async (page) => {
             };
 
             /**
+             * Height of in-flow content (ignores absolute decorations and any
+             * flex/fragmentainer stretch below the last visible child).
+             * @param {Element} el
+             */
+            const measureInFlowContentHeight = (el) => {
+                const cs = getComputedStyle(el);
+                const padBottom = parseFloat(cs.paddingBottom) || 0;
+                const pageTop = el.getBoundingClientRect().top;
+                const inFlow = [...el.children].filter((child) => {
+                    const childCs = getComputedStyle(child);
+                    return (
+                        childCs.display !== 'none' &&
+                        childCs.position !== 'absolute' &&
+                        childCs.position !== 'fixed'
+                    );
+                });
+                if (!inFlow.length) {
+                    return Math.ceil(el.getBoundingClientRect().height);
+                }
+                const contentBottom = Math.max(
+                    ...inFlow.map((child) => child.getBoundingClientRect().bottom)
+                );
+                return Math.ceil(contentBottom - pageTop + padBottom);
+            };
+
+            /**
              * Reset Example Week to intrinsic sizing, then pixel-lock measured
              * heights so print fragmentainers cannot stretch the cards.
              * @param {Element} pageEl
@@ -284,14 +310,29 @@ export const applyElevateContentPageSizes = async (page) => {
                     // a stretched fragmentainer cannot inflate the page box.
                     if (el.classList.contains('page-workouts')) {
                         lockExampleWeekContentHeights(el);
+                        void document.body.offsetHeight;
+                        // Overview: size from last in-flow child (footer), not the
+                        // possibly stretched page box — keeps MediaBox tight after
+                        // Example Week is excluded and print CSS unlocks height.
+                        heightPx = Math.max(
+                            measureInFlowContentHeight(el),
+                            minContentHeight
+                        );
+                    } else {
+                        const measured = Math.ceil(
+                            el.getBoundingClientRect().height
+                        );
+                        heightPx = Math.max(measured, minContentHeight);
                     }
-                    const measured = Math.ceil(
-                        el.getBoundingClientRect().height
-                    );
-                    heightPx = Math.max(measured, minContentHeight);
                 }
 
-                el.style.height = `${heightPx}px`;
+                if (el.classList.contains('page-workouts')) {
+                    // !important so @media print `height: auto` cannot drop the
+                    // locked box and leave the named @page taller than content.
+                    lockPx(el, heightPx);
+                } else {
+                    el.style.height = `${heightPx}px`;
+                }
                 el.classList.add(`elevate-named-page-${index}`);
                 rules.push(
                     `@page ${pageName} { size: ${pageWidth}px ${heightPx}px; margin: 0; }`
