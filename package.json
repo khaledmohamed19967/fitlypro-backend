@@ -30,6 +30,7 @@
     "test:pdf-studio": "node scripts/test-pdf-studio.mjs",
     "test:pdf-renderer": "node scripts/test-pdf-renderer-runtime.mjs",
     "test:elevate-nutrition-pdf": "node scripts/test-elevate-nutrition-pdf.mjs",
+    "test:elevate-example-week": "node scripts/test-elevate-example-week.mjs",
     "test:contact": "node scripts/test-contact.mjs"
   },
   "keywords": [

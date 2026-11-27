@@ -193,7 +193,7 @@ const assertCompact = (label, metrics) => {
     return true;
 };
 
-const rasterizePdfPage = async (pdfBuffer, pageNumber, outPath) => {
+const inspectPdfPage = async (pdfBuffer, pageNumber, outPath) => {
     const browser = await localChromium.launch({ headless: true });
     const page = await browser.newPage({
         viewport: { width: 1000, height: 1400 },
@@ -209,14 +209,21 @@ pdfjs.GlobalWorkerOptions.workerSrc =
 const data = Uint8Array.from(atob(${JSON.stringify(b64)}), (c) => c.charCodeAt(0));
 const doc = await pdfjs.getDocument({ data }).promise;
 window.__pages = doc.numPages;
-window.__render = async (n) => {
+window.__inspect = async (n) => {
   const p = await doc.getPage(n);
   const viewport = p.getViewport({ scale: 1.5 });
   const canvas = document.getElementById('c');
   canvas.width = viewport.width;
   canvas.height = viewport.height;
   await p.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
-  return { w: canvas.width, h: canvas.height, pages: doc.numPages };
+  const textContent = await p.getTextContent();
+  const text = textContent.items.map((item) => item.str).join(' ');
+  return {
+    w: canvas.width,
+    h: canvas.height,
+    pages: doc.numPages,
+    text,
+  };
 };
 window.__ready = true;
 </script></body></html>`;
@@ -228,7 +235,7 @@ window.__ready = true;
             timeout: 120_000,
         });
         const info = await page.evaluate(
-            async (n) => window.__render(n),
+            async (n) => window.__inspect(n),
             pageNumber
         );
         await page.locator('#c').screenshot({ path: outPath });
@@ -319,10 +326,10 @@ async function run() {
             );
         }
 
-        // Overview is page 2 in the PDF (cover=1). Rasterize and ensure the
-        // page is not an A4-tall empty card slab (height stays content-sized).
+        // Overview is page 2 in the PDF (cover=1). Rasterize + extract text so
+        // empty day cards (borders without Mon/Tue content) fail the suite.
         const overviewPng = join(OUT_DIR, `example-week-pdf-overview-${mode}.png`);
-        const raster = await rasterizePdfPage(pdf, 2, overviewPng);
+        const raster = await inspectPdfPage(pdf, 2, overviewPng);
         if (raster.h < 1100) {
             pass(
                 'rasterized overview PDF page is content-short (not A4-tall stretch)',
@@ -335,18 +342,104 @@ async function run() {
             );
         }
 
+        const expectedDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+        const overviewText = String(raster.text || '');
+        // PDF.js often inserts spaces between glyphs ("E x a m p l e").
+        const compactOverview = overviewText.replace(/\s+/g, '');
+        const missingDays = expectedDays.filter(
+            (d) => !compactOverview.includes(d)
+        );
+        const hasExampleWeek = /Example\s*week/i.test(overviewText);
+        const hasProgramNotes = /Program\s*notes/i.test(overviewText);
+        const hasDayStatuses =
+            /Rest/i.test(overviewText) && /Workout/i.test(overviewText);
+        if (
+            missingDays.length === 0 &&
+            hasExampleWeek &&
+            hasProgramNotes &&
+            hasDayStatuses
+        ) {
+            pass(
+                'overview PDF text includes all 7 day labels + Example Week + Program notes',
+                `textChars=${overviewText.length}`
+            );
+        } else {
+            fail(
+                'overview PDF text includes all 7 day labels + Example Week + Program notes',
+                JSON.stringify({
+                    missingDays,
+                    hasExampleWeek,
+                    hasProgramNotes,
+                    hasDayStatuses,
+                    sample: overviewText.slice(0, 220),
+                })
+            );
+        }
+
+        if (
+            afterPrepare.notesTop != null &&
+            afterPrepare.weekBottom != null &&
+            afterPrepare.notesTop - afterPrepare.weekBottom >= 8 &&
+            afterPrepare.notesTop - afterPrepare.weekBottom <= 48
+        ) {
+            pass(
+                'Program Notes follows Example Week with reasonable gap',
+                `gap=${afterPrepare.notesTop - afterPrepare.weekBottom}px`
+            );
+        } else {
+            fail(
+                'Program Notes follows Example Week with reasonable gap',
+                `notesTop=${afterPrepare.notesTop} weekBottom=${afterPrepare.weekBottom}`
+            );
+        }
+
+        if (
+            afterPrepare.overviewHeight != null &&
+            afterPrepare.weekHeight != null &&
+            afterPrepare.overviewHeight < ELEVATE_A4_HEIGHT_PX - 80 &&
+            afterPrepare.overviewHeight >
+                afterPrepare.weekHeight + 120
+        ) {
+            pass(
+                'overview page height matches content (not inherited tall A4)',
+                `overview=${afterPrepare.overviewHeight}px week=${afterPrepare.weekHeight}px`
+            );
+        } else {
+            fail(
+                'overview page height matches content (not inherited tall A4)',
+                JSON.stringify({
+                    overview: afterPrepare.overviewHeight,
+                    week: afterPrepare.weekHeight,
+                })
+            );
+        }
+
         // Details page must remain a separate raster page (no forced merge).
         const detailsPng = join(OUT_DIR, `example-week-pdf-details-${mode}.png`);
-        const detailsRaster = await rasterizePdfPage(pdf, 3, detailsPng);
-        if (detailsRaster.pages === view.totalPageCount && detailsRaster.h > 100) {
+        const detailsRaster = await inspectPdfPage(pdf, 3, detailsPng);
+        const detailsText = String(detailsRaster.text || '');
+        const compactDetails = detailsText.replace(/\s+/g, '');
+        const detailsStartsClean =
+            /WORKOUT\s*PLAN/i.test(detailsText) &&
+            !/Exampleweek/i.test(compactDetails);
+        if (
+            detailsRaster.pages === view.totalPageCount &&
+            detailsRaster.h > 100 &&
+            detailsStartsClean
+        ) {
             pass(
-                'details page renders separately (no Example Week overlap merge)',
+                'next page starts with its own Workout Plan content (no Example Week bleed)',
                 `pages=${detailsRaster.pages} detailsPng=${detailsRaster.w}x${detailsRaster.h}`
             );
         } else {
             fail(
-                'details page renders separately (no Example Week overlap merge)',
-                JSON.stringify(detailsRaster)
+                'next page starts with its own Workout Plan content (no Example Week bleed)',
+                JSON.stringify({
+                    pages: detailsRaster.pages,
+                    h: detailsRaster.h,
+                    detailsStartsClean,
+                    sample: detailsText.slice(0, 220),
+                })
             );
         }
     } finally {

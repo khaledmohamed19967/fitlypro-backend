@@ -4,6 +4,14 @@
  * Covers stay A4. Overview / detail / meals / notes pages are measured after
  * layout and assigned matching CSS named `@page` sizes so Chromium
  * (`preferCSSPageSize`) emits short pages instead of empty A4 space.
+ *
+ * Production Chromium (serverless / @sparticuz) can stretch CSS Grid / flex
+ * tracks to the print fragmentainer during `page.pdf()`. That emptied Example
+ * Week day-card content, left a tall empty overview fragment, and let the next
+ * page's header/artwork overlap. We therefore:
+ * 1) force content-sized overview layout
+ * 2) pixel-lock Example Week / day-card heights from measured content
+ * 3) then measure and assign page boxes
  */
 
 /** Design canvas width (matches `.page { width: 794px }`). */
@@ -15,6 +23,9 @@ export const ELEVATE_A4_HEIGHT_PX = 1123;
 /** Minimum content-sized page height so chrome/header never collapse. */
 const MIN_CONTENT_PAGE_HEIGHT_PX = 320;
 
+/** Soft cap for a single day card — content-based, not plan-specific. */
+const MAX_WEEK_DAY_HEIGHT_PX = 160;
+
 /**
  * Measure rendered Elevate pages and inject named `@page` sizes.
  * Must run after fonts/images settle, before `page.pdf()`.
@@ -23,7 +34,7 @@ const MIN_CONTENT_PAGE_HEIGHT_PX = 320;
  */
 export const applyElevateContentPageSizes = async (page) => {
     await page.evaluate(
-        ({ pageWidth, a4Height, minContentHeight }) => {
+        ({ pageWidth, a4Height, minContentHeight, maxWeekDayHeight }) => {
             const pages = Array.from(document.querySelectorAll('.page'));
             if (!pages.length) return;
 
@@ -32,6 +43,186 @@ export const applyElevateContentPageSizes = async (page) => {
                 el.classList.contains('page-workouts') ||
                 el.classList.contains('page-nutrition-meals') ||
                 el.classList.contains('page-nutrition-notes');
+
+            const lockPx = (el, heightPx) => {
+                const h = `${Math.max(1, Math.ceil(heightPx))}px`;
+                el.style.setProperty('height', h, 'important');
+                el.style.setProperty('max-height', h, 'important');
+                el.style.setProperty('min-height', h, 'important');
+                el.style.setProperty('flex-grow', '0', 'important');
+                el.style.setProperty('flex-shrink', '0', 'important');
+            };
+
+            /**
+             * Reset Example Week to intrinsic sizing, then pixel-lock measured
+             * heights so print fragmentainers cannot stretch the cards.
+             * @param {Element} pageEl
+             */
+            const lockExampleWeekContentHeights = (pageEl) => {
+                const workoutsGrid = pageEl.querySelector('.workouts-grid');
+                if (workoutsGrid) {
+                    workoutsGrid.style.setProperty('flex', 'none', 'important');
+                    workoutsGrid.style.setProperty('height', 'auto', 'important');
+                    workoutsGrid.style.setProperty('min-height', '0', 'important');
+                    workoutsGrid.style.setProperty(
+                        'max-height',
+                        'none',
+                        'important'
+                    );
+                }
+
+                const exampleWeeks = pageEl.querySelectorAll('.example-week');
+                exampleWeeks.forEach((exampleWeek) => {
+                    exampleWeek.style.setProperty('flex', 'none', 'important');
+                    exampleWeek.style.setProperty('height', 'auto', 'important');
+                    exampleWeek.style.setProperty('min-height', '0', 'important');
+                    exampleWeek.style.setProperty(
+                        'max-height',
+                        'none',
+                        'important'
+                    );
+                    exampleWeek.style.setProperty(
+                        'align-self',
+                        'flex-start',
+                        'important'
+                    );
+                    exampleWeek.style.setProperty(
+                        'break-inside',
+                        'avoid',
+                        'important'
+                    );
+                    exampleWeek.style.setProperty(
+                        'page-break-inside',
+                        'avoid',
+                        'important'
+                    );
+
+                    const exampleGrid =
+                        exampleWeek.querySelector('.example-week-grid');
+                    if (exampleGrid) {
+                        // Flex row avoids production Chromium print grid-track
+                        // stretch into the fragmentainer.
+                        exampleGrid.style.setProperty(
+                            'display',
+                            'flex',
+                            'important'
+                        );
+                        exampleGrid.style.setProperty(
+                            'flex-direction',
+                            'row',
+                            'important'
+                        );
+                        exampleGrid.style.setProperty(
+                            'flex-wrap',
+                            'nowrap',
+                            'important'
+                        );
+                        exampleGrid.style.setProperty(
+                            'align-items',
+                            'flex-start',
+                            'important'
+                        );
+                        exampleGrid.style.setProperty(
+                            'align-content',
+                            'flex-start',
+                            'important'
+                        );
+                        exampleGrid.style.setProperty(
+                            'height',
+                            'auto',
+                            'important'
+                        );
+                        exampleGrid.style.setProperty(
+                            'min-height',
+                            '0',
+                            'important'
+                        );
+                        exampleGrid.style.setProperty(
+                            'max-height',
+                            'none',
+                            'important'
+                        );
+                    }
+
+                    const days = [
+                        ...exampleWeek.querySelectorAll('.week-day'),
+                    ];
+                    days.forEach((day) => {
+                        day.style.removeProperty('height');
+                        day.style.removeProperty('max-height');
+                        day.style.removeProperty('min-height');
+                        day.style.setProperty('height', 'auto', 'important');
+                        day.style.setProperty('max-height', 'none', 'important');
+                        day.style.setProperty('min-height', '0', 'important');
+                        day.style.setProperty('flex', '1 1 0', 'important');
+                        day.style.setProperty(
+                            'align-self',
+                            'flex-start',
+                            'important'
+                        );
+                        day.style.setProperty('overflow', 'visible', 'important');
+                        day.style.setProperty(
+                            'break-inside',
+                            'avoid',
+                            'important'
+                        );
+                        day.style.setProperty(
+                            'page-break-inside',
+                            'avoid',
+                            'important'
+                        );
+                    });
+                });
+
+                void document.body.offsetHeight;
+
+                exampleWeeks.forEach((exampleWeek) => {
+                    const days = [
+                        ...exampleWeek.querySelectorAll('.week-day'),
+                    ];
+                    const dayHeights = days.map((day) => {
+                        const rectH = day.getBoundingClientRect().height;
+                        const borderY =
+                            (parseFloat(getComputedStyle(day).borderTopWidth) ||
+                                0) +
+                            (parseFloat(
+                                getComputedStyle(day).borderBottomWidth
+                            ) || 0);
+                        return Math.ceil(
+                            Math.max(rectH, day.scrollHeight + borderY)
+                        );
+                    });
+                    const targetDayHeight = Math.min(
+                        maxWeekDayHeight,
+                        Math.max(78, ...dayHeights, 78)
+                    );
+                    days.forEach((day) => {
+                        lockPx(day, targetDayHeight);
+                        day.style.setProperty('flex', '1 1 0', 'important');
+                        day.style.setProperty(
+                            'align-self',
+                            'flex-start',
+                            'important'
+                        );
+                    });
+
+                    const exampleGrid =
+                        exampleWeek.querySelector('.example-week-grid');
+                    if (exampleGrid) {
+                        void document.body.offsetHeight;
+                        lockPx(
+                            exampleGrid,
+                            exampleGrid.getBoundingClientRect().height
+                        );
+                    }
+
+                    void document.body.offsetHeight;
+                    lockPx(
+                        exampleWeek,
+                        exampleWeek.getBoundingClientRect().height
+                    );
+                });
+            };
 
             for (const el of pages) {
                 if (!isContentSized(el)) continue;
@@ -60,6 +251,7 @@ export const applyElevateContentPageSizes = async (page) => {
                     }
                     const footer = el.querySelector('.workouts-footer');
                     if (footer) footer.style.marginTop = '12px';
+                    lockExampleWeekContentHeights(el);
                 }
 
                 if (el.classList.contains('page-nutrition-notes')) {
@@ -71,6 +263,15 @@ export const applyElevateContentPageSizes = async (page) => {
                 }
             }
 
+            // Nutrition cover is A4-sized but still needs Example Week locks.
+            document
+                .querySelectorAll('.page-nutrition-cover')
+                .forEach((cover) => {
+                    if (cover.querySelector('.example-week')) {
+                        lockExampleWeekContentHeights(cover);
+                    }
+                });
+
             void document.body.offsetHeight;
 
             const rules = [];
@@ -79,7 +280,14 @@ export const applyElevateContentPageSizes = async (page) => {
                 let heightPx = a4Height;
 
                 if (isContentSized(el)) {
-                    const measured = Math.ceil(el.getBoundingClientRect().height);
+                    // Re-assert Example Week locks before measuring the page so
+                    // a stretched fragmentainer cannot inflate the page box.
+                    if (el.classList.contains('page-workouts')) {
+                        lockExampleWeekContentHeights(el);
+                    }
+                    const measured = Math.ceil(
+                        el.getBoundingClientRect().height
+                    );
                     heightPx = Math.max(measured, minContentHeight);
                 }
 
@@ -88,8 +296,25 @@ export const applyElevateContentPageSizes = async (page) => {
                 rules.push(
                     `@page ${pageName} { size: ${pageWidth}px ${heightPx}px; margin: 0; }`
                 );
-                rules.push(`.elevate-named-page-${index} { page: ${pageName}; }`);
+                rules.push(
+                    `.elevate-named-page-${index} { page: ${pageName}; }`
+                );
             });
+
+            // Final pass: page boxes now have definite heights; re-lock Example
+            // Week so print layout cannot redistribute leftover free space.
+            pages.forEach((el) => {
+                if (el.classList.contains('page-workouts')) {
+                    lockExampleWeekContentHeights(el);
+                }
+            });
+            document
+                .querySelectorAll('.page-nutrition-cover')
+                .forEach((cover) => {
+                    if (cover.querySelector('.example-week')) {
+                        lockExampleWeekContentHeights(cover);
+                    }
+                });
 
             document
                 .querySelectorAll('style[data-elevate-content-page-sizes]')
@@ -104,6 +329,7 @@ export const applyElevateContentPageSizes = async (page) => {
             pageWidth: ELEVATE_PAGE_WIDTH_PX,
             a4Height: ELEVATE_A4_HEIGHT_PX,
             minContentHeight: MIN_CONTENT_PAGE_HEIGHT_PX,
+            maxWeekDayHeight: MAX_WEEK_DAY_HEIGHT_PX,
         }
     );
 };
