@@ -3,6 +3,7 @@ import { validatePlanExportTemplatesQuery } from './plan-export.validator.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { ApiResponse } from '../../utils/ApiResponse.js';
 import { ApiError } from '../../utils/ApiError.js';
+import { createExportId } from './pdf/pdfExportTrace.js';
 
 /**
  * @desc    List available PDF export templates
@@ -37,7 +38,14 @@ export const getPlanExportTemplates = asyncHandler(async (req, res) => {
  */
 export const createPlanExport = asyncHandler(async (req, res) => {
     const trainerId = req.user.id;
-    const result = await planExportService.exportPlanPdf(req.body, trainerId);
+    const exportId = createExportId(
+        req.get('x-export-id') || req.body?.exportId
+    );
+
+    const result = await planExportService.exportPlanPdf(
+        { ...req.body, exportId },
+        trainerId
+    );
 
     res.setHeader('Content-Type', result.mimeType);
     res.setHeader(
@@ -45,5 +53,7 @@ export const createPlanExport = asyncHandler(async (req, res) => {
         `attachment; filename="${result.filename}"`
     );
     res.setHeader('Content-Length', result.buffer.length);
+    res.setHeader('X-Export-Id', result.exportId || exportId);
+    res.setHeader('Cache-Control', 'no-store');
     res.status(200).send(result.buffer);
 });

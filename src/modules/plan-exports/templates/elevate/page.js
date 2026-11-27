@@ -151,7 +151,14 @@ const readAssetBuffer = (relativePath) => {
 /**
  * @param {string} relativePath
  */
+/** Memoize data URIs so Studio inlining does not re-encode the same file. */
+const dataUriCache = new Map();
+
 const toDataUri = (relativePath) => {
+    const key = String(relativePath || '').replace(/\\/g, '/');
+    const cached = dataUriCache.get(key);
+    if (cached) return cached;
+
     const absolute = resolveSafeAssetPath(relativePath);
     const ext = absolute.slice(absolute.lastIndexOf('.')).toLowerCase();
     const mime = MIME_BY_EXT[ext];
@@ -159,7 +166,9 @@ const toDataUri = (relativePath) => {
         throw new Error(`Unsupported Elevate HTML asset type: ${relativePath}`);
     }
     const buffer = readAssetBuffer(relativePath);
-    return `data:${mime};base64,${buffer.toString('base64')}`;
+    const uri = `data:${mime};base64,${buffer.toString('base64')}`;
+    dataUriCache.set(key, uri);
+    return uri;
 };
 
 /**
@@ -1710,14 +1719,20 @@ export const inlineLocalAssets = (html) => {
 };
 
 /**
- * Production + Studio builder: author's HTML + export-model data + inlined assets.
+ * Production + Studio builder: author's HTML + export-model data + assets.
+ *
  * @param {object} exportModel
+ * @param {{ inlineAssets?: boolean }} [options]
+ *   `inlineAssets` (default true) embeds CSS/images/fonts as data URIs for Studio
+ *   srcdoc previews. Production PDF rendering should pass `false` and let
+ *   `htmlPdfRenderer` serve assets once via Playwright routing.
  * @returns {string}
  */
-export const buildElevateWorkoutHtml = (exportModel) => {
+export const buildElevateWorkoutHtml = (exportModel, options = {}) => {
+    const inlineAssets = options.inlineAssets !== false;
     const view = deriveElevateViewModel(exportModel);
     const withData = applyDynamicContent(readElevateHtmlEntryFile(), view);
-    const html = inlineLocalAssets(withData);
+    const html = inlineAssets ? inlineLocalAssets(withData) : withData;
 
     if (
         !html.includes('class="page page-cover"') ||

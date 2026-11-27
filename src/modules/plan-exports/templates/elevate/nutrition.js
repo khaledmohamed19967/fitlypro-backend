@@ -1261,19 +1261,68 @@ const applyNutritionDynamicContent = (html, view) => {
 };
 
 /**
+ * Safe structural metrics for PDF export tracing (no PII / food names).
+ *
+ * @param {object} exportModel
+ */
+export const getNutritionExportSafeMetrics = (exportModel) => {
+    const days = Array.isArray(exportModel?.content?.nutritionDays)
+        ? exportModel.content.nutritionDays
+        : [];
+    let mealCount = 0;
+    let foodItemCount = 0;
+    for (const day of days) {
+        const meals = Array.isArray(day?.meals) ? day.meals : [];
+        mealCount += meals.length;
+        for (const meal of meals) {
+            foodItemCount += Array.isArray(meal?.foodItems)
+                ? meal.foodItems.length
+                : 0;
+        }
+    }
+
+    let mealPages = 0;
+    let notesPages = 0;
+    let totalPages = 0;
+    try {
+        const view = deriveElevateNutritionViewModel(exportModel);
+        mealPages = view.mealPages?.length || 0;
+        notesPages = view.notesPages?.length || 0;
+        totalPages = view.totalPages || 0;
+    } catch {
+        // Metrics are best-effort; HTML build will surface real errors.
+    }
+
+    return {
+        dayCount: days.length,
+        mealCount,
+        foodItemCount,
+        mealPages,
+        notesPages,
+        totalPages,
+        // Nutrition PDF uses local decorative assets only (no remote food thumbs).
+        remoteFoodImages: 0,
+    };
+};
+
+/**
  * Production + Studio builder: Nutrition cover + packed meal/notes pages.
  *
  * @param {object} exportModel
+ * @param {{ inlineAssets?: boolean }} [options]
+ *   Production PDF path should pass `inlineAssets: false` so decorative images
+ *   are served once via the shared renderer instead of duplicated data URIs.
  * @returns {string}
  */
-export const buildElevateNutritionHtml = (exportModel) => {
+export const buildElevateNutritionHtml = (exportModel, options = {}) => {
+    const inlineAssets = options.inlineAssets !== false;
     const view = deriveElevateNutritionViewModel(exportModel);
     const withData = applyNutritionDynamicContent(
         readElevateNutritionHtmlEntryFile(),
         view
     );
 
-    let html = inlineLocalAssets(withData);
+    let html = inlineAssets ? inlineLocalAssets(withData) : withData;
 
     if (!html.includes(ELEVATE_NUTRITION_HTML_SOURCE_MARKER)) {
         html = html.replace(
@@ -1325,6 +1374,7 @@ export {
 export default {
     buildElevateNutritionHtml,
     deriveElevateNutritionViewModel,
+    getNutritionExportSafeMetrics,
     readElevateNutritionHtmlEntryFile,
     packMealPages,
     packNotesPages,

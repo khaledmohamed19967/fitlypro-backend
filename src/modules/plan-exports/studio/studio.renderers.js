@@ -37,9 +37,15 @@ export const resolveStudioHtmlBuilder = async (
  *
  * @param {string} templateId
  */
-export const resolveStudioPdfOptions = async (templateId) => {
+export const resolveStudioPdfOptions = async (templateId, planType) => {
     if (templateId === 'elevate') {
         const mod = await import('../templates/elevate/index.js');
+        if (planType === 'nutrition') {
+            return { ...mod.ELEVATE_NUTRITION_PDF_OPTIONS };
+        }
+        if (planType === 'workout') {
+            return { ...mod.ELEVATE_WORKOUT_PDF_OPTIONS };
+        }
         return { ...mod.ELEVATE_PDF_OPTIONS };
     }
     return {};

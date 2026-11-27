@@ -123,9 +123,10 @@ export const buildStudioHtml = async ({
 /**
  * @param {string} html
  * @param {string} templateId
+ * @param {string} [planType]
  */
-export const renderStudioPdf = async (html, templateId) => {
-    const pdfOptions = await resolveStudioPdfOptions(templateId);
+export const renderStudioPdf = async (html, templateId, planType) => {
+    const pdfOptions = await resolveStudioPdfOptions(templateId, planType);
     const buffer = await renderStudioPdfBuffer(html, pdfOptions);
     if (!Buffer.isBuffer(buffer) || buffer.length === 0) {
         throw new ApiError(500, 'PDF generation failed');
@@ -191,7 +192,11 @@ export const createStudioPreview = async (input) => {
     }
 
     if (input.format === 'pdf') {
-        const pdf = await renderStudioPdf(html, input.templateId);
+        const pdf = await renderStudioPdf(
+            html,
+            input.templateId,
+            input.planType
+        );
         return {
             format: 'pdf',
             buffer: pdf.buffer,
