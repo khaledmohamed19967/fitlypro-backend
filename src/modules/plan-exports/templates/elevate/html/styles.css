@@ -76,6 +76,10 @@ body {
   gap: 10px;
   page-break-before: always;
   break-before: page;
+  /* Content-based height (not fixed A4). PDF box sized in contentPageSizes.js. */
+  height: auto;
+  min-height: 0;
+  overflow: visible;
 }
 
 .hero {
@@ -731,7 +735,7 @@ body {
   color: #c9d0d6;
 }
 
-/* Spare vertical space sits above the banner so short plans still pin photo+footer down. */
+/* Decorative gym image stays in normal flow after Program Notes (no flex push). */
 .page-workouts .workouts-photo {
   position: relative;
   z-index: 3;
@@ -740,11 +744,11 @@ body {
   max-width: 718px;
   height: auto;
   max-height: 240px;
-  margin: auto auto 0;
+  margin: 12px 0 0;
   object-fit: cover;
   object-position: center;
   border-radius: 12px;
-  flex: 0 1 auto;
+  flex: none;
   min-height: 96px;
   user-select: none;
 }
@@ -756,7 +760,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 4px;
+  margin-top: 12px;
   font-size: 11px;
   color: var(--muted);
   letter-spacing: 0.01em;
@@ -773,6 +777,23 @@ body {
   gap: 10px;
   page-break-before: always;
   break-before: page;
+}
+
+/*
+ * Content-based height (not fixed A4) for workout details + nutrition meals/notes.
+ * Covers stay A4. PDF page boxes are sized in contentPageSizes.js.
+ */
+.page-workout-details,
+.page-nutrition-meals,
+.page-nutrition-notes {
+  height: auto;
+  min-height: 0;
+  overflow: visible;
+}
+
+.page-workout-details .details-stack,
+.page-nutrition-meals .details-stack {
+  flex: none;
 }
 
 .page-workout-details .details-corner,
@@ -843,6 +864,18 @@ body {
   color: #fff;
 }
 
+/* Keep section titles on one line within the page width. */
+.page-workout-details .details-title,
+.page-nutrition-meals .details-title,
+.page-nutrition-notes .details-title {
+  font-size: 28px;
+  line-height: 1;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: clip;
+}
+
 .page-workout-details .details-title span,
 .page-nutrition-meals .details-title span,
 .page-nutrition-notes .details-title span {
@@ -864,12 +897,26 @@ body {
   margin-bottom: 10px;
 }
 
+.page-workout-details .details-dek,
+.page-nutrition-meals .details-dek,
+.page-nutrition-notes .details-dek {
+  margin-top: 8px;
+  margin-bottom: 14px;
+}
+
+/* Later pages: logo only, then section content (no repeated document title/dek). */
+.page-workout-details--compact .details-logo,
+.page-nutrition-meals--compact .details-logo,
+.page-nutrition-notes--compact .details-logo {
+  margin-bottom: 16px;
+}
+
 .page-workout-details .details-stack,
 .page-nutrition-meals .details-stack,
 .page-nutrition-notes .details-stack {
   position: relative;
   z-index: 3;
-  flex: 1 1 auto;
+  flex: none;
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -1095,7 +1142,9 @@ background: linear-gradient(90deg, #CCFF01 0%, #B6E600 100%);
 .page-workout-details .details-row,
 .page-nutrition-meals .details-row,
 .page-nutrition-notes .details-row {
-  /* Rows stay with their JS-packed page; do not force CSS page breaks. */
+  /* Keep a full exercise/activity row together if Chromium reflows. */
+  break-inside: avoid;
+  page-break-inside: avoid;
 }
 
 .page-workout-details .details-row td,
@@ -1226,7 +1275,7 @@ background: linear-gradient(90deg, #CCFF01 0%, #B6E600 100%);
   /* Bleed past body left pad (16px) and card right pad (14px). */
   margin: 0 -14px 0 -16px;
   padding: 0 14px 0 16px;
-  min-height: 36px;
+  min-height: 42px;
   background: var(--section-bar);
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
@@ -1363,6 +1412,13 @@ background: linear-gradient(90deg, #CCFF01 0%, #B6E600 100%);
   letter-spacing: 0.01em;
 }
 
+/* Keep the footer under content with a small gap (not pinned to A4 bottom). */
+.page-workout-details .details-footer,
+.page-nutrition-meals .details-footer,
+.page-nutrition-notes .details-footer {
+  margin-top: 28px;
+}
+
 @page {
   size: A4;
   margin: 0;
@@ -1448,13 +1504,14 @@ background: linear-gradient(90deg, #CCFF01 0%, #B6E600 100%);
 .page-nutrition-notes .notes-bottom {
   position: relative;
   z-index: 3;
-  /* Fill remaining page space so the portrait can render at natural ratio; footer stays pinned. */
-  flex: 1 1 auto;
+  /* Content-sized: do not stretch to fill leftover A4 space. */
+  flex: none;
   min-height: 0;
   display: grid;
   grid-template-columns: 1fr 2fr;
   gap: 14px;
-  align-items: stretch;
+  align-items: start;
+  margin-top: 14px;
 }
 
 .page-nutrition-notes .notes-bottom > * {
@@ -1466,9 +1523,9 @@ background: linear-gradient(90deg, #CCFF01 0%, #B6E600 100%);
   display: block;
   width: auto;
   max-width: 100%;
-  height: 100%;
+  max-height: 280px;
+  height: auto;
   justify-self: start;
-  /* Full asset visible; height follows the row, width follows intrinsic ratio. */
   object-fit: contain;
   object-position: left top;
   border-radius: 16px;

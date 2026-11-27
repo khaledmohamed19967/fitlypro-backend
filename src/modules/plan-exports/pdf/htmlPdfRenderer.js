@@ -235,7 +235,9 @@ const waitForFontsReady = async (page, timeoutMs = FONT_READY_TIMEOUT_MS) => {
  * Render a full HTML document to a PDF Buffer.
  *
  * @param {string} html
- * @param {import('playwright-core').Page.pdfOptions} [pdfOptions]
+ * @param {import('playwright-core').Page.pdfOptions & {
+ *   preparePage?: (page: import('playwright-core').Page) => Promise<void> | void
+ * }} [pdfOptions]
  * @returns {Promise<Buffer>}
  */
 export const renderHtmlToPdf = async (html, pdfOptions = {}) => {
@@ -258,9 +260,14 @@ export const renderHtmlToPdf = async (html, pdfOptions = {}) => {
         await settleRemoteImages(page);
         await waitForFontsReady(page);
 
+        const { preparePage, ...chromePdfOptions } = pdfOptions;
+        if (typeof preparePage === 'function') {
+            await preparePage(page);
+        }
+
         const pdf = await page.pdf({
             ...DEFAULT_PDF_OPTIONS,
-            ...pdfOptions,
+            ...chromePdfOptions,
         });
 
         return Buffer.isBuffer(pdf) ? pdf : Buffer.from(pdf);

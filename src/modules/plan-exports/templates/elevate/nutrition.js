@@ -57,12 +57,8 @@ const TITLE_LAYOUT = Object.freeze({
 const NOTES_PAGE_DEK =
     'What to take alongside the meals, and your daily totals.';
 
-const NOTES_PAGE_DEK_CONTINUED = 'Continued from previous page.';
-
 const NOTES_CARD_LEDE =
     'What to take alongside the meals, with dose and timing.';
-
-const MEALS_PAGE_DEK_CONTINUED = 'Continued from previous page.';
 
 /** Static template guidance — not client-specific export data. */
 const DEFAULT_PLAN_GUIDANCE = Object.freeze([
@@ -88,7 +84,10 @@ const NOTES_HOWTO_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true">
  */
 const MEAL_PAGE_LAYOUT = Object.freeze({
     pageBudget: 920,
-    pageChrome: 110,
+    /** Logo + DAILY MEAL PLAN title + dek on the first meals page. */
+    pageChrome: 168,
+    /** Logo + padding/footer only on later meals pages. */
+    compactPageChrome: 72,
     cardChrome: 78,
     rowHeight: 34,
     cardGap: 18,
@@ -99,10 +98,13 @@ const MEAL_PAGE_LAYOUT = Object.freeze({
  */
 const NOTES_PAGE_LAYOUT = Object.freeze({
     pageBudget: 920,
-    pageChrome: 110,
+    /** Logo + SUPPLEMENTS & NOTES title + dek on the first notes page. */
+    pageChrome: 168,
+    /** Logo + padding/footer only on later notes pages. */
+    compactPageChrome: 72,
     cardChrome: 96,
     itemHeight: 52,
-    bottomChrome: 360,
+    bottomChrome: 320,
 });
 
 /**
@@ -113,19 +115,29 @@ const NOTES_PAGE_LAYOUT = Object.freeze({
  * @returns {{ blocks: object[] }[]}
  */
 const packMealPages = (meals = []) => {
-    const { pageBudget, pageChrome, cardChrome, rowHeight, cardGap } =
-        MEAL_PAGE_LAYOUT;
+    const {
+        pageBudget,
+        pageChrome,
+        compactPageChrome,
+        cardChrome,
+        rowHeight,
+        cardGap,
+    } = MEAL_PAGE_LAYOUT;
 
     /** @type {{ blocks: object[] }[]} */
     const pages = [];
     let currentBlocks = [];
-    let used = pageChrome;
+    const chromeForNextPage = () =>
+        pages.length === 0 && currentBlocks.length === 0
+            ? pageChrome
+            : compactPageChrome;
+    let used = chromeForNextPage();
 
     const flush = () => {
         if (!currentBlocks.length) return;
         pages.push({ blocks: currentBlocks });
         currentBlocks = [];
-        used = pageChrome;
+        used = chromeForNextPage();
     };
 
     /** @param {number} rowCount food rows + optional total row */
@@ -145,7 +157,12 @@ const packMealPages = (meals = []) => {
         const wholeHeight = estimateCard(wholeRows);
         const gap = currentBlocks.length ? cardGap : 0;
         const remaining = pageBudget - used - gap;
-        const fullPageCapacity = pageBudget - pageChrome;
+        // Next empty page uses compact chrome once any meals page exists.
+        const nextPageChrome =
+            pages.length > 0 || currentBlocks.length > 0
+                ? compactPageChrome
+                : pageChrome;
+        const fullPageCapacity = pageBudget - nextPageChrome;
 
         if (wholeHeight <= remaining) {
             pushBlock(
@@ -257,6 +274,7 @@ const packNotesPages = (entries = []) => {
     const {
         pageBudget,
         pageChrome,
+        compactPageChrome,
         cardChrome,
         itemHeight,
         bottomChrome,
@@ -264,6 +282,8 @@ const packNotesPages = (entries = []) => {
 
     const estimateCard = (count) =>
         cardChrome + Math.max(count, 1) * itemHeight;
+    const chromeAt = (pageIndex) =>
+        pageIndex === 0 ? pageChrome : compactPageChrome;
 
     if (!entries.length) {
         return [{ entries: [], continued: false, includeBottom: true }];
@@ -285,10 +305,12 @@ const packNotesPages = (entries = []) => {
     let continued = false;
 
     while (offset < entries.length) {
+        const pageIndex = pages.length;
+        const chrome = chromeAt(pageIndex);
         const remaining = entries.length - offset;
         const remainingHeight = estimateCard(remaining);
 
-        if (pageChrome + remainingHeight + bottomChrome <= pageBudget) {
+        if (chrome + remainingHeight + bottomChrome <= pageBudget) {
             pages.push({
                 entries: entries.slice(offset),
                 continued,
@@ -298,13 +320,13 @@ const packNotesPages = (entries = []) => {
             break;
         }
 
-        const available = pageBudget - pageChrome - cardChrome;
+        const available = pageBudget - chrome - cardChrome;
         let take = Math.max(1, Math.floor(available / itemHeight));
         take = Math.min(take, remaining);
 
         if (
             take >= remaining &&
-            pageChrome + remainingHeight + bottomChrome > pageBudget
+            chrome + remainingHeight + bottomChrome > pageBudget
         ) {
             pages.push({
                 entries: entries.slice(offset),
@@ -884,9 +906,18 @@ const renderMealPageHtml = (
       <p class="details-empty">No meals in this plan yet.</p>
     </article>`;
 
-    const dek = isFirstMealsPage ? mealsPageDek : MEALS_PAGE_DEK_CONTINUED;
+    const pageClass = isFirstMealsPage
+        ? 'page page-nutrition-meals'
+        : 'page page-nutrition-meals page-nutrition-meals--compact';
 
-    return `<section class="page page-nutrition-meals" aria-label="Daily meal plan" data-elevate="nutrition-meals">
+    // Section title + dek only on the first meals page (single-line heading).
+    const introHtml = isFirstMealsPage
+        ? `<h1 class="details-title">DAILY <span>MEAL PLAN</span></h1>
+    <p class="details-dek">${escapeHtml(mealsPageDek)}</p>
+`
+        : '';
+
+    return `<section class="${pageClass}" aria-label="Daily meal plan" data-elevate="nutrition-meals">
     <img class="details-corner details-corner-dark" src="images/top-corner-2.png" alt="">
     <img class="details-corner details-corner-lime" src="images/top-corner-1.png" alt="">
     <img class="details-slash" src="images/Frame-Cornars.png" alt="">
@@ -895,12 +926,7 @@ const renderMealPageHtml = (
       <span class="logo-f">F</span><span class="logo-word">itlyPro</span>
     </p>
 
-    <h1 class="details-title">
-      DAILY<br>
-      <span>MEAL PLAN</span>
-    </h1>
-    <p class="details-dek">${escapeHtml(dek)}</p>
-
+    ${introHtml}
     <div class="details-stack" data-elevate="nutrition-meals-stack">
       ${cards}
     </div>
@@ -1056,9 +1082,9 @@ const renderNotesPageHtml = (
     view,
     pageNumber,
     totalPages,
-    entryOffset
+    entryOffset,
+    { showIntro = false } = {}
 ) => {
-    const dek = page.continued ? NOTES_PAGE_DEK_CONTINUED : NOTES_PAGE_DEK;
     const cardHtml = renderSupplementsCardHtml(page.entries, {
         continued: page.continued,
         startIndex: entryOffset,
@@ -1082,7 +1108,18 @@ const renderNotesPageHtml = (
     </div>`
         : '';
 
-    return `<section class="page page-nutrition-notes" aria-label="Supplements and notes" data-elevate="nutrition-notes">
+    const pageClass = showIntro
+        ? 'page page-nutrition-notes'
+        : 'page page-nutrition-notes page-nutrition-notes--compact';
+
+    // Section title + dek only on the first notes page (single-line heading).
+    const introHtml = showIntro
+        ? `<h1 class="details-title">SUPPLEMENTS <span>&amp; NOTES</span></h1>
+    <p class="details-dek">${escapeHtml(NOTES_PAGE_DEK)}</p>
+`
+        : '';
+
+    return `<section class="${pageClass}" aria-label="Supplements and notes" data-elevate="nutrition-notes">
     <img class="details-corner details-corner-dark" src="images/top-corner-2.png" alt="">
     <img class="details-corner details-corner-lime" src="images/top-corner-1.png" alt="">
     <img class="details-slash" src="images/Frame-Cornars.png" alt="">
@@ -1091,12 +1128,7 @@ const renderNotesPageHtml = (
       <span class="logo-f">F</span><span class="logo-word">itlyPro</span>
     </p>
 
-    <h1 class="details-title">
-      SUPPLEMENTS<br>
-      <span>&amp; NOTES</span>
-    </h1>
-    <p class="details-dek">${escapeHtml(dek)}</p>
-
+    ${introHtml}
     <div class="details-stack" data-elevate="nutrition-notes-stack">
       ${stackContent}
     </div>
@@ -1212,7 +1244,8 @@ const applyNutritionDynamicContent = (html, view) => {
                 view,
                 (view.notesStartPageNumber || 2 + mealPages.length) + index,
                 view.totalPages,
-                entryOffset
+                entryOffset,
+                { showIntro: index === 0 }
             );
             entryOffset += page.entries?.length || 0;
             return html;

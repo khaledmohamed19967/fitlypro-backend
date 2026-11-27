@@ -53,7 +53,10 @@ const WORKOUT_THEME_COLORS = Object.freeze([
 /** Vertical budget for packing Page 03 tables onto A4 (794×1123). */
 const DETAIL_LAYOUT = Object.freeze({
     pageBudget: 920,
-    pageChrome: 96,
+    /** Logo + WORKOUT PLAN title + dek + padding/footer on the first detail page. */
+    pageChrome: 168,
+    /** Logo + padding/footer only (title/dek omitted on later detail pages). */
+    compactPageChrome: 72,
     cardChrome: 78,
     /** Section title bar + per-section column header row. */
     sectionHeaderHeight: 60,
@@ -829,147 +832,169 @@ const buildDetailWorkout = (day, index) => {
 };
 
 /**
- * Pack Warm-up / Main / Cardio sections onto one or more A4 detail pages.
- * Keeps section headers with at least one row; avoids orphan single trailing rows.
+ * Content height available for one workout card on a detail page.
+ * @param {boolean} compact later pages omit the WORKOUT PLAN intro
+ * @returns {number}
+ */
+const detailContentBudget = (compact = false) => {
+    const { pageBudget, pageChrome, compactPageChrome } = DETAIL_LAYOUT;
+    return pageBudget - (compact ? compactPageChrome : pageChrome);
+};
+
+/**
+ * Estimated height of a workout card containing the given section slices.
+ * @param {object[]} sectionSlices
+ * @returns {number}
+ */
+const estimateWorkoutCardHeight = (sectionSlices = []) => {
+    const { cardChrome, sectionHeaderHeight, rowHeight, sectionGap } =
+        DETAIL_LAYOUT;
+    if (!sectionSlices.length) return cardChrome;
+    return (
+        cardChrome +
+        sectionSlices.reduce(
+            (sum, slice, index) =>
+                sum +
+                (index > 0 ? sectionGap : 0) +
+                sectionHeaderHeight +
+                Math.max(slice.rows?.length || 0, 1) * rowHeight,
+            0
+        )
+    );
+};
+
+/**
+ * Pack detail pages so each workout day is one parent page containing its
+ * Warm-up + Exercise + Cardio child sections. Page breaks occur between
+ * workout days only. Oversized workouts continue at safe row boundaries.
  * @param {ReturnType<typeof buildDetailWorkout>[]} workouts
  */
 const packDetailPages = (workouts = []) => {
-    const {
-        pageBudget,
-        pageChrome,
-        cardChrome,
-        sectionHeaderHeight,
-        rowHeight,
-        sectionGap = 8,
-        cardGap,
-    } = DETAIL_LAYOUT;
+    const { sectionHeaderHeight, rowHeight, sectionGap, cardChrome } =
+        DETAIL_LAYOUT;
 
     /** @type {{ blocks: object[] }[]} */
     const pages = [];
-    let currentBlocks = [];
-    let used = pageChrome;
 
-    const flush = () => {
-        if (!currentBlocks.length) return;
-        pages.push({ blocks: currentBlocks });
-        currentBlocks = [];
-        used = pageChrome;
-    };
-
-    const estimateBlock = (sectionSlices) => {
-        if (!sectionSlices.length) {
-            return cardChrome + rowHeight;
-        }
-        return (
-            cardChrome +
-            sectionSlices.reduce(
-                (sum, slice, index) =>
-                    sum +
-                    (index > 0 ? sectionGap : 0) +
-                    sectionHeaderHeight +
-                    Math.max(slice.rows.length, 1) * rowHeight,
-                0
-            )
-        );
-    };
-
-    const pushBlock = (workout, sectionSlices, continued) => {
-        const height = estimateBlock(sectionSlices);
-        const gap = currentBlocks.length ? cardGap : 0;
-        if (currentBlocks.length && used + gap + height > pageBudget) {
-            flush();
-        }
-        const blockGap = currentBlocks.length ? cardGap : 0;
-        currentBlocks.push({
-            workout,
-            sections: sectionSlices,
-            exercises: sectionSlices.flatMap((slice) => slice.rows),
-            continued,
+    const pushWorkoutPage = (workout, sectionSlices, continued) => {
+        const metaBase = workout.meta || '0 exercises';
+        pages.push({
+            blocks: [
+                {
+                    workout,
+                    sections: sectionSlices,
+                    exercises: sectionSlices.flatMap((slice) => slice.rows || []),
+                    continued,
+                    meta: continued ? `${metaBase} (continued)` : metaBase,
+                },
+            ],
         });
-        used += blockGap + height;
     };
 
     for (const workout of workouts) {
-        const sections = Array.isArray(workout.sections) ? workout.sections : [];
-        if (!sections.length) {
-            pushBlock(workout, [], false);
+        const sections = (Array.isArray(workout.sections) ? workout.sections : [])
+            .map((section) => ({
+                id: section.id,
+                label: section.label,
+                accent: section.accent,
+                countLabel: section.countLabel,
+                showHeader: true,
+                rows: Array.isArray(section.rows) ? [...section.rows] : [],
+            }))
+            .filter((section) => section.rows.length > 0);
+
+        // Empty days (e.g. rest) are excluded upstream; never emit blank detail pages.
+        if (!sections.length) continue;
+
+        // Prefer one unified page when the full workout fits.
+        const compactFirst = pages.length > 0;
+        if (
+            estimateWorkoutCardHeight(sections) <=
+            detailContentBudget(compactFirst)
+        ) {
+            pushWorkoutPage(workout, sections, false);
             continue;
         }
 
-        /** @type {object[]} */
-        let openSlices = [];
-        let openContinued = false;
-        let openUsed = 0;
+        // Oversized workout: pack as many complete rows as fit; continue at row boundaries.
+        /** @type {{ id: string, label: string, accent: string, countLabel: string, showHeader: boolean, rows: object[] }[]} */
+        let queue = sections.map((section) => ({
+            ...section,
+            rows: [...section.rows],
+        }));
+        let continued = false;
 
-        const commitOpen = () => {
-            if (!openSlices.length) return;
-            pushBlock(workout, openSlices, openContinued);
-            openSlices = [];
-            openUsed = 0;
-            openContinued = true;
-        };
+        while (queue.some((section) => section.rows.length > 0)) {
+            const compact = pages.length > 0;
+            const room = detailContentBudget(compact);
+            /** @type {object[]} */
+            const pageSlices = [];
+            let used = cardChrome;
 
-        const pageRoom = () => {
-            const gap = currentBlocks.length || openSlices.length ? cardGap : 0;
-            // Room left on the current PDF page after existing blocks + in-progress card chrome.
-            return pageBudget - used - gap - cardChrome - openUsed;
-        };
-
-        for (let s = 0; s < sections.length; s += 1) {
-            const section = sections[s];
-            let offset = 0;
-
-            while (offset < section.rows.length) {
-                let room = pageRoom();
-                const sliceGap = openSlices.length ? sectionGap : 0;
-                const headerCost = sliceGap + sectionHeaderHeight;
-                let maxRows = Math.floor((room - headerCost) / rowHeight);
-
-                if (maxRows < 1) {
-                    commitOpen();
-                    flush();
-                    openContinued = true;
-                    room = pageBudget - pageChrome - cardChrome;
-                    maxRows = Math.floor((room - sectionHeaderHeight) / rowHeight);
+            while (queue.length) {
+                const section = queue[0];
+                if (!section.rows.length) {
+                    queue.shift();
+                    continue;
                 }
 
+                const gap = pageSlices.length ? sectionGap : 0;
+                const headerCost = gap + sectionHeaderHeight;
+                const remainingRoom = room - used - headerCost;
+                let maxRows = Math.floor(remainingRoom / rowHeight);
+
                 if (maxRows < 1) {
+                    // No room for this section header + a row on the current page.
+                    if (pageSlices.length) break;
+                    // Always place at least one row so progress is guaranteed.
                     maxRows = 1;
                 }
 
-                const remaining = section.rows.length - offset;
+                const remaining = section.rows.length;
                 let take = Math.min(maxRows, remaining);
                 if (remaining > take && remaining - take === 1 && take > 1) {
                     take -= 1;
                 }
 
-                const rows = section.rows.slice(offset, offset + take);
-                openSlices.push({
+                pageSlices.push({
                     id: section.id,
                     label: section.label,
                     accent: section.accent,
                     countLabel: section.countLabel,
                     showHeader: true,
-                    rows,
+                    rows: section.rows.slice(0, take),
                 });
-                openUsed +=
-                    (openSlices.length > 1 ? sectionGap : 0) +
-                    sectionHeaderHeight +
-                    take * rowHeight;
-                offset += take;
-
-                if (offset < section.rows.length) {
-                    commitOpen();
-                    flush();
-                    openContinued = true;
+                used += headerCost + take * rowHeight;
+                section.rows = section.rows.slice(take);
+                if (!section.rows.length) {
+                    queue.shift();
+                } else {
+                    // Section continues on the next page; stop filling this page.
+                    break;
                 }
             }
-        }
 
-        commitOpen();
+            if (!pageSlices.length) {
+                // Safety: force one row forward to avoid an infinite loop.
+                const section = queue.find((s) => s.rows.length > 0);
+                if (!section) break;
+                pageSlices.push({
+                    id: section.id,
+                    label: section.label,
+                    accent: section.accent,
+                    countLabel: section.countLabel,
+                    showHeader: true,
+                    rows: section.rows.slice(0, 1),
+                });
+                section.rows = section.rows.slice(1);
+            }
+
+            pushWorkoutPage(workout, pageSlices, continued);
+            continued = true;
+            queue = queue.filter((section) => section.rows.length > 0);
+        }
     }
 
-    flush();
     if (!pages.length) {
         pages.push({ blocks: [] });
     }
@@ -1260,15 +1285,20 @@ const renderDetailWorkoutCard = (block) => {
       <p class="details-ex-name">No exercises</p>
     </section>`;
 
+    const meta =
+        typeof block.meta === 'string' && block.meta.trim()
+            ? block.meta.trim()
+            : continued
+              ? `${workout.meta} (continued)`
+              : workout.meta;
+
     return `<article class="details-card details-card--${escapeHtml(theme.id)}">
       <header class="details-card-head">
         <div class="details-pill">
           ${DETAILS_DUMBBELL_ICON}
           <span>${escapeHtml(title)}</span>
         </div>
-        <p class="details-card-meta">${escapeHtml(
-            continued ? `${workout.meta} (continued)` : workout.meta
-        )}</p>
+        <p class="details-card-meta">${escapeHtml(meta)}</p>
       </header>
       <div class="details-card-body details-card-body--sections">
         ${sectionsHtml}
@@ -1280,20 +1310,32 @@ const renderDetailWorkoutCard = (block) => {
  * @param {object} page
  * @param {number} pageNumber
  * @param {number} totalPages
- * @param {boolean} isFirstDetailsPage
+ * @param {{ showIntro?: boolean }} [options]
  */
-const renderDetailPage = (page, pageNumber, totalPages, isFirstDetailsPage) => {
+const renderDetailPage = (
+    page,
+    pageNumber,
+    totalPages,
+    { showIntro = false } = {}
+) => {
     const cards = page.blocks.length
         ? page.blocks.map((block) => renderDetailWorkoutCard(block)).join('\n      ')
         : `<article class="details-card details-card-empty">
       <p class="details-empty">No workouts in this plan yet.</p>
     </article>`;
 
-    const dek = isFirstDetailsPage
-        ? 'Warm-up, main exercises, and cardio. Tick a box for every set you finish.'
-        : 'Continued from previous page.';
+    const pageClass = showIntro
+        ? 'page page-workout-details'
+        : 'page page-workout-details page-workout-details--compact';
 
-    return `<section class="page page-workout-details" aria-label="Workout plan details">
+    // Title + dek only on the first detail page (single-line WORKOUT PLAN).
+    const introHtml = showIntro
+        ? `<h1 class="details-title">WORKOUT <span>PLAN</span></h1>
+    <p class="details-dek">Warm-up, main exercises, and cardio. Tick a box for every set you finish.</p>
+`
+        : '';
+
+    return `<section class="${pageClass}" aria-label="Workout plan details">
     <img class="details-corner details-corner-dark" src="images/top-corner-2.png" alt="">
     <img class="details-corner details-corner-lime" src="images/top-corner-1.png" alt="">
     <img class="details-slash" src="images/Frame-Cornars.png" alt="">
@@ -1302,12 +1344,7 @@ const renderDetailPage = (page, pageNumber, totalPages, isFirstDetailsPage) => {
       <span class="logo-f">F</span><span class="logo-word">itlyPro</span>
     </p>
 
-    <h1 class="details-title">
-      WORKOUT<br>
-      <span>PLAN</span>
-    </h1>
-    <p class="details-dek">${escapeHtml(dek)}</p>
-
+    ${introHtml}
     <div class="details-stack" data-elevate="workout-details-stack">
       ${cards}
     </div>
@@ -1527,7 +1564,7 @@ const applyDynamicContent = (html, view) => {
                 page,
                 view.detailsStartPageNumber + index,
                 view.totalPageCount,
-                index === 0
+                { showIntro: index === 0 }
             )
         )
         .join('\n\n  ');
