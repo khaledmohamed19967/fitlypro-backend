@@ -1,0 +1,305 @@
+{
+  "generatedAt": "2026-11-27T19:33:54.229Z",
+  "results": [
+    {
+      "label": "small-10",
+      "ok": true,
+      "totalMs": 1873,
+      "htmlBytes": 1013752,
+      "htmlPages": 4,
+      "pdfBytes": 998945,
+      "stages": {
+        "html_template": {
+          "ms": 10,
+          "ok": true,
+          "detail": {}
+        },
+        "browser_launch_or_reuse": {
+          "ms": 305,
+          "ok": true,
+          "detail": {}
+        },
+        "page_create": {
+          "ms": 76,
+          "ok": true,
+          "detail": {}
+        },
+        "set_content": {
+          "ms": 75,
+          "ok": true,
+          "detail": {}
+        },
+        "image_settle": {
+          "ms": 328,
+          "ok": true,
+          "detail": {
+            "stageBudgetMs": 8000
+          }
+        },
+        "font_ready": {
+          "ms": 2,
+          "ok": true,
+          "detail": {}
+        },
+        "prepare_page": {
+          "ms": 2,
+          "ok": true,
+          "detail": {}
+        },
+        "page_pdf": {
+          "ms": 1066,
+          "ok": true,
+          "detail": {}
+        }
+      },
+      "planType": "workout",
+      "workoutDayCount": 2,
+      "nutritionDayCount": 0,
+      "exerciseCount": 10,
+      "warmupActivityCount": 4,
+      "cardioActivityCount": 2,
+      "remoteImageUrlCount": 16,
+      "uniqueRemoteImageCount": 1
+    },
+    {
+      "label": "medium-30",
+      "ok": true,
+      "totalMs": 2928,
+      "htmlBytes": 1249373,
+      "htmlPages": 8,
+      "pdfBytes": 1101956,
+      "stages": {
+        "html_template": {
+          "ms": 11,
+          "ok": true,
+          "detail": {}
+        },
+        "browser_launch_or_reuse": {
+          "ms": 0,
+          "ok": true,
+          "detail": {}
+        },
+        "page_create": {
+          "ms": 42,
+          "ok": true,
+          "detail": {}
+        },
+        "set_content": {
+          "ms": 82,
+          "ok": true,
+          "detail": {}
+        },
+        "image_settle": {
+          "ms": 1132,
+          "ok": true,
+          "detail": {
+            "stageBudgetMs": 8000
+          }
+        },
+        "font_ready": {
+          "ms": 15,
+          "ok": true,
+          "detail": {}
+        },
+        "prepare_page": {
+          "ms": 29,
+          "ok": true,
+          "detail": {}
+        },
+        "page_pdf": {
+          "ms": 1603,
+          "ok": true,
+          "detail": {}
+        }
+      },
+      "planType": "workout",
+      "workoutDayCount": 3,
+      "nutritionDayCount": 0,
+      "exerciseCount": 30,
+      "warmupActivityCount": 6,
+      "cardioActivityCount": 3,
+      "remoteImageUrlCount": 39,
+      "uniqueRemoteImageCount": 1
+    },
+    {
+      "label": "large-60",
+      "ok": true,
+      "totalMs": 3584,
+      "htmlBytes": 1502242,
+      "htmlPages": 12,
+      "pdfBytes": 1242694,
+      "stages": {
+        "html_template": {
+          "ms": 12,
+          "ok": true,
+          "detail": {}
+        },
+        "browser_launch_or_reuse": {
+          "ms": 0,
+          "ok": true,
+          "detail": {}
+        },
+        "page_create": {
+          "ms": 47,
+          "ok": true,
+          "detail": {}
+        },
+        "set_content": {
+          "ms": 93,
+          "ok": true,
+          "detail": {}
+        },
+        "image_settle": {
+          "ms": 1131,
+          "ok": true,
+          "detail": {
+            "stageBudgetMs": 8000
+          }
+        },
+        "font_ready": {
+          "ms": 3,
+          "ok": true,
+          "detail": {}
+        },
+        "prepare_page": {
+          "ms": 7,
+          "ok": true,
+          "detail": {}
+        },
+        "page_pdf": {
+          "ms": 2275,
+          "ok": true,
+          "detail": {}
+        }
+      },
+      "planType": "workout",
+      "workoutDayCount": 5,
+      "nutritionDayCount": 0,
+      "exerciseCount": 60,
+      "warmupActivityCount": 10,
+      "cardioActivityCount": 5,
+      "remoteImageUrlCount": 75,
+      "uniqueRemoteImageCount": 1
+    },
+    {
+      "label": "xlarge-100",
+      "ok": true,
+      "totalMs": 3677,
+      "htmlBytes": 1761272,
+      "htmlPages": 16,
+      "pdfBytes": 1403722,
+      "stages": {
+        "html_template": {
+          "ms": 18,
+          "ok": true,
+          "detail": {}
+        },
+        "browser_launch_or_reuse": {
+          "ms": 0,
+          "ok": true,
+          "detail": {}
+        },
+        "page_create": {
+          "ms": 48,
+          "ok": true,
+          "detail": {}
+        },
+        "set_content": {
+          "ms": 111,
+          "ok": true,
+          "detail": {}
+        },
+        "image_settle": {
+          "ms": 342,
+          "ok": true,
+          "detail": {
+            "stageBudgetMs": 8000
+          }
+        },
+        "font_ready": {
+          "ms": 1,
+          "ok": true,
+          "detail": {}
+        },
+        "prepare_page": {
+          "ms": 21,
+          "ok": true,
+          "detail": {}
+        },
+        "page_pdf": {
+          "ms": 3128,
+          "ok": true,
+          "detail": {}
+        }
+      },
+      "planType": "workout",
+      "workoutDayCount": 7,
+      "nutritionDayCount": 0,
+      "exerciseCount": 100,
+      "warmupActivityCount": 14,
+      "cardioActivityCount": 7,
+      "remoteImageUrlCount": 121,
+      "uniqueRemoteImageCount": 1
+    },
+    {
+      "label": "large-60-no-images",
+      "ok": true,
+      "totalMs": 1264,
+      "htmlBytes": 1511176,
+      "htmlPages": 12,
+      "pdfBytes": 1098445,
+      "stages": {
+        "html_template": {
+          "ms": 10,
+          "ok": true,
+          "detail": {}
+        },
+        "browser_launch_or_reuse": {
+          "ms": 0,
+          "ok": true,
+          "detail": {}
+        },
+        "page_create": {
+          "ms": 49,
+          "ok": true,
+          "detail": {}
+        },
+        "set_content": {
+          "ms": 91,
+          "ok": true,
+          "detail": {}
+        },
+        "image_settle": {
+          "ms": 77,
+          "ok": true,
+          "detail": {
+            "stageBudgetMs": 8000
+          }
+        },
+        "font_ready": {
+          "ms": 3,
+          "ok": true,
+          "detail": {}
+        },
+        "prepare_page": {
+          "ms": 3,
+          "ok": true,
+          "detail": {}
+        },
+        "page_pdf": {
+          "ms": 1013,
+          "ok": true,
+          "detail": {}
+        }
+      },
+      "planType": "workout",
+      "workoutDayCount": 5,
+      "nutritionDayCount": 0,
+      "exerciseCount": 60,
+      "warmupActivityCount": 10,
+      "cardioActivityCount": 5,
+      "remoteImageUrlCount": 0,
+      "uniqueRemoteImageCount": 0
+    }
+  ]
+}

@@ -9,7 +9,9 @@
       "config": {
         "includeFiles": [
           "src/modules/plan-exports/templates/elevate/**"
-        ]
+        ],
+        "maxDuration": 60,
+        "memory": 1024
       }
     }
   ],

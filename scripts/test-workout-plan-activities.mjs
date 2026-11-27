@@ -505,11 +505,11 @@ async function main() {
         fail('API: create without activity sections returns empty arrays', JSON.stringify(createEmpty.json));
     }
 
-    // Wrong category
-    const wrongCat = await request('POST', '/workout-plans', {
+    // Mixed category allowed in warm-up / cardio
+    const mixedCat = await request('POST', '/workout-plans', {
         token,
         body: {
-            name: `Wrong Cat ${suffix}`,
+            name: `Mixed Cat ${suffix}`,
             duration: 4,
             daysPerWeek: 1,
             goal: 'general_fitness',
@@ -517,7 +517,7 @@ async function main() {
             workoutDays: [
                 {
                     dayNumber: 1,
-                    name: 'Bad',
+                    name: 'Mixed',
                     warmupActivities: [
                         {
                             activityType: 'other',
@@ -528,15 +528,34 @@ async function main() {
                         },
                     ],
                     exercises: [],
+                    cardioActivities: [
+                        {
+                            activityType: 'other',
+                            protocol: 'continuous',
+                            order: 1,
+                            durationMinutes: 10,
+                            intensity: 'moderate',
+                            exerciseId: strengthEx._id.toString(),
+                        },
+                    ],
                 },
             ],
         },
     });
-    if (wrongCat.status === 400) {
-        pass('API: rejects strength exercise in warm-up section');
+    const mixedDay = mixedCat.json?.data?.workoutPlan?.workoutDays?.[0];
+    if (
+        mixedCat.status === 201 &&
+        mixedDay?.warmupActivities?.[0]?.exerciseId === strengthEx._id.toString() &&
+        mixedDay?.cardioActivities?.[0]?.exerciseId === strengthEx._id.toString()
+    ) {
+        pass('API: allows any exercise category in warm-up and cardio');
     } else {
-        fail('API: rejects strength exercise in warm-up section', JSON.stringify(wrongCat.json));
+        fail(
+            'API: allows any exercise category in warm-up and cardio',
+            JSON.stringify(mixedCat.json)
+        );
     }
+    const mixedPlanId = mixedCat.json?.data?.workoutPlan?.id;
 
     // Private exercise
     const privateRef = await request('POST', '/workout-plans', {
@@ -819,9 +838,13 @@ async function main() {
     // Cleanup
     await WorkoutPlan.deleteMany({
         _id: {
-            $in: [planId, createEmpty.json?.data?.workoutPlan?.id, legacyDoc._id, cloned?.id].filter(
-                Boolean
-            ),
+            $in: [
+                planId,
+                createEmpty.json?.data?.workoutPlan?.id,
+                mixedPlanId,
+                legacyDoc._id,
+                cloned?.id,
+            ].filter(Boolean),
         },
     });
     await Exercise.deleteMany({

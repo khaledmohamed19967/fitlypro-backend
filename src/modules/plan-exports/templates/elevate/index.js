@@ -7,6 +7,7 @@
  */
 
 import { renderHtmlToPdf } from '../../pdf/htmlPdfRenderer.js';
+import { countElevateHtmlPages } from '../../pdf/pdfExportTrace.js';
 import {
     buildElevateWorkoutHtml,
     buildHighlightedTitleHtml,
@@ -43,22 +44,56 @@ export const ELEVATE_NUTRITION_PDF_OPTIONS = Object.freeze({
 
 /**
  * @param {object} exportModel
+ * @param {{ trace?: object, modelMetrics?: object }} [options]
  * @returns {Promise<Buffer>}
  */
-export const renderElevateWorkoutPdf = async (exportModel) => {
-    const html = buildElevateWorkoutHtml(exportModel);
-    return renderHtmlToPdf(html, ELEVATE_WORKOUT_PDF_OPTIONS);
+export const renderElevateWorkoutPdf = async (exportModel, options = {}) => {
+    const html = options.trace?.time
+        ? await options.trace.time('html_template', () =>
+              buildElevateWorkoutHtml(exportModel)
+          )
+        : buildElevateWorkoutHtml(exportModel);
+
+    const htmlBytes = Buffer.byteLength(html, 'utf8');
+    const htmlPages = countElevateHtmlPages(html);
+    options.trace?.log?.('html_built', {
+        htmlBytes,
+        htmlPages,
+        ...(options.modelMetrics || {}),
+    });
+
+    return renderHtmlToPdf(html, {
+        ...ELEVATE_WORKOUT_PDF_OPTIONS,
+        trace: options.trace,
+    });
 };
 
 /**
  * Elevate Nutrition — Cover, Daily Meal Plan, Supplements & Notes.
  *
  * @param {object} exportModel
+ * @param {{ trace?: object, modelMetrics?: object }} [options]
  * @returns {Promise<Buffer>}
  */
-export const renderElevateNutritionPdf = async (exportModel) => {
-    const html = buildElevateNutritionHtml(exportModel);
-    return renderHtmlToPdf(html, ELEVATE_NUTRITION_PDF_OPTIONS);
+export const renderElevateNutritionPdf = async (exportModel, options = {}) => {
+    const html = options.trace?.time
+        ? await options.trace.time('html_template', () =>
+              buildElevateNutritionHtml(exportModel)
+          )
+        : buildElevateNutritionHtml(exportModel);
+
+    const htmlBytes = Buffer.byteLength(html, 'utf8');
+    const htmlPages = countElevateHtmlPages(html);
+    options.trace?.log?.('html_built', {
+        htmlBytes,
+        htmlPages,
+        ...(options.modelMetrics || {}),
+    });
+
+    return renderHtmlToPdf(html, {
+        ...ELEVATE_NUTRITION_PDF_OPTIONS,
+        trace: options.trace,
+    });
 };
 
 export {

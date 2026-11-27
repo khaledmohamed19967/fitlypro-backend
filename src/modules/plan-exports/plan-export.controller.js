@@ -37,7 +37,9 @@ export const getPlanExportTemplates = asyncHandler(async (req, res) => {
  */
 export const createPlanExport = asyncHandler(async (req, res) => {
     const trainerId = req.user.id;
-    const result = await planExportService.exportPlanPdf(req.body, trainerId);
+    const result = await planExportService.exportPlanPdf(req.body, trainerId, {
+        req,
+    });
 
     res.setHeader('Content-Type', result.mimeType);
     res.setHeader(
@@ -45,5 +47,8 @@ export const createPlanExport = asyncHandler(async (req, res) => {
         `attachment; filename="${result.filename}"`
     );
     res.setHeader('Content-Length', result.buffer.length);
+    if (result.exportId) {
+        res.setHeader('X-Export-Id', result.exportId);
+    }
     res.status(200).send(result.buffer);
 });

@@ -1063,6 +1063,7 @@ background: linear-gradient(90deg, #CCFF01 0%, #B6E600 100%);
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
+  margin-top: 12px;
 }
 
 .page-workout-details .details-table th,
