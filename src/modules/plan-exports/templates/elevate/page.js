@@ -27,6 +27,18 @@ export const ELEVATE_HTML_CSS_NAME = 'styles.css';
 export const ELEVATE_HTML_SOURCE_MARKER =
     'elevate-html-source:templates/elevate/html/index.html';
 
+/**
+ * TEMPORARY: exclude Example Week from the Workout PDF composition until the
+ * production Chromium fragmentainer stretch is verified fixed.
+ *
+ * - `false` = omit the Example Week section from PDF HTML (no empty wrapper)
+ * - `true`  = restore Example Week in the PDF
+ *
+ * Does not delete example-week data, Studio fixtures, or Nutrition glance.
+ * Flip this single flag to revert.
+ */
+export const ELEVATE_INCLUDE_EXAMPLE_WEEK_IN_PDF = false;
+
 const DAY_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
 /**
@@ -1547,12 +1559,21 @@ const applyDynamicContent = (html, view) => {
     </section>`
     );
 
-    next = next.replace(
-        /<div class="example-week-grid"[^>]*>[\s\S]*?<\/div>/i,
-        `<div class="example-week-grid" data-elevate="example-week">
+    if (ELEVATE_INCLUDE_EXAMPLE_WEEK_IN_PDF) {
+        next = next.replace(
+            /<div class="example-week-grid"[^>]*>[\s\S]*?<\/div>/i,
+            `<div class="example-week-grid" data-elevate="example-week">
         ${exampleWeekHtml}
       </div>`
-    );
+        );
+    } else {
+        // Remove the whole Example Week section (not CSS hide) so content-sized
+        // overview measurement has no empty gap / blank fragment.
+        next = next.replace(
+            /<section\b[^>]*\bexample-week\b[^>]*>[\s\S]*?<\/section>/i,
+            '<!-- elevate: example-week temporarily excluded from PDF -->'
+        );
+    }
 
     next = next.replace(
         /<ul class="program-notes-list"[^>]*>[\s\S]*?<\/ul>/i,
@@ -1768,4 +1789,5 @@ export default {
     ELEVATE_HTML_ENTRY_NAME,
     ELEVATE_HTML_CSS_NAME,
     ELEVATE_HTML_SOURCE_MARKER,
+    ELEVATE_INCLUDE_EXAMPLE_WEEK_IN_PDF,
 };

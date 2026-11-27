@@ -18,6 +18,7 @@ import { chromium as localChromium } from 'playwright';
 import {
     buildElevateWorkoutHtml,
     deriveElevateViewModel,
+    ELEVATE_INCLUDE_EXAMPLE_WEEK_IN_PDF,
 } from '../src/modules/plan-exports/templates/elevate/page.js';
 import { renderElevateWorkoutPdf } from '../src/modules/plan-exports/templates/elevate/index.js';
 import {
@@ -288,17 +289,54 @@ async function run() {
 
         await applyElevateWorkoutContentPageSizes(page);
         const afterPrepare = await measureExampleWeek(page);
-        assertCompact(
-            'after preparePage: compact Example Week with visible day content',
-            afterPrepare
-        );
 
-        await page.emulateMedia({ media: 'print' });
-        const afterPrint = await measureExampleWeek(page);
-        assertCompact(
-            'print media after preparePage: compact Example Week with visible day content',
-            afterPrint
-        );
+        if (ELEVATE_INCLUDE_EXAMPLE_WEEK_IN_PDF) {
+            assertCompact(
+                'after preparePage: compact Example Week with visible day content',
+                afterPrepare
+            );
+            await page.emulateMedia({ media: 'print' });
+            const afterPrint = await measureExampleWeek(page);
+            assertCompact(
+                'print media after preparePage: compact Example Week with visible day content',
+                afterPrint
+            );
+        } else {
+            if (
+                afterPrepare.dayCount === 0 &&
+                afterPrepare.weekHeight == null &&
+                html.includes('example-week temporarily excluded') &&
+                !/<section\b[^>]*\bexample-week\b/i.test(html)
+            ) {
+                pass(
+                    'TEMP: Example Week section excluded from Workout PDF HTML',
+                    `overview=${afterPrepare.overviewHeight}px`
+                );
+            } else {
+                fail(
+                    'TEMP: Example Week section excluded from Workout PDF HTML',
+                    JSON.stringify({
+                        dayCount: afterPrepare.dayCount,
+                        weekHeight: afterPrepare.weekHeight,
+                        hasComment: html.includes(
+                            'example-week temporarily excluded'
+                        ),
+                    })
+                );
+            }
+            // Data still derived for easy restore — not deleted.
+            if (Array.isArray(view.exampleWeekDays) && view.exampleWeekDays.length === 7) {
+                pass(
+                    'TEMP: exampleWeekDays data still derived (not deleted)',
+                    `days=${view.exampleWeekDays.length}`
+                );
+            } else {
+                fail(
+                    'TEMP: exampleWeekDays data still derived (not deleted)',
+                    JSON.stringify(view.exampleWeekDays)
+                );
+            }
+        }
         await page.close();
 
         const pdf = await renderElevateWorkoutPdf(fixture);
@@ -326,8 +364,7 @@ async function run() {
             );
         }
 
-        // Overview is page 2 in the PDF (cover=1). Rasterize + extract text so
-        // empty day cards (borders without Mon/Tue content) fail the suite.
+        // Overview is page 2 in the PDF (cover=1).
         const overviewPng = join(OUT_DIR, `example-week-pdf-overview-${mode}.png`);
         const raster = await inspectPdfPage(pdf, 2, overviewPng);
         if (raster.h < 1100) {
@@ -342,76 +379,112 @@ async function run() {
             );
         }
 
-        const expectedDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
         const overviewText = String(raster.text || '');
-        // PDF.js often inserts spaces between glyphs ("E x a m p l e").
         const compactOverview = overviewText.replace(/\s+/g, '');
-        const missingDays = expectedDays.filter(
-            (d) => !compactOverview.includes(d)
-        );
-        const hasExampleWeek = /Example\s*week/i.test(overviewText);
-        const hasProgramNotes = /Program\s*notes/i.test(overviewText);
-        const hasDayStatuses =
-            /Rest/i.test(overviewText) && /Workout/i.test(overviewText);
-        if (
-            missingDays.length === 0 &&
-            hasExampleWeek &&
-            hasProgramNotes &&
-            hasDayStatuses
-        ) {
-            pass(
-                'overview PDF text includes all 7 day labels + Example Week + Program notes',
-                `textChars=${overviewText.length}`
-            );
-        } else {
-            fail(
-                'overview PDF text includes all 7 day labels + Example Week + Program notes',
-                JSON.stringify({
-                    missingDays,
-                    hasExampleWeek,
-                    hasProgramNotes,
-                    hasDayStatuses,
-                    sample: overviewText.slice(0, 220),
-                })
-            );
-        }
 
-        if (
-            afterPrepare.notesTop != null &&
-            afterPrepare.weekBottom != null &&
-            afterPrepare.notesTop - afterPrepare.weekBottom >= 8 &&
-            afterPrepare.notesTop - afterPrepare.weekBottom <= 48
-        ) {
-            pass(
-                'Program Notes follows Example Week with reasonable gap',
-                `gap=${afterPrepare.notesTop - afterPrepare.weekBottom}px`
+        if (ELEVATE_INCLUDE_EXAMPLE_WEEK_IN_PDF) {
+            const expectedDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+            const missingDays = expectedDays.filter(
+                (d) => !compactOverview.includes(d)
             );
-        } else {
-            fail(
-                'Program Notes follows Example Week with reasonable gap',
-                `notesTop=${afterPrepare.notesTop} weekBottom=${afterPrepare.weekBottom}`
-            );
-        }
+            const hasExampleWeek = /Example\s*week/i.test(overviewText);
+            const hasProgramNotes = /Program\s*notes/i.test(overviewText);
+            const hasDayStatuses =
+                /Rest/i.test(overviewText) && /Workout/i.test(overviewText);
+            if (
+                missingDays.length === 0 &&
+                hasExampleWeek &&
+                hasProgramNotes &&
+                hasDayStatuses
+            ) {
+                pass(
+                    'overview PDF text includes all 7 day labels + Example Week + Program notes',
+                    `textChars=${overviewText.length}`
+                );
+            } else {
+                fail(
+                    'overview PDF text includes all 7 day labels + Example Week + Program notes',
+                    JSON.stringify({
+                        missingDays,
+                        hasExampleWeek,
+                        hasProgramNotes,
+                        hasDayStatuses,
+                        sample: overviewText.slice(0, 220),
+                    })
+                );
+            }
 
-        if (
-            afterPrepare.overviewHeight != null &&
-            afterPrepare.weekHeight != null &&
-            afterPrepare.overviewHeight < ELEVATE_A4_HEIGHT_PX - 80 &&
-            afterPrepare.overviewHeight >
-                afterPrepare.weekHeight + 120
-        ) {
-            pass(
-                'overview page height matches content (not inherited tall A4)',
-                `overview=${afterPrepare.overviewHeight}px week=${afterPrepare.weekHeight}px`
-            );
+            if (
+                afterPrepare.notesTop != null &&
+                afterPrepare.weekBottom != null &&
+                afterPrepare.notesTop - afterPrepare.weekBottom >= 8 &&
+                afterPrepare.notesTop - afterPrepare.weekBottom <= 48
+            ) {
+                pass(
+                    'Program Notes follows Example Week with reasonable gap',
+                    `gap=${afterPrepare.notesTop - afterPrepare.weekBottom}px`
+                );
+            } else {
+                fail(
+                    'Program Notes follows Example Week with reasonable gap',
+                    `notesTop=${afterPrepare.notesTop} weekBottom=${afterPrepare.weekBottom}`
+                );
+            }
+
+            if (
+                afterPrepare.overviewHeight != null &&
+                afterPrepare.weekHeight != null &&
+                afterPrepare.overviewHeight < ELEVATE_A4_HEIGHT_PX - 80 &&
+                afterPrepare.overviewHeight > afterPrepare.weekHeight + 120
+            ) {
+                pass(
+                    'overview page height matches content (not inherited tall A4)',
+                    `overview=${afterPrepare.overviewHeight}px week=${afterPrepare.weekHeight}px`
+                );
+            } else {
+                fail(
+                    'overview page height matches content (not inherited tall A4)',
+                    JSON.stringify({
+                        overview: afterPrepare.overviewHeight,
+                        week: afterPrepare.weekHeight,
+                    })
+                );
+            }
         } else {
-            fail(
-                'overview page height matches content (not inherited tall A4)',
-                JSON.stringify({
-                    overview: afterPrepare.overviewHeight,
-                    week: afterPrepare.weekHeight,
-                })
-            );
+            const hasExampleWeek = /Exampleweek/i.test(compactOverview);
+            const hasProgramNotes = /Program\s*notes/i.test(overviewText);
+            const hasWorkoutsTitle = /WORKOUTS/i.test(overviewText);
+            if (!hasExampleWeek && hasProgramNotes && hasWorkoutsTitle) {
+                pass(
+                    'TEMP: overview PDF has workouts + notes, no Example Week',
+                    `overviewPt≈${Math.round(boxes[1]?.heightPt || 0)}`
+                );
+            } else {
+                fail(
+                    'TEMP: overview PDF has workouts + notes, no Example Week',
+                    JSON.stringify({
+                        hasExampleWeek,
+                        hasProgramNotes,
+                        hasWorkoutsTitle,
+                        sample: overviewText.slice(0, 240),
+                    })
+                );
+            }
+
+            if (
+                afterPrepare.overviewHeight != null &&
+                afterPrepare.overviewHeight < ELEVATE_A4_HEIGHT_PX - 80
+            ) {
+                pass(
+                    'TEMP: overview remains content-sized without Example Week',
+                    `overview=${afterPrepare.overviewHeight}px`
+                );
+            } else {
+                fail(
+                    'TEMP: overview remains content-sized without Example Week',
+                    String(afterPrepare.overviewHeight)
+                );
+            }
         }
 
         // Details page must remain a separate raster page (no forced merge).
