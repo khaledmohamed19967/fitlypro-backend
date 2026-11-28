@@ -24,7 +24,7 @@ export const createUser = asyncHandler(async (req, res) => {
 /**
  * @desc    Get all users
  * @route   GET /api/v1/users
- * @access  Public
+ * @access  Private (Admin)
  */
 export const getAllUsers = asyncHandler(async (req, res) => {
     const { page = 1, limit = 10, search, role, trainer } = req.query;

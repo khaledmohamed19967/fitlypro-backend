@@ -20,10 +20,10 @@ const router = express.Router();
 // Statistics route (before :id to avoid conflict)
 // router.get('/stats', getUserStats);
 
-// CRUD routes
+// CRUD routes — list/create require admin (user PII must not be public)
 router
     .route('/')
-    .get(getAllUsers)
+    .get(protect, authorize('admin'), getAllUsers)
     .post(protect, authorize('admin'), validate(validateUser), createUser);
 
 // router

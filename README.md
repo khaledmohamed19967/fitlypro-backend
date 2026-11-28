@@ -83,9 +83,9 @@ npm start
 - `GET /api/v1/health` - Health check
 
 ### Users
-- `GET /api/v1/users` - Get all users (with pagination & search)
+- `GET /api/v1/users` - Get all users (admin only; pagination & search)
 - `GET /api/v1/users/:id` - Get user by ID
-- `POST /api/v1/users` - Create new user
+- `POST /api/v1/users` - Create new user (admin only)
 - `PUT /api/v1/users/:id` - Update user
 - `DELETE /api/v1/users/:id` - Delete user (soft delete)
 - `GET /api/v1/users/stats` - Get user statistics
@@ -107,9 +107,10 @@ Content-Type: application/json
 }
 ```
 
-Get users with pagination:
+Get users with pagination (admin Bearer token required):
 ```bash
-GET http://localhost:8000/api/v1/users?page=1&limit=10&search=john&role=user
+GET http://localhost:8000/api/v1/users?page=1&limit=10&search=john&role=trainer
+Authorization: Bearer <admin-token>
 ```
 
 ## 🏗️ Architecture

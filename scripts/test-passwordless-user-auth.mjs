@@ -626,11 +626,43 @@ async function main() {
             );
         }
 
-        const list = await request('GET', '/users?limit=5');
-        if (list.status === 200 && !JSON.stringify(list.json).includes('"$2a$') && !JSON.stringify(list.json).includes('"$2b$')) {
-            pass('25. GET /users does not serialize password hashes');
+        const listUnauth = await request('GET', '/users?limit=5');
+        if (listUnauth.status === 401) {
+            pass('25a. Unauthenticated GET /users is rejected');
         } else {
-            fail('25. GET /users does not serialize password hashes', `status=${list.status}`);
+            fail(
+                '25a. Unauthenticated GET /users is rejected',
+                `status=${listUnauth.status}`
+            );
+        }
+
+        const listAsTrainer = await request('GET', '/users?limit=5', {
+            token: trainerToken,
+        });
+        if (listAsTrainer.status === 403) {
+            pass('25b. Non-admin GET /users is rejected');
+        } else {
+            fail(
+                '25b. Non-admin GET /users is rejected',
+                `status=${listAsTrainer.status}`
+            );
+        }
+
+        const list = await request('GET', '/users?limit=5', {
+            token: adminToken,
+        });
+        const listBody = JSON.stringify(list.json);
+        if (
+            list.status === 200 &&
+            !listBody.includes('"$2a$') &&
+            !listBody.includes('"$2b$')
+        ) {
+            pass('25c. Admin GET /users does not serialize password hashes');
+        } else {
+            fail(
+                '25c. Admin GET /users does not serialize password hashes',
+                `status=${list.status}`
+            );
         }
         }
     } finally {

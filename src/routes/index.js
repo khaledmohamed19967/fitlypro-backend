@@ -16,6 +16,7 @@ import clientRegistrationRequestRoutes from '../modules/client-registration-requ
 import healthReferenceRoutes from '../modules/health-reference/health-reference.routes.js';
 import coachDashboardRoutes from '../modules/coach-dashboard/coach-dashboard.routes.js';
 import contactRoutes from '../modules/contact/contact.routes.js';
+import superAdminRoutes from '../modules/super-admin/super-admin.routes.js';
 
 const router = express.Router();
 
@@ -37,6 +38,7 @@ router.use('/users', userRoutes);
 router.use('/auth', authRoutes);
 router.use('/clients', clientRoutes);
 router.use('/coach-dashboard', coachDashboardRoutes);
+router.use('/super-admin', superAdminRoutes);
 router.use('/health-reference-options', healthReferenceRoutes);
 router.use('/client-invitations', clientInvitationRoutes);
 router.use('/client-prospect-invitations', clientProspectInvitationRoutes);

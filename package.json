@@ -20,6 +20,7 @@
     "migrate:health-option-ids": "node scripts/migrate-health-option-ids.mjs",
     "backfill:joined-coach-at": "node scripts/backfill-joined-coach-at.mjs",
     "test:coach-dashboard": "node scripts/test-coach-dashboard-overview.mjs",
+    "test:super-admin": "node scripts/test-super-admin-phase1.mjs",
     "test:clients-growth": "node scripts/test-clients-growth.mjs",
     "test:phone-util": "node scripts/test-phone-util.mjs",
     "test:phone-phase2": "node scripts/test-phone-phase2.mjs",
